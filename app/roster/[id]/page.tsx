@@ -3,17 +3,9 @@ import { prisma } from "@/lib/db";
 import { cookies } from "next/headers";
 import { Card, CardContent, CardHeader, CardTitle, Button, Input } from "@/components/ui";
 import { SessionSingersGrid } from "./SessionSingersGrid";
-import {
-  updateSessionNotes,
-  addInstrumentRow,
-  deleteInstrumentRow,
-} from "./actions";
+import { updateSessionNotes, addInstrumentRow, deleteInstrumentRow } from "./actions";
 
-export default async function SessionPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function SessionPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   const session = await prisma.session.findUnique({
@@ -29,16 +21,10 @@ export default async function SessionPage({
 
   if (!session) return <div>Not found</div>;
 
-  // ✅ Freeze values we need so server actions don’t “see” session as possibly null
-  const sessionId = session.id;
-
-  // Next.js 15: cookies() is async-typed; await it before calling .get()
   const cookieStore = await cookies();
   const canEdit = cookieStore.get("edit")?.value === "1";
 
-  const allSingers = canEdit
-    ? await prisma.singer.findMany({ orderBy: { name: "asc" } })
-    : [];
+  const allSingers = canEdit ? await prisma.singer.findMany({ orderBy: { name: "asc" } }) : [];
 
   const initialRows = session.singers.map((x) => ({
     id: x.id,
@@ -61,31 +47,32 @@ export default async function SessionPage({
     day: "numeric",
   });
 
-  // Suggestions (server-side, fast)
+  // Suggestions
   const pitchOptions = await prisma.pitchLookup.findMany({
     select: { label: true, tablaPitch: true },
     orderBy: { label: "asc" },
   });
 
-  const pitchToTabla: Record<string, string> = {};
-  for (const p of pitchOptions) {
-    if (p.label) pitchToTabla[p.label] = p.tablaPitch ?? "";
-  }
+  const pitchToTabla = Object.fromEntries(
+    pitchOptions
+      .map((x) => [x.label, x.tablaPitch] as const)
+      .filter(([a, b]) => Boolean(a) && Boolean(b))
+  );
 
   const suggestions = {
-    pitches: pitchOptions.map((x) => x.label).filter(Boolean) as string[],
+    pitches: pitchOptions.map((x) => x.label).filter(Boolean),
     pitchToTabla,
   };
 
   async function onUpdateNotes(formData: FormData) {
     "use server";
-    await updateSessionNotes(sessionId, String(formData.get("notes") || ""));
+    await updateSessionNotes(session.id, String(formData.get("notes") || ""));
   }
 
   async function onAddInstrument(formData: FormData) {
     "use server";
     await addInstrumentRow(
-      sessionId,
+      session.id,
       String(formData.get("instrument") || ""),
       String(formData.get("person") || "")
     );
@@ -115,32 +102,10 @@ export default async function SessionPage({
         </CardHeader>
 
         <CardContent className="grid gap-6">
-          {/* Notes */}
-          <div>
-            <div className="text-sm font-semibold mb-2">Notes</div>
-            {canEdit ? (
-              <form action={onUpdateNotes} className="grid gap-2">
-                <textarea
-                  name="notes"
-                  defaultValue={session.notes ?? ""}
-                  className="min-h-[80px] w-full rounded-xl border p-3 text-sm outline-none focus:ring-2 focus:ring-black/10"
-                  placeholder="Session notes…"
-                />
-                <div>
-                  <Button type="submit">Save notes</Button>
-                </div>
-              </form>
-            ) : (
-              <div className="rounded-xl border bg-white p-3 text-sm whitespace-pre-wrap">
-                {session.notes ?? "—"}
-              </div>
-            )}
-          </div>
-
-          {/* Grid editor for bhajans/singers */}
+          {/* ✅ Main roster first */}
           <SessionSingersGrid
             canEdit={canEdit}
-            sessionId={sessionId}
+            sessionId={session.id}
             singers={allSingers}
             initialRows={initialRows}
             suggestions={suggestions}
@@ -190,6 +155,28 @@ export default async function SessionPage({
                 ))
               )}
             </div>
+          </div>
+
+          {/* ✅ Notes at bottom */}
+          <div>
+            <div className="text-sm font-semibold mb-2">Notes</div>
+            {canEdit ? (
+              <form action={onUpdateNotes} className="grid gap-2">
+                <textarea
+                  name="notes"
+                  defaultValue={session.notes ?? ""}
+                  className="min-h-[80px] w-full rounded-xl border p-3 text-sm outline-none focus:ring-2 focus:ring-black/10"
+                  placeholder="Session notes…"
+                />
+                <div>
+                  <Button type="submit">Save notes</Button>
+                </div>
+              </form>
+            ) : (
+              <div className="rounded-xl border bg-white p-3 text-sm whitespace-pre-wrap">
+                {session.notes ?? "—"}
+              </div>
+            )}
           </div>
 
           <div className="text-sm">

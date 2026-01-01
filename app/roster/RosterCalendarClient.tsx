@@ -1,37 +1,38 @@
 "use client";
 
-import Link from "next/link";
 import { useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 type DayInfo = Record<string, { sessionId: string; entries: number }>;
 
-function pad2(n: number) {
-  return String(n).padStart(2, "0");
+function isoParts(iso: string) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return null;
+  return { y: Number(m[1]), mo: Number(m[2]) - 1, d: Number(m[3]) };
 }
 
-function isoFromUTC(d: Date) {
-  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}-${pad2(d.getUTCDate())}`;
+function toISODateUTC(d: Date) {
+  return d.toISOString().slice(0, 10);
 }
 
-function parseMonthKey(k: string) {
-  const m = /^(\d{4})-(\d{2})$/.exec(k);
-  if (!m) return new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
-  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, 1));
+function toMonthKeyUTC(d: Date) {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${y}-${m}`;
 }
 
-function monthKey(d: Date) {
-  return `${d.getUTCFullYear()}-${pad2(d.getUTCMonth() + 1)}`;
-}
-
-function parseISODate(s: string) {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
-  if (!m) return new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
-  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+function fromMonthKeyUTC(m: string) {
+  const x = /^(\d{4})-(\d{2})$/.exec(m);
+  if (!x) return null;
+  const y = Number(x[1]);
+  const mo = Number(x[2]) - 1;
+  const dt = new Date(Date.UTC(y, mo, 1));
+  return isNaN(dt.getTime()) ? null : dt;
 }
 
 function startOfWeekMondayUTC(d: Date) {
-  const day = (d.getUTCDay() + 6) % 7; // Monday=0
+  // Monday=0 ... Sunday=6
+  const day = (d.getUTCDay() + 6) % 7;
   const out = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
   out.setUTCDate(out.getUTCDate() - day);
   return out;
@@ -43,22 +44,19 @@ function addDaysUTC(d: Date, n: number) {
   return out;
 }
 
-function startOfMonthUTC(d: Date) {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
-}
+function getMonthGrid(monthStartUTC: Date) {
+  const first = new Date(Date.UTC(monthStartUTC.getUTCFullYear(), monthStartUTC.getUTCMonth(), 1));
+  const firstDay = (first.getUTCDay() + 6) % 7; // Monday=0
+  const gridStart = addDaysUTC(first, -firstDay);
 
-function endOfMonthExclusiveUTC(d: Date) {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
-}
-
-function clampHeat(entries: number) {
-  // Convert entry count -> subtle “heat” (opacity/width), no number badge.
-  if (entries <= 0) return { show: false, cls: "" };
-  if (entries === 1) return { show: true, cls: "opacity-30 w-2/12" };
-  if (entries === 2) return { show: true, cls: "opacity-45 w-3/12" };
-  if (entries <= 4) return { show: true, cls: "opacity-60 w-5/12" };
-  if (entries <= 7) return { show: true, cls: "opacity-80 w-8/12" };
-  return { show: true, cls: "opacity-100 w-11/12" };
+  const weeks: Date[][] = [];
+  let cur = gridStart;
+  for (let w = 0; w < 6; w++) {
+    const row: Date[] = [];
+    for (let i = 0; i < 7; i++) row.push(addDaysUTC(cur, w * 7 + i));
+    weeks.push(row);
+  }
+  return weeks;
 }
 
 export function RosterCalendarClient(props: {
@@ -67,243 +65,239 @@ export function RosterCalendarClient(props: {
   dayInfo: DayInfo;
 }) {
   const router = useRouter();
+  const sp = useSearchParams();
 
-  const [month, setMonth] = useState(() => parseMonthKey(props.initialMonth));
+  const [monthKey, setMonthKey] = useState(props.initialMonth);
   const [selectedISO, setSelectedISO] = useState(props.initialSelected);
 
-  const selectedDate = useMemo(() => parseISODate(selectedISO), [selectedISO]);
-  const selectedInfo = props.dayInfo[selectedISO] ?? null;
+  const monthStart = useMemo(() => {
+    return fromMonthKeyUTC(monthKey) ?? new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
+  }, [monthKey]);
 
-  function pushParams(next: { m?: string; d?: string }) {
-    const m = next.m ?? monthKey(month);
-    const d = next.d ?? selectedISO;
-    router.push(`/roster?m=${encodeURIComponent(m)}&d=${encodeURIComponent(d)}`, { scroll: false });
+  const selectedDate = useMemo(() => {
+    const p = isoParts(selectedISO);
+    if (!p) return new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate()));
+    return new Date(Date.UTC(p.y, p.mo, p.d));
+  }, [selectedISO]);
+
+  function pushRosterParams(nextMonthKey: string, nextSelectedISO: string) {
+    const next = new URLSearchParams(sp?.toString() || "");
+    next.set("view", "calendar");
+    next.set("m", nextMonthKey);
+    next.set("d", nextSelectedISO);
+    router.push(`/roster?${next.toString()}`);
   }
 
-  // Desktop month grid range (Mon..Sun)
-  const grid = useMemo(() => {
-    const mStart = startOfMonthUTC(month);
-    const gridStart = startOfWeekMondayUTC(mStart);
-    const days: Array<{ iso: string; d: Date; inMonth: boolean; info?: { sessionId: string; entries: number } | null }> =
-      [];
-    for (let i = 0; i < 42; i++) {
-      const d = addDaysUTC(gridStart, i);
-      const iso = isoFromUTC(d);
-      const inMonth = d >= mStart && d < endOfMonthExclusiveUTC(month);
-      days.push({ iso, d, inMonth, info: props.dayInfo[iso] ?? null });
+  function goMonth(delta: number) {
+    const dt = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + delta, 1));
+    const mk = toMonthKeyUTC(dt);
+    setMonthKey(mk);
+    // keep selected inside the new month if possible
+    const keep = new Date(Date.UTC(dt.getUTCFullYear(), dt.getUTCMonth(), Math.min(selectedDate.getUTCDate(), 28)));
+    const iso = toISODateUTC(keep);
+    setSelectedISO(iso);
+    pushRosterParams(mk, iso);
+  }
+
+  function onSelectDay(iso: string) {
+    setSelectedISO(iso);
+
+    const info = props.dayInfo[iso];
+    if (info?.sessionId) {
+      // ✅ direct jump into that day's session (no extra click)
+      router.push(`/roster/${info.sessionId}`);
+      return;
     }
-    return days;
-  }, [month, props.dayInfo]);
 
-  // Mobile week strip = week of selected day
-  const week = useMemo(() => {
-    const wStart = startOfWeekMondayUTC(selectedDate);
-    return Array.from({ length: 7 }).map((_, i) => {
-      const d = addDaysUTC(wStart, i);
-      const iso = isoFromUTC(d);
-      return { iso, d, info: props.dayInfo[iso] ?? null };
-    });
-  }, [selectedDate, props.dayInfo]);
+    // fallback: just update query params
+    pushRosterParams(monthKey, iso);
+  }
 
-  function selectDay(iso: string) {
+  // MOBILE: week strip
+  const weekStart = useMemo(() => startOfWeekMondayUTC(selectedDate), [selectedDate]);
+  const weekDays = useMemo(() => Array.from({ length: 7 }, (_, i) => addDaysUTC(weekStart, i)), [weekStart]);
+
+  function goWeek(deltaWeeks: number) {
+    const next = addDaysUTC(selectedDate, deltaWeeks * 7);
+    const iso = toISODateUTC(next);
+    const mk = toMonthKeyUTC(next);
     setSelectedISO(iso);
-    // Keep month synced on desktop when selecting an out-of-month day (rare, but nice)
-    const d = parseISODate(iso);
-    const m = startOfMonthUTC(d);
-    setMonth(m);
-    pushParams({ m: monthKey(m), d: iso });
+    setMonthKey(mk);
+    pushRosterParams(mk, iso);
   }
 
-  function gotoToday() {
-    const now = new Date();
-    const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    const iso = isoFromUTC(todayUTC);
-    const m = startOfMonthUTC(todayUTC);
-    setMonth(m);
-    setSelectedISO(iso);
-    pushParams({ m: monthKey(m), d: iso });
-  }
-
-  function prevMonth() {
-    const m = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() - 1, 1));
-    setMonth(m);
-    pushParams({ m: monthKey(m) });
-  }
-
-  function nextMonth() {
-    const m = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1));
-    setMonth(m);
-    pushParams({ m: monthKey(m) });
-  }
-
-  function prevWeek() {
-    const iso = isoFromUTC(addDaysUTC(selectedDate, -7));
-    selectDay(iso);
-  }
-
-  function nextWeek() {
-    const iso = isoFromUTC(addDaysUTC(selectedDate, 7));
-    selectDay(iso);
-  }
+  // DESKTOP: month grid
+  const weeks = useMemo(() => getMonthGrid(monthStart), [monthStart]);
 
   const monthLabel = useMemo(() => {
-    return month.toLocaleDateString(undefined, { month: "long", year: "numeric", timeZone: "UTC" });
-  }, [month]);
-
-  const selectedLabel = useMemo(() => {
-    return selectedDate.toLocaleDateString(undefined, {
-      weekday: "long",
+    return new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth(), 1)).toLocaleDateString(undefined, {
       year: "numeric",
-      month: "short",
-      day: "numeric",
-      timeZone: "UTC",
+      month: "long",
     });
-  }, [selectedDate]);
+  }, [monthStart]);
 
   const dow = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const dowShort = ["M", "T", "W", "T", "F", "S", "S"];
 
   return (
-    <div className="grid gap-4">
-      {/* MOBILE: week strip */}
-      <div className="md:hidden rounded-2xl border bg-white p-3">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <div className="text-sm font-semibold">{selectedLabel}</div>
-            <div className="text-xs text-gray-600">Week strip (mobile). Tap a day.</div>
-          </div>
+    <div className="grid gap-3">
+      {/* Desktop header */}
+      <div className="hidden md:flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => goMonth(-1)}
+          className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
+        >
+          Prev
+        </button>
+
+        <div className="text-sm font-semibold">{monthLabel}</div>
+
+        <button
+          type="button"
+          onClick={() => goMonth(1)}
+          className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
+        >
+          Next
+        </button>
+      </div>
+
+      {/* Mobile week strip */}
+      <div className="md:hidden rounded-2xl border bg-white p-2">
+        <div className="flex items-center justify-between">
           <button
             type="button"
+            onClick={() => goWeek(-1)}
             className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
-            onClick={gotoToday}
           >
-            Today
-          </button>
-        </div>
-
-        <div className="mt-3 flex items-center justify-between gap-2">
-          <button type="button" className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50" onClick={prevWeek}>
             Prev
           </button>
 
-          <div className="flex-1 overflow-x-auto">
-            <div className="flex min-w-max gap-2 px-1">
-              {week.map((x, idx) => {
-                const isSel = x.iso === selectedISO;
-                const heat = clampHeat(x.info?.entries ?? 0);
-                return (
-                  <button
-                    key={x.iso}
-                    type="button"
-                    onClick={() => selectDay(x.iso)}
-                    className={[
-                      "relative w-[52px] shrink-0 rounded-2xl border px-2 py-2 text-left",
-                      isSel ? "border-violet-400 ring-2 ring-violet-200" : "hover:bg-gray-50",
-                    ].join(" ")}
-                  >
-                    <div className="text-[11px] text-gray-500">{dowShort[idx]}</div>
-                    <div className="text-sm font-semibold">{x.d.getUTCDate()}</div>
-                    {heat.show ? (
-                      <div className="mt-2 h-1 w-full rounded-full bg-gray-100">
-                        <div className={`h-1 rounded-full bg-violet-600 ${heat.cls}`} />
-                      </div>
-                    ) : (
-                      <div className="mt-2 h-1 w-full rounded-full bg-transparent" />
-                    )}
-                  </button>
-                );
-              })}
-            </div>
+          <div className="text-sm font-semibold">
+            {selectedDate.toLocaleDateString(undefined, { month: "short", year: "numeric" })}
           </div>
 
-          <button type="button" className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50" onClick={nextWeek}>
+          <button
+            type="button"
+            onClick={() => goWeek(1)}
+            className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
+          >
             Next
           </button>
         </div>
-      </div>
 
-      {/* DESKTOP: month grid */}
-      <div className="hidden md:block rounded-2xl border bg-white p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-base font-semibold">{monthLabel}</div>
-            <div className="text-sm text-gray-600">Month grid (desktop). Activity shown as a tiny heat bar.</div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button type="button" className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50" onClick={prevMonth}>
-              Prev
-            </button>
-            <button type="button" className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50" onClick={gotoToday}>
-              Today
-            </button>
-            <button type="button" className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50" onClick={nextMonth}>
-              Next
-            </button>
-          </div>
-        </div>
-
-        <div className="mt-4 grid grid-cols-7 gap-2 text-xs text-gray-600">
-          {dow.map((x) => (
-            <div key={x} className="px-1 py-1 font-medium">
-              {x}
-            </div>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-7 gap-2">
-          {grid.map((x) => {
-            const isSel = x.iso === selectedISO;
-            const heat = clampHeat(x.info?.entries ?? 0);
+        <div className="mt-2 grid grid-cols-7 gap-1">
+          {weekDays.map((d) => {
+            const iso = toISODateUTC(d);
+            const isSelected = iso === selectedISO;
+            const info = props.dayInfo[iso];
+            const hasAnySession = Boolean(info?.sessionId);
+            const hasEntries = (info?.entries ?? 0) > 0;
 
             return (
               <button
-                key={x.iso}
+                key={iso}
                 type="button"
-                onClick={() => selectDay(x.iso)}
+                onClick={() => onSelectDay(iso)}
                 className={[
-                  "rounded-2xl border p-2 text-left hover:bg-gray-50",
-                  x.inMonth ? "bg-white" : "bg-gray-50 text-gray-400",
-                  isSel ? "border-violet-400 ring-2 ring-violet-200" : "",
+                  "relative rounded-xl border px-1 py-2 text-center",
+                  isSelected ? "bg-black text-white" : "bg-white hover:bg-gray-50",
                 ].join(" ")}
               >
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-semibold">{x.d.getUTCDate()}</div>
-                </div>
+                <div className="text-[10px] opacity-80">{dow[(d.getUTCDay() + 6) % 7]}</div>
+                <div className="text-sm font-semibold leading-5">{d.getUTCDate()}</div>
 
-                {/* Heat bar (no number badge) */}
-                {heat.show ? (
-                  <div className="mt-2 h-1 w-full rounded-full bg-gray-100">
-                    <div className={`h-1 rounded-full bg-violet-600 ${heat.cls}`} />
-                  </div>
-                ) : (
-                  <div className="mt-2 h-1 w-full rounded-full bg-transparent" />
-                )}
+                {/* Dot only (less clutter). Only show dot if entries>0. */}
+                {hasEntries ? (
+                  <span
+                    className={[
+                      "absolute left-1/2 -translate-x-1/2 bottom-1 h-1.5 w-1.5 rounded-full",
+                      isSelected ? "bg-white" : "bg-black",
+                    ].join(" ")}
+                    aria-label="Has roster entries"
+                  />
+                ) : hasAnySession ? (
+                  // Optional: faint dot to indicate session exists but empty (keeps feel consistent)
+                  <span
+                    className={[
+                      "absolute left-1/2 -translate-x-1/2 bottom-1 h-1 w-1 rounded-full opacity-30",
+                      isSelected ? "bg-white" : "bg-black",
+                    ].join(" ")}
+                    aria-label="Has session"
+                  />
+                ) : null}
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Selected day panel (count shown here only) */}
-      <div className="rounded-2xl border bg-white p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <div className="text-sm font-semibold">{selectedLabel}</div>
-            <div className="text-sm text-gray-600">
-              {selectedInfo
-                ? selectedInfo.entries > 0
-                  ? `${selectedInfo.entries} roster entr${selectedInfo.entries === 1 ? "y" : "ies"} (bhajans).`
-                  : "Session exists, but no roster rows yet."
-                : "No session found for this day."}
+      {/* Desktop month grid */}
+      <div className="hidden md:block rounded-2xl border bg-white p-3">
+        <div className="grid grid-cols-7 gap-2 text-xs text-gray-500">
+          {dow.map((x) => (
+            <div key={x} className="px-2">
+              {x}
             </div>
-          </div>
-
-          {selectedInfo?.sessionId ? (
-            <Link className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50" href={`/roster/${selectedInfo.sessionId}`}>
-              Open session
-            </Link>
-          ) : null}
+          ))}
         </div>
+
+        <div className="mt-2 grid grid-rows-6 gap-2">
+          {weeks.map((week, wi) => (
+            <div key={wi} className="grid grid-cols-7 gap-2">
+              {week.map((d) => {
+                const iso = toISODateUTC(d);
+                const isInMonth = d.getUTCMonth() === monthStart.getUTCMonth();
+                const isSelected = iso === selectedISO;
+
+                const info = props.dayInfo[iso];
+                const hasAnySession = Boolean(info?.sessionId);
+                const hasEntries = (info?.entries ?? 0) > 0;
+
+                return (
+                  <button
+                    key={iso}
+                    type="button"
+                    onClick={() => onSelectDay(iso)}
+                    className={[
+                      "relative h-14 rounded-xl border px-2 py-2 text-left hover:bg-gray-50",
+                      isSelected ? "bg-black text-white" : "bg-white",
+                      isInMonth ? "" : "opacity-40",
+                    ].join(" ")}
+                  >
+                    <div className="text-sm font-semibold">{d.getUTCDate()}</div>
+
+                    {/* Dot only */}
+                    {hasEntries ? (
+                      <span
+                        className={[
+                          "absolute right-2 top-2 h-2 w-2 rounded-full",
+                          isSelected ? "bg-white" : "bg-black",
+                        ].join(" ")}
+                        aria-label="Has roster entries"
+                      />
+                    ) : hasAnySession ? (
+                      <span
+                        className={[
+                          "absolute right-2 top-2 h-2 w-2 rounded-full opacity-25",
+                          isSelected ? "bg-white" : "bg-black",
+                        ].join(" ")}
+                        aria-label="Has session"
+                      />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Optional selected info (desktop + mobile) */}
+      <div className="text-sm text-gray-700">
+        Selected:{" "}
+        <span className="font-medium">
+          {selectedDate.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "short", day: "numeric" })}
+        </span>
       </div>
     </div>
   );

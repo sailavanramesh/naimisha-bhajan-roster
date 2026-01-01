@@ -67,8 +67,11 @@ export function SessionSingersGrid(props: {
   const [isPending, startTransition] = useTransition();
 
   const singerById = useMemo(() => new Map(props.singers.map((s) => [s.id, s])), [props.singers]);
-
   const pitchListId = `pitch-options-${props.sessionId}`;
+
+  // Column widths (tuned to reduce cramped look + keep Bhajan narrower)
+  const COL_SINGER = 180;
+  const COL_BHAJAN = 260;
 
   const [rows, setRows] = useState<RowState[]>(
     props.initialRows.map((r) => ({
@@ -89,9 +92,9 @@ export function SessionSingersGrid(props: {
     }))
   );
 
-  const [search, setSearch] = useState<
-    Record<string, { q: string; items: { id: string; title: string }[]; open: boolean }>
-  >({});
+  const [search, setSearch] = useState<Record<string, { q: string; items: { id: string; title: string }[]; open: boolean }>>(
+    {}
+  );
 
   async function bhajanSearch(q: string) {
     const res = await fetch(`/api/bhajans/search?q=${encodeURIComponent(q)}`);
@@ -115,11 +118,12 @@ export function SessionSingersGrid(props: {
     if (!props.canEdit) return;
     const firstSinger = props.singers[0];
     const id = `new_${Math.random().toString(36).slice(2)}`;
+
     setRows((prev) => [
       ...prev,
       {
         _localId: id,
-        id: null,
+        id: null as any, // keep compatible with existing action type
         singerId: firstSinger?.id || "",
         singerName: firstSinger?.name,
         singerGender: firstSinger?.gender ?? null,
@@ -134,6 +138,7 @@ export function SessionSingersGrid(props: {
         _bhajan: null,
       },
     ]);
+
     setSearch((prev) => ({ ...prev, [id]: { q: "", items: [], open: false } }));
   }
 
@@ -219,7 +224,7 @@ export function SessionSingersGrid(props: {
     if (!props.canEdit) return;
     startTransition(async () => {
       const payload: SingerRowInput[] = rows.map((r) => ({
-        id: r.id,
+        id: (r as any).id,
         singerId: r.singerId,
         bhajanId: r.bhajanId,
         bhajanTitle: r.bhajanTitle,
@@ -239,11 +244,9 @@ export function SessionSingersGrid(props: {
     if (!row || !props.canEdit) return;
 
     startTransition(async () => {
-      // Delete on server if it exists in DB
-      if (row.id && !String(row.id).startsWith("new_")) {
-        await deleteSingerRow(row.id);
+      if ((row as any).id && !String((row as any).id).startsWith("new_")) {
+        await deleteSingerRow((row as any).id);
       }
-      // Always remove from UI state so it won't be included in Save
       setRows((prev) => prev.filter((r) => r._localId !== localId));
       router.refresh();
     });
@@ -260,7 +263,9 @@ export function SessionSingersGrid(props: {
       <div className="flex items-center justify-between gap-3">
         <div>
           <div className="text-sm font-semibold">Roster entries</div>
-          <div className="text-xs text-gray-600">Confirmed Pitch is the main field. Recommended/Tabla are adjuncts.</div>
+          <div className="mt-1 text-xs text-gray-600">
+            Confirmed Pitch is the main field. Recommended/Tabla are adjuncts.
+          </div>
         </div>
 
         {props.canEdit ? (
@@ -273,17 +278,29 @@ export function SessionSingersGrid(props: {
         ) : null}
       </div>
 
-      {/* Horizontal-scroll grid with sticky left columns */}
-      <div className="-mx-2 overflow-x-auto px-2">
+      {/* ✅ Always keep grid (including on phone) via horizontal scroll */}
+      <div className="-mx-3 overflow-x-auto px-3">
         <div className="min-w-[980px]">
           {/* Header row */}
-          <div className="grid grid-cols-[11rem_28rem_13rem_13rem_8rem_7rem] gap-2 rounded-2xl border bg-gray-50 p-3 text-xs font-semibold text-gray-700">
-            <div className="sticky left-0 z-20 bg-gray-50">Singer</div>
-            <div className="sticky left-44 z-20 bg-gray-50">Bhajan</div>
-            <div className="text-gray-900">Confirmed Pitch</div>
-            <div className="text-gray-600">Recommended</div>
-            <div className="text-gray-600">Tabla</div>
-            <div className="text-right">Actions</div>
+          <div className="sticky top-0 z-40 rounded-2xl border bg-white">
+            <div
+              className="grid items-center gap-2 px-2 py-2 text-xs font-semibold text-gray-700"
+              style={{
+                gridTemplateColumns: `${COL_SINGER}px ${COL_BHAJAN}px 190px 180px 120px 110px`,
+              }}
+            >
+              <div className="sticky left-0 z-50 bg-white px-2 py-2 rounded-xl">Singer</div>
+              <div
+                className="sticky z-40 bg-white px-2 py-2 rounded-xl"
+                style={{ left: COL_SINGER }}
+              >
+                Bhajan
+              </div>
+              <div className="px-2 py-2">Confirmed Pitch</div>
+              <div className="px-2 py-2">Recommended</div>
+              <div className="px-2 py-2">Tabla</div>
+              <div className="px-2 py-2 text-right">Actions</div>
+            </div>
           </div>
 
           {/* Rows */}
@@ -292,10 +309,15 @@ export function SessionSingersGrid(props: {
               const s = search[r._localId] || { q: r.bhajanTitle || "", items: [], open: false };
 
               return (
-                <div key={r._localId} className="rounded-2xl border bg-white p-3">
-                  <div className="grid grid-cols-[11rem_28rem_13rem_13rem_8rem_7rem] gap-2 items-start">
+                <div key={r._localId} className="rounded-2xl border bg-white">
+                  <div
+                    className="grid items-start gap-2 px-2 py-2"
+                    style={{
+                      gridTemplateColumns: `${COL_SINGER}px ${COL_BHAJAN}px 190px 180px 120px 110px`,
+                    }}
+                  >
                     {/* Singer (sticky) */}
-                    <div className="sticky left-0 z-10 bg-white">
+                    <div className="sticky left-0 z-30 bg-white px-2 py-2 rounded-xl">
                       {props.canEdit ? (
                         <select
                           value={r.singerId}
@@ -311,11 +333,17 @@ export function SessionSingersGrid(props: {
                       ) : (
                         <div className="text-sm font-medium">{r.singerName}</div>
                       )}
-                      <div className="mt-1 text-xs text-gray-600">{r.singerGender ? `Gender: ${r.singerGender}` : "Gender: —"}</div>
+
+                      <div className="mt-1 text-[11px] text-gray-600">
+                        {r.singerGender ? `Gender: ${r.singerGender}` : "Gender: —"}
+                      </div>
                     </div>
 
-                    {/* Bhajan (sticky) */}
-                    <div className="sticky left-44 z-10 bg-white">
+                    {/* Bhajan (sticky) — narrower + no overlap */}
+                    <div
+                      className="sticky z-20 bg-white px-2 py-2 rounded-xl"
+                      style={{ left: COL_SINGER }}
+                    >
                       <div className="relative">
                         {props.canEdit ? (
                           <>
@@ -324,8 +352,9 @@ export function SessionSingersGrid(props: {
                               placeholder="Search masterlist…"
                               onChange={(e) => onSearchChange(r._localId, e.target.value)}
                             />
+
                             {s.open && s.items.length > 0 ? (
-                              <div className="absolute z-30 mt-1 w-full max-h-64 overflow-auto rounded-xl border bg-white shadow">
+                              <div className="absolute z-50 mt-1 w-full max-h-64 overflow-auto rounded-xl border bg-white shadow">
                                 {s.items.map((it) => (
                                   <button
                                     type="button"
@@ -340,12 +369,12 @@ export function SessionSingersGrid(props: {
                             ) : null}
                           </>
                         ) : (
-                          <div className="text-sm">{r.bhajanTitle ?? "—"}</div>
+                          <div className="text-sm whitespace-normal break-words">{r.bhajanTitle ?? "—"}</div>
                         )}
                       </div>
 
                       {r.bhajanTitle ? (
-                        <div className="mt-2">
+                        <div className="mt-1">
                           <button
                             type="button"
                             onClick={() => toggleDetails(r._localId)}
@@ -357,8 +386,8 @@ export function SessionSingersGrid(props: {
                       ) : null}
                     </div>
 
-                    {/* Confirmed pitch (stands out) */}
-                    <div>
+                    {/* Confirmed pitch (stands out + not hidden by sticky cols) */}
+                    <div className="px-2 py-2">
                       <Input
                         list={pitchListId}
                         value={r.confirmedPitch ?? ""}
@@ -367,11 +396,11 @@ export function SessionSingersGrid(props: {
                         disabled={!props.canEdit}
                         className="bg-violet-50 ring-2 ring-violet-200"
                       />
-                      <div className="mt-1 text-[11px] text-gray-500">Main pitch</div>
+                      <div className="mt-1 text-[11px] text-gray-600">Main pitch</div>
                     </div>
 
-                    {/* Recommended pitch */}
-                    <div>
+                    {/* Recommended */}
+                    <div className="px-2 py-2">
                       <Input
                         list={pitchListId}
                         value={r.recommendedPitch ?? ""}
@@ -381,13 +410,13 @@ export function SessionSingersGrid(props: {
                       />
                     </div>
 
-                    {/* Tabla pitch (auto) */}
-                    <div>
+                    {/* Tabla */}
+                    <div className="px-2 py-2">
                       <Input value={r.confirmedPitch ? r.alternativeTablaPitch ?? "" : ""} placeholder="Tabla" disabled />
                     </div>
 
                     {/* Actions */}
-                    <div className="flex justify-end">
+                    <div className="px-2 py-2 flex justify-end">
                       {props.canEdit ? (
                         <Button onClick={() => removeRow(r._localId)} className="border-red-300 text-red-700 hover:bg-red-50">
                           Delete
@@ -396,9 +425,9 @@ export function SessionSingersGrid(props: {
                     </div>
                   </div>
 
-                  {/* Lyrics/Meaning section */}
+                  {/* Lyrics/Meaning */}
                   {r.bhajanTitle && r._detailsOpen ? (
-                    <div className="mt-3 rounded-2xl border bg-gray-50 p-3 text-sm">
+                    <div className="mx-2 mb-2 rounded-xl border bg-gray-50 p-3 text-sm">
                       <div className="grid md:grid-cols-2 gap-3">
                         <div>
                           <div className="text-xs font-semibold text-gray-700 mb-1">Lyrics</div>
