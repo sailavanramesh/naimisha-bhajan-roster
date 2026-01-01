@@ -3,10 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 
 export function middleware(req: NextRequest) {
   const url = req.nextUrl;
-  const editKey = process.env.EDIT_KEY || "";
 
-  // Turn ON edit mode with ?k=YOUR_KEY (then redirect to clean URL)
+  const editKey = process.env.EDIT_KEY || "";
   const k = url.searchParams.get("k");
+
+  // Enable edit mode: ?k=EDIT_KEY
   if (k && editKey && k === editKey) {
     const clean = new URL(url.toString());
     clean.searchParams.delete("k");
@@ -16,16 +17,14 @@ export function middleware(req: NextRequest) {
       path: "/",
       sameSite: "lax",
       secure: true,
-      // not httpOnly so client UX can reflect it if needed; change to true if you prefer
       httpOnly: false,
-      maxAge: 60 * 60 * 24 * 365, // 1 year
+      maxAge: 60 * 60 * 24 * 365,
     });
     return res;
   }
 
-  // Optional: Turn OFF edit mode with ?readonly=1
-  const readonly = url.searchParams.get("readonly");
-  if (readonly === "1") {
+  // Optional: disable edit mode with ?readonly=1
+  if (url.searchParams.get("readonly") === "1") {
     const clean = new URL(url.toString());
     clean.searchParams.delete("readonly");
 
@@ -38,10 +37,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: [
-    /*
-      Run middleware on all pages/routes except Next internals and common static assets.
-    */
-    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };
