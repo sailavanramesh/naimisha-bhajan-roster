@@ -48,10 +48,8 @@ export default async function RosterPage({
     d?: string;
   }>;
 }) {
-  // ✅ Next 15: searchParams is async-typed in your setup
   const sp = await searchParams;
 
-  // ✅ Next 15: cookies() is async-typed
   const cookieStore = await cookies();
   const canEdit = cookieStore.get("edit")?.value === "1";
 
@@ -61,16 +59,13 @@ export default async function RosterPage({
   // Calendar params
   const todayUTC = new Date();
   const selected = parseISODate(sp.d) ?? parseISODate(toISODate(todayUTC))!;
-  const month =
-    parseMonth(sp.m) ?? new Date(Date.UTC(selected.getUTCFullYear(), selected.getUTCMonth(), 1));
+  const month = parseMonth(sp.m) ?? new Date(Date.UTC(selected.getUTCFullYear(), selected.getUTCMonth(), 1));
   const monthStart = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1));
   const monthEndExclusive = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1));
 
-  // Pull sessions for the visible month
+  // Pull sessions for visible month
   const monthSessions = await prisma.session.findMany({
-    where: {
-      date: { gte: monthStart, lt: monthEndExclusive },
-    },
+    where: { date: { gte: monthStart, lt: monthEndExclusive } },
     select: {
       id: true,
       date: true,
@@ -79,12 +74,11 @@ export default async function RosterPage({
     orderBy: { date: "asc" },
   });
 
-  // Map day -> { sessionId, entries }
+  // day -> { sessionId, entries }
   const dayInfo: Record<string, { sessionId: string; entries: number }> = {};
   for (const s of monthSessions) {
     const iso = toISODate(s.date);
     const entries = s._count.singers ?? 0;
-    // Store all sessions, but UI can decide whether to show a dot/badge
     dayInfo[iso] = { sessionId: s.id, entries };
   }
 
@@ -137,7 +131,7 @@ export default async function RosterPage({
               <CardTitle>Roster</CardTitle>
               <div className="mt-1 text-sm text-gray-600">
                 {view === "calendar"
-                  ? "Calendar view (default). Tap a day to see details."
+                  ? "Tap a date to open the session. (Edit mode will auto-create an empty day.)"
                   : "List view. Search + date range available."}
               </div>
             </div>
@@ -168,6 +162,7 @@ export default async function RosterPage({
         <CardContent className="grid gap-4">
           {view === "calendar" ? (
             <RosterCalendarClient
+              canEdit={canEdit}
               initialMonth={monthKey(monthStart)}
               initialSelected={toISODate(selected)}
               dayInfo={dayInfo}
