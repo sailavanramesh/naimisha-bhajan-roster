@@ -2,8 +2,14 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 
-export default async function SingerPage({ params }: { params: { id: string } }) {
-  const singer = await prisma.singer.findUnique({ where: { id: params.id } });
+export default async function SingerPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+
+  const singer = await prisma.singer.findUnique({ where: { id } });
   if (!singer) return <div>Not found</div>;
 
   const history = await prisma.sessionSinger.findMany({
@@ -23,11 +29,21 @@ export default async function SingerPage({ params }: { params: { id: string } })
         <CardContent>
           <div className="grid gap-2">
             {history.map((h) => (
-              <Link key={h.id} href={`/roster/${h.sessionId}`} className="rounded-xl border bg-white p-3 hover:bg-gray-50">
+              <Link
+                key={h.id}
+                href={`/roster/${h.sessionId}`}
+                className="rounded-xl border bg-white p-3 hover:bg-gray-50"
+              >
                 <div className="text-sm font-medium">
-                  {new Date(h.session.date).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })}
+                  {new Date(h.session.date).toLocaleDateString(undefined, {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
                 </div>
-                <div className="mt-1 text-sm text-gray-700">{h.bhajanTitle ?? h.festivalBhajanTitle ?? "—"}</div>
+                <div className="mt-1 text-sm text-gray-700">
+                  {h.bhajanTitle ?? h.festivalBhajanTitle ?? "—"}
+                </div>
               </Link>
             ))}
           </div>
