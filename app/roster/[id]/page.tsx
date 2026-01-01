@@ -5,7 +5,11 @@ import { Card, CardContent, CardHeader, CardTitle, Button, Input } from "@/compo
 import { SessionSingersGrid } from "./SessionSingersGrid";
 import { updateSessionNotes, addInstrumentRow, deleteInstrumentRow } from "./actions";
 
-export default async function SessionPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function SessionPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = await params;
 
   const session = await prisma.session.findUnique({
@@ -21,10 +25,15 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
 
   if (!session) return <div>Not found</div>;
 
+  // ✅ Next 15: cookies() is async
   const cookieStore = await cookies();
   const canEdit = cookieStore.get("edit")?.value === "1";
 
-  const allSingers = canEdit ? await prisma.singer.findMany({ orderBy: { name: "asc" } }) : [];
+  const sessionId = session.id; // ✅ capture for server actions (avoid "session possibly null")
+
+  const allSingers = canEdit
+    ? await prisma.singer.findMany({ orderBy: { name: "asc" } })
+    : [];
 
   const initialRows = session.singers.map((x) => ({
     id: x.id,
@@ -47,30 +56,35 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
     day: "numeric",
   });
 
-  // Suggestions
-  const pitchOptions = await prisma.pitchLookup.findMany({
+  // Suggestions (server-side, fast)
+  const pitchRows = await prisma.pitchLookup.findMany({
     select: { label: true, tablaPitch: true },
     orderBy: { label: "asc" },
   });
 
+  const pitches = pitchRows.map((x) => x.label).filter(Boolean);
+
+  // ✅ Make this Record<string,string> (no nulls) to satisfy SessionSingersGrid typing
+  const pitchToTabla: Record<string, string> = {};
+  for (const r of pitchRows) {
+    if (!r.label) continue;
+    pitchToTabla[r.label] = r.tablaPitch ?? "";
+  }
+
   const suggestions = {
-    pitches: pitchOptions.map((x) => x.label).filter(Boolean),
-    pitchToTabla: Object.fromEntries(
-      pitchOptions
-        .filter((x) => x.label)
-        .map((x) => [x.label!, x.tablaPitch ?? ""])
-    ) as Record<string, string>,
+    pitches,
+    pitchToTabla,
   };
 
   async function onUpdateNotes(formData: FormData) {
     "use server";
-    await updateSessionNotes(session.id, String(formData.get("notes") || ""));
+    await updateSessionNotes(sessionId, String(formData.get("notes") || ""));
   }
 
   async function onAddInstrument(formData: FormData) {
     "use server";
     await addInstrumentRow(
-      session.id,
+      sessionId,
       String(formData.get("instrument") || ""),
       String(formData.get("person") || "")
     );
@@ -93,17 +107,19 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
             <div className="mt-2 rounded-xl border bg-amber-50 p-3 text-sm">
               <div className="font-medium">Read-only mode</div>
               <div className="text-gray-700">
-                To edit, open the special edit link that includes the key (for example: <span className="font-mono">?k=…</span>).
+                To edit, open the special edit link that includes the key (for example:{" "}
+                <span className="font-mono">?k=…</span>).
               </div>
             </div>
           )}
         </CardHeader>
 
+        {/* ✅ Notes at the bottom (as requested) */}
         <CardContent className="grid gap-6">
-          {/* ✅ Main roster first */}
+          {/* Main roster */}
           <SessionSingersGrid
             canEdit={canEdit}
-            sessionId={session.id}
+            sessionId={sessionId}
             singers={allSingers}
             initialRows={initialRows}
             suggestions={suggestions}
@@ -155,7 +171,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
             </div>
           </div>
 
-          {/* ✅ Notes moved to bottom */}
+          {/* Notes */}
           <div>
             <div className="text-sm font-semibold mb-2">Notes</div>
             {canEdit ? (
@@ -163,7 +179,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
                 <textarea
                   name="notes"
                   defaultValue={session.notes ?? ""}
-                  className="min-h-[90px] w-full rounded-xl border p-3 text-sm outline-none focus:ring-2 focus:ring-black/10"
+                  className="min-h-[80px] w-full rounded-xl border p-3 text-sm outline-none focus:ring-2 focus:ring-black/10"
                   placeholder="Session notes…"
                 />
                 <div>
