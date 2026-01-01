@@ -58,11 +58,13 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
     orderBy: { label: "asc" },
   });
 
-  const pitchToTabla = Object.fromEntries(
-    pitchOptions
-      .map((x) => [x.label, x.tablaPitch] as const)
-      .filter(([a, b]) => Boolean(a) && Boolean(b))
-  );
+  // ✅ strict Record<string,string> (skip null tablaPitch)
+  const pitchToTabla: Record<string, string> = {};
+  for (const p of pitchOptions) {
+    if (!p.label) continue;
+    if (p.tablaPitch == null) continue;
+    pitchToTabla[p.label] = p.tablaPitch;
+  }
 
   const suggestions = {
     pitches: pitchOptions.map((x) => x.label).filter(Boolean),
