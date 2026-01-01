@@ -1,33 +1,47 @@
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+// middleware.ts
+import { NextRequest, NextResponse } from "next/server";
 
 export function middleware(req: NextRequest) {
   const url = req.nextUrl;
-  const key = url.searchParams.get("k");
-  const editKey = process.env.EDIT_KEY;
+  const editKey = process.env.EDIT_KEY || "";
 
-  const res = NextResponse.next();
+  // Turn ON edit mode with ?k=YOUR_KEY (then redirect to clean URL)
+  const k = url.searchParams.get("k");
+  if (k && editKey && k === editKey) {
+    const clean = new URL(url.toString());
+    clean.searchParams.delete("k");
 
-  // If the key matches, set a cookie that enables edit mode
-  if (key && editKey && key === editKey) {
+    const res = NextResponse.redirect(clean);
     res.cookies.set("edit", "1", {
-      httpOnly: true,
+      path: "/",
       sameSite: "lax",
       secure: true,
-      path: "/",
-      maxAge: 60 * 60 * 24 * 30, // 30 days
+      // not httpOnly so client UX can reflect it if needed; change to true if you prefer
+      httpOnly: false,
+      maxAge: 60 * 60 * 24 * 365, // 1 year
     });
-
-    // Optional: strip the key from the URL by redirecting to same path without ?k=
-    // Keeps the "anyone with link can edit" behavior but reduces accidental copying of the key.
-    const clean = new URL(req.url);
-    clean.searchParams.delete("k");
-    return NextResponse.redirect(clean, { headers: res.headers });
+    return res;
   }
 
-  return res;
+  // Optional: Turn OFF edit mode with ?readonly=1
+  const readonly = url.searchParams.get("readonly");
+  if (readonly === "1") {
+    const clean = new URL(url.toString());
+    clean.searchParams.delete("readonly");
+
+    const res = NextResponse.redirect(clean);
+    res.cookies.set("edit", "0", { path: "/", maxAge: 0 });
+    return res;
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  matcher: [
+    /*
+      Run middleware on all pages/routes except Next internals and common static assets.
+    */
+    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)",
+  ],
 };
