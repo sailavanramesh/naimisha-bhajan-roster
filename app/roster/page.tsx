@@ -4,34 +4,37 @@ import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle, Input, Button } from "@/components/ui";
 import { RosterCalendarClient } from "./RosterCalendarClient";
 
-function toISODate(d: Date) {
-  return d.toISOString().slice(0, 10);
+function isoDateUTC(d: Date) {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
-function parseISODate(s?: string | null): Date | null {
+function parseISODateUTC(s?: string | null): Date | null {
   if (!s) return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
   if (!m) return null;
-  const dt = new Date(`${m[1]}-${m[2]}-${m[3]}T00:00:00.000Z`);
+  const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0));
   return isNaN(dt.getTime()) ? null : dt;
 }
 
-function parseMonth(s?: string | null): Date | null {
+function parseMonthUTC(s?: string | null): Date | null {
   if (!s) return null;
   const m = /^(\d{4})-(\d{2})$/.exec(s);
   if (!m) return null;
-  const dt = new Date(`${m[1]}-${m[2]}-01T00:00:00.000Z`);
+  const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, 1, 0, 0, 0));
   return isNaN(dt.getTime()) ? null : dt;
 }
 
-function monthKey(d: Date) {
+function monthKeyUTC(d: Date) {
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
   return `${y}-${m}`;
 }
 
 function addDaysUTC(d: Date, n: number) {
-  const out = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  const out = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0));
   out.setUTCDate(out.getUTCDate() + n);
   return out;
 }
@@ -57,29 +60,26 @@ export default async function RosterPage({
   const q = (sp.q ?? "").trim();
 
   // Calendar params
-  const todayUTC = new Date();
-  const selected = parseISODate(sp.d) ?? parseISODate(toISODate(todayUTC))!;
-  const month = parseMonth(sp.m) ?? new Date(Date.UTC(selected.getUTCFullYear(), selected.getUTCMonth(), 1));
-  const monthStart = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1));
-  const monthEndExclusive = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1));
+  const now = new Date();
+  const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
 
-  // Pull sessions for visible month
+  const selected = parseISODateUTC(sp.d) ?? todayUTC;
+  const month = parseMonthUTC(sp.m) ?? new Date(Date.UTC(selected.getUTCFullYear(), selected.getUTCMonth(), 1, 0, 0, 0));
+  const monthStart = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1, 0, 0, 0));
+  const monthEndExclusive = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1, 0, 0, 0));
+
+  // Sessions for visible month
   const monthSessions = await prisma.session.findMany({
     where: { date: { gte: monthStart, lt: monthEndExclusive } },
-    select: {
-      id: true,
-      date: true,
-      _count: { select: { singers: true } },
-    },
+    select: { id: true, date: true, _count: { select: { singers: true } } },
     orderBy: { date: "asc" },
   });
 
-  // day -> { sessionId, entries }
+  // Map day -> info (ALWAYS include sessionId if session exists, even if entries=0)
   const dayInfo: Record<string, { sessionId: string; entries: number }> = {};
   for (const s of monthSessions) {
-    const iso = toISODate(s.date);
-    const entries = s._count.singers ?? 0;
-    dayInfo[iso] = { sessionId: s.id, entries };
+    const iso = isoDateUTC(s.date);
+    dayInfo[iso] = { sessionId: s.id, entries: s._count.singers ?? 0 };
   }
 
   // LIST VIEW
@@ -93,8 +93,8 @@ export default async function RosterPage({
     | null = null;
 
   if (view === "list") {
-    const from = parseISODate(sp.from) ?? null;
-    const to = parseISODate(sp.to) ?? null;
+    const from = parseISODateUTC(sp.from) ?? null;
+    const to = parseISODateUTC(sp.to) ?? null;
 
     listSessions = await prisma.session.findMany({
       where: {
@@ -131,7 +131,7 @@ export default async function RosterPage({
               <CardTitle>Roster</CardTitle>
               <div className="mt-1 text-sm text-gray-600">
                 {view === "calendar"
-                  ? "Tap a date to open the session. (Edit mode will auto-create an empty day.)"
+                  ? "Calendar view (default). Tap a day to open its session."
                   : "List view. Search + date range available."}
               </div>
             </div>
@@ -163,9 +163,9 @@ export default async function RosterPage({
           {view === "calendar" ? (
             <RosterCalendarClient
               canEdit={canEdit}
-              initialMonth={monthKey(monthStart)}
-              initialSelected={toISODate(selected)}
-              dayInfo={dayInfo}
+              initialMonth={monthKeyUTC(monthStart)}
+              initialSelected={isoDateUTC(selected)}
+              initialDayInfo={dayInfo}
             />
           ) : (
             <>
