@@ -9,30 +9,21 @@ function parseISODateOnly(s: string) {
   const d = Number(m[3]);
   const start = new Date(Date.UTC(y, mo, d, 0, 0, 0));
   const end = new Date(Date.UTC(y, mo, d + 1, 0, 0, 0));
-  return { start, end, day: start };
+  return { start, end };
 }
 
-export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
-  const date = String(body?.date || "");
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+  const date = searchParams.get("date") || "";
   const range = parseISODateOnly(date);
 
   if (!range) return NextResponse.json({ sessionId: null }, { status: 400 });
 
-  // Find existing session for that day
-  const existing = await prisma.session.findFirst({
+  const s = await prisma.session.findFirst({
     where: { date: { gte: range.start, lt: range.end } },
     select: { id: true },
     orderBy: { date: "asc" },
   });
 
-  if (existing) return NextResponse.json({ sessionId: existing.id });
-
-  // Create one at UTC midnight for that date
-  const created = await prisma.session.create({
-    data: { date: range.day },
-    select: { id: true },
-  });
-
-  return NextResponse.json({ sessionId: created.id });
+  return NextResponse.json({ sessionId: s?.id ?? null });
 }

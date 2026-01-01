@@ -21,11 +21,6 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
 
   if (!session) return <div>Not found</div>;
 
-  // ✅ capture primitives so TS doesn't think `session` might be null inside server actions
-  const sessionId = session.id;
-  const sessionNotes = session.notes ?? "";
-  const sessionDate = session.date;
-
   const cookieStore = await cookies();
   const canEdit = cookieStore.get("edit")?.value === "1";
 
@@ -45,7 +40,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
     raga: x.raga,
   }));
 
-  const dateLabel = new Date(sessionDate).toLocaleDateString(undefined, {
+  const dateLabel = new Date(session.date).toLocaleDateString(undefined, {
     weekday: "long",
     year: "numeric",
     month: "short",
@@ -58,28 +53,24 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
     orderBy: { label: "asc" },
   });
 
-  // ✅ strict Record<string,string> (skip null tablaPitch)
-  const pitchToTabla: Record<string, string> = {};
-  for (const p of pitchOptions) {
-    if (!p.label) continue;
-    if (p.tablaPitch == null) continue;
-    pitchToTabla[p.label] = p.tablaPitch;
-  }
-
   const suggestions = {
     pitches: pitchOptions.map((x) => x.label).filter(Boolean),
-    pitchToTabla,
+    pitchToTabla: Object.fromEntries(
+      pitchOptions
+        .filter((x) => x.label)
+        .map((x) => [x.label!, x.tablaPitch ?? ""])
+    ) as Record<string, string>,
   };
 
   async function onUpdateNotes(formData: FormData) {
     "use server";
-    await updateSessionNotes(sessionId, String(formData.get("notes") || ""));
+    await updateSessionNotes(session.id, String(formData.get("notes") || ""));
   }
 
   async function onAddInstrument(formData: FormData) {
     "use server";
     await addInstrumentRow(
-      sessionId,
+      session.id,
       String(formData.get("instrument") || ""),
       String(formData.get("person") || "")
     );
@@ -102,8 +93,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
             <div className="mt-2 rounded-xl border bg-amber-50 p-3 text-sm">
               <div className="font-medium">Read-only mode</div>
               <div className="text-gray-700">
-                To edit, open the special edit link that includes the key (for example:{" "}
-                <span className="font-mono">?k=…</span>).
+                To edit, open the special edit link that includes the key (for example: <span className="font-mono">?k=…</span>).
               </div>
             </div>
           )}
@@ -113,7 +103,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
           {/* ✅ Main roster first */}
           <SessionSingersGrid
             canEdit={canEdit}
-            sessionId={sessionId}
+            sessionId={session.id}
             singers={allSingers}
             initialRows={initialRows}
             suggestions={suggestions}
@@ -165,15 +155,15 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
             </div>
           </div>
 
-          {/* ✅ Notes at bottom */}
+          {/* ✅ Notes moved to bottom */}
           <div>
             <div className="text-sm font-semibold mb-2">Notes</div>
             {canEdit ? (
               <form action={onUpdateNotes} className="grid gap-2">
                 <textarea
                   name="notes"
-                  defaultValue={sessionNotes}
-                  className="min-h-[80px] w-full rounded-xl border p-3 text-sm outline-none focus:ring-2 focus:ring-black/10"
+                  defaultValue={session.notes ?? ""}
+                  className="min-h-[90px] w-full rounded-xl border p-3 text-sm outline-none focus:ring-2 focus:ring-black/10"
                   placeholder="Session notes…"
                 />
                 <div>
@@ -181,7 +171,9 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
                 </div>
               </form>
             ) : (
-              <div className="rounded-xl border bg-white p-3 text-sm whitespace-pre-wrap">{sessionNotes || "—"}</div>
+              <div className="rounded-xl border bg-white p-3 text-sm whitespace-pre-wrap">
+                {session.notes ?? "—"}
+              </div>
             )}
           </div>
 

@@ -2,232 +2,211 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import clsx from "clsx";
 
-type DayInfo = Record<string, { sessionId: string; entries: number }>;
+type DayInfo = { sessionId: string; entries: number; hasSession: boolean };
 
-function isoDateUTC(d: Date) {
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+function monthStartUTC(yyyyMm: string) {
+  const m = /^(\d{4})-(\d{2})$/.exec(yyyyMm);
+  if (!m) return new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), 1));
+  return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, 1, 0, 0, 0));
 }
 
-function parseMonthKeyUTC(m: string) {
-  const mm = /^(\d{4})-(\d{2})$/.exec(m);
-  if (!mm) return new Date(Date.UTC(1970, 0, 1));
-  return new Date(Date.UTC(Number(mm[1]), Number(mm[2]) - 1, 1));
+function isoUTC(d: Date) {
+  return d.toISOString().slice(0, 10);
 }
 
-function monthKeyUTC(d: Date) {
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
-}
-
-function addMonthsUTC(d: Date, n: number) {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1));
-}
-
-function startOfCalendarGridUTC(monthStart: Date) {
-  // Monday-first grid
-  const day = (monthStart.getUTCDay() + 6) % 7; // Mon=0 ... Sun=6
-  const out = new Date(Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth(), 1));
-  out.setUTCDate(out.getUTCDate() - day);
+function addDaysUTC(d: Date, n: number) {
+  const out = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0));
+  out.setUTCDate(out.getUTCDate() + n);
   return out;
 }
 
-async function fetchMonthInfo(m: string): Promise<DayInfo> {
-  const res = await fetch(`/api/roster/month?m=${encodeURIComponent(m)}`, { cache: "no-store" });
-  if (!res.ok) return {};
-  const data = await res.json();
-  return (data.dayInfo || {}) as DayInfo;
-}
-
-async function ensureSession(dateISO: string): Promise<string | null> {
-  const res = await fetch("/api/roster/ensure", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ date: dateISO }),
-  });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return (data.sessionId as string) || null;
+function startOfGridUTC(monthStart: Date) {
+  // Monday-start calendar
+  const dow = (monthStart.getUTCDay() + 6) % 7; // Mon=0..Sun=6
+  return addDaysUTC(monthStart, -dow);
 }
 
 export function RosterCalendarClient(props: {
   canEdit: boolean;
   initialMonth: string; // YYYY-MM
   initialSelected: string; // YYYY-MM-DD
-  initialDayInfo: DayInfo;
+  initialDayInfo: Record<string, DayInfo>;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
   const [month, setMonth] = useState(props.initialMonth);
   const [selected, setSelected] = useState(props.initialSelected);
-  const [dayInfo, setDayInfo] = useState<DayInfo>(props.initialDayInfo);
+  const [dayInfo, setDayInfo] = useState<Record<string, DayInfo>>(props.initialDayInfo);
+  const [hint, setHint] = useState<string>("");
 
-  const monthStart = useMemo(() => parseMonthKeyUTC(month), [month]);
-  const gridStart = useMemo(() => startOfCalendarGridUTC(monthStart), [monthStart]);
-
-  // Keep calendar markers fresh when month changes
-  useEffect(() => {
-    let alive = true;
-    (async () => {
-      const info = await fetchMonthInfo(month);
-      if (alive) setDayInfo(info);
-    })();
-    return () => {
-      alive = false;
-    };
-  }, [month]);
+  const ms = useMemo(() => monthStartUTC(month), [month]);
+  const gridStart = useMemo(() => startOfGridUTC(ms), [ms]);
 
   const weeks = useMemo(() => {
-    const out: Date[][] = [];
-    let cur = new Date(gridStart);
-    for (let w = 0; w < 6; w++) {
-      const row: Date[] = [];
-      for (let i = 0; i < 7; i++) {
-        row.push(new Date(cur));
-        cur.setUTCDate(cur.getUTCDate() + 1);
-      }
-      out.push(row);
-    }
-    return out;
+    const cells: Date[] = [];
+    for (let i = 0; i < 42; i++) cells.push(addDaysUTC(gridStart, i));
+    const rows: Date[][] = [];
+    for (let r = 0; r < 6; r++) rows.push(cells.slice(r * 7, r * 7 + 7));
+    return rows;
   }, [gridStart]);
 
-  function labelMonth(d: Date) {
-    return d.toLocaleDateString(undefined, { month: "long", year: "numeric", timeZone: "UTC" });
+  async function loadMonth(m: string) {
+    const res = await fetch(`/api/roster/month?month=${encodeURIComponent(m)}`, { cache: "no-store" });
+    if (!res.ok) return;
+    const data = await res.json();
+    setDayInfo((data?.days || {}) as Record<string, DayInfo>);
   }
 
-  function entriesToHeat(entries: number) {
-    // tiny heat bar width (0..100). You can tweak later.
-    if (entries <= 0) return 0;
-    if (entries === 1) return 35;
-    if (entries === 2) return 55;
-    if (entries === 3) return 70;
-    return 90;
+  useEffect(() => {
+    // keep calendar indicators fresh
+    loadMonth(month).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [month]);
+
+  async function lookupSessionId(date: string) {
+    const res = await fetch(`/api/roster/lookup?date=${encodeURIComponent(date)}`, { cache: "no-store" });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data?.sessionId as string | null) ?? null;
   }
 
-  function onTapDay(iso: string) {
-    setSelected(iso);
+  async function ensureSessionId(date: string) {
+    const res = await fetch(`/api/roster/ensure`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ date }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return (data?.sessionId as string | null) ?? null;
+  }
 
-    const info = dayInfo[iso];
+  function goPrev() {
+    const d = new Date(Date.UTC(ms.getUTCFullYear(), ms.getUTCMonth() - 1, 1));
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    setMonth(`${y}-${m}`);
+  }
 
+  function goNext() {
+    const d = new Date(Date.UTC(ms.getUTCFullYear(), ms.getUTCMonth() + 1, 1));
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    setMonth(`${y}-${m}`);
+  }
+
+  async function onTapDay(date: string) {
+    setHint("");
+    setSelected(date);
+
+    // Try from cached month info first
+    const info = dayInfo[date];
+    if (info?.sessionId) {
+      router.push(`/roster/${info.sessionId}`);
+      return;
+    }
+
+    // If cache missed (timezone / range / etc), look it up server-side (read-only safe)
+    const found = await lookupSessionId(date);
+    if (found) {
+      router.push(`/roster/${found}`);
+      return;
+    }
+
+    // No session exists
+    if (!props.canEdit) {
+      setHint("No session on this day.");
+      return;
+    }
+
+    // Edit mode: create + open
     startTransition(async () => {
-      // If session exists, ALWAYS open it (read-only + edit)
-      if (info?.sessionId) {
-        router.push(`/roster/${info.sessionId}`);
-        return;
-      }
-
-      // If no session exists:
-      if (!props.canEdit) {
-        // read-only: do nothing (but selection still updates)
-        return;
-      }
-
-      // edit: create session + open
-      const sessionId = await ensureSession(iso);
-      if (!sessionId) return;
-
-      // optimistic marker: show dot immediately
-      setDayInfo((prev) => ({
-        ...prev,
-        [iso]: { sessionId, entries: 0 },
-      }));
-
-      router.push(`/roster/${sessionId}`);
+      const sid = await ensureSessionId(date);
+      if (sid) router.push(`/roster/${sid}`);
     });
   }
 
+  const title = useMemo(() => {
+    const d = ms;
+    return d.toLocaleDateString(undefined, { month: "long", year: "numeric", timeZone: "UTC" });
+  }, [ms]);
+
+  const selectedInfo = dayInfo[selected];
+
   return (
     <div className="grid gap-3">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex items-center justify-between">
         <button
           type="button"
           className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
-          onClick={() => setMonth(monthKeyUTC(addMonthsUTC(monthStart, -1)))}
-          disabled={isPending}
+          onClick={goPrev}
         >
           Prev
         </button>
 
-        <div className="text-sm font-semibold">{labelMonth(monthStart)}</div>
+        <div className="text-sm font-semibold">{title}</div>
 
         <button
           type="button"
           className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
-          onClick={() => setMonth(monthKeyUTC(addMonthsUTC(monthStart, 1)))}
-          disabled={isPending}
+          onClick={goNext}
         >
           Next
         </button>
       </div>
 
-      {/* Weekday labels */}
-      <div className="grid grid-cols-7 text-center text-[11px] sm:text-xs text-gray-500">
-        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
-          <div key={d} className="py-1">
-            {d}
+      <div className="grid grid-cols-7 gap-1 sm:gap-2 text-xs text-gray-600">
+        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((x) => (
+          <div key={x} className="px-1 py-1 text-center">
+            {x}
           </div>
         ))}
       </div>
 
-      {/* Month grid (mobile + desktop) */}
-      <div className="grid gap-2">
-        {weeks.map((week, wi) => (
-          <div key={wi} className="grid grid-cols-7 gap-2">
-            {week.map((d) => {
-              const iso = isoDateUTC(d);
-              const inMonth = d.getUTCMonth() === monthStart.getUTCMonth();
-              const isSelected = iso === selected;
+      <div className="grid gap-1 sm:gap-2">
+        {weeks.map((row, idx) => (
+          <div key={idx} className="grid grid-cols-7 gap-1 sm:gap-2">
+            {row.map((d) => {
+              const date = isoUTC(d);
+              const inMonth = d.getUTCMonth() === ms.getUTCMonth();
+              const isSelected = date === selected;
 
-              const info = dayInfo[iso];
-              const hasSession = !!info?.sessionId;
+              const info = dayInfo[date];
+              const hasSession = info?.hasSession;
               const entries = info?.entries ?? 0;
 
-              const heat = entriesToHeat(entries);
+              // A tiny "heat bar" intensity based on entries (cap at 6)
+              const intensity = Math.min(entries, 6) / 6;
 
               return (
                 <button
-                  key={iso}
+                  key={date}
                   type="button"
-                  onClick={() => onTapDay(iso)}
-                  className={clsx(
-                    "relative rounded-2xl border bg-white text-left",
-                    // more breathing room on mobile
-                    "min-h-[48px] sm:min-h-[64px] p-2 sm:p-3",
-                    "hover:bg-gray-50 active:scale-[0.99] transition",
-                    !inMonth && "opacity-40",
-                    isSelected && "ring-2 ring-black"
-                  )}
+                  onClick={() => onTapDay(date)}
+                  className={[
+                    "relative rounded-xl border text-left",
+                    "min-h-[54px] sm:min-h-[68px]",
+                    "px-2 py-2",
+                    "transition hover:bg-gray-50",
+                    inMonth ? "bg-white" : "bg-gray-50 text-gray-400",
+                    isSelected ? "ring-2 ring-black/15" : "",
+                  ].join(" ")}
                 >
-                  {/* Day number */}
-                  <div className="text-[12px] sm:text-sm font-medium">{d.getUTCDate()}</div>
+                  <div className="text-sm font-medium">{d.getUTCDate()}</div>
 
-                  {/* Indicators */}
+                  {/* Indicator */}
                   {hasSession ? (
-                    <>
-                      {/* Dot: session exists */}
+                    entries > 0 ? (
                       <div
-                        className={clsx(
-                          "absolute top-2 right-2 h-2 w-2 rounded-full",
-                          entries > 0 ? "bg-black" : "bg-gray-400"
-                        )}
-                        title={entries > 0 ? `${entries} entries` : "Session exists"}
+                        className="absolute bottom-2 left-2 right-2 h-1 rounded-full bg-black/20"
+                        style={{ opacity: 0.25 + intensity * 0.6 }}
+                        aria-hidden
                       />
-                      {/* Heat bar: only if entries>0 */}
-                      {entries > 0 ? (
-                        <div className="absolute left-2 right-2 bottom-2">
-                          <div className="h-1 rounded-full bg-gray-200 overflow-hidden">
-                            <div className="h-full bg-black rounded-full" style={{ width: `${heat}%` }} />
-                          </div>
-                        </div>
-                      ) : null}
-                    </>
+                    ) : (
+                      <div className="absolute bottom-2 left-2 h-2 w-2 rounded-full bg-black/10" aria-hidden />
+                    )
                   ) : null}
                 </button>
               );
@@ -236,12 +215,33 @@ export function RosterCalendarClient(props: {
         ))}
       </div>
 
-      <div className="text-xs text-gray-600">
-        {props.canEdit ? (
-          <>Tap a day to open it. If no session exists, it will be created.</>
-        ) : (
-          <>Tap a day with a dot to open that session (read-only).</>
-        )}
+      <div className="rounded-2xl border bg-white p-3 text-sm">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="font-medium">
+              {new Date(`${selected}T00:00:00.000Z`).toLocaleDateString(undefined, {
+                weekday: "long",
+                year: "numeric",
+                month: "short",
+                day: "numeric",
+                timeZone: "UTC",
+              })}
+            </div>
+            <div className="text-gray-600">
+              {selectedInfo?.hasSession
+                ? selectedInfo.entries > 0
+                  ? `${selectedInfo.entries} bhajan row${selectedInfo.entries === 1 ? "" : "s"}`
+                  : "Session exists (no bhajans yet)"
+                : props.canEdit
+                ? "Tap to create a session."
+                : "No session."}
+            </div>
+          </div>
+
+          {isPending ? <div className="text-gray-600">Opening…</div> : null}
+        </div>
+
+        {hint ? <div className="mt-2 text-xs text-gray-600">{hint}</div> : null}
       </div>
     </div>
   );

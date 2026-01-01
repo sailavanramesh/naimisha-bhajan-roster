@@ -4,14 +4,11 @@ import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle, Input, Button } from "@/components/ui";
 import { RosterCalendarClient } from "./RosterCalendarClient";
 
-function isoDateUTC(d: Date) {
-  const y = d.getUTCFullYear();
-  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(d.getUTCDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+function toISODate(d: Date) {
+  return d.toISOString().slice(0, 10);
 }
 
-function parseISODateUTC(s?: string | null): Date | null {
+function parseISODate(s?: string | null): Date | null {
   if (!s) return null;
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
   if (!m) return null;
@@ -19,7 +16,7 @@ function parseISODateUTC(s?: string | null): Date | null {
   return isNaN(dt.getTime()) ? null : dt;
 }
 
-function parseMonthUTC(s?: string | null): Date | null {
+function parseMonth(s?: string | null): Date | null {
   if (!s) return null;
   const m = /^(\d{4})-(\d{2})$/.exec(s);
   if (!m) return null;
@@ -27,7 +24,7 @@ function parseMonthUTC(s?: string | null): Date | null {
   return isNaN(dt.getTime()) ? null : dt;
 }
 
-function monthKeyUTC(d: Date) {
+function monthKey(d: Date) {
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
   return `${y}-${m}`;
@@ -52,37 +49,34 @@ export default async function RosterPage({
   }>;
 }) {
   const sp = await searchParams;
-
   const cookieStore = await cookies();
   const canEdit = cookieStore.get("edit")?.value === "1";
 
   const view = sp.view === "list" ? "list" : "calendar";
   const q = (sp.q ?? "").trim();
 
-  // Calendar params
-  const now = new Date();
-  const todayUTC = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
-
-  const selected = parseISODateUTC(sp.d) ?? todayUTC;
-  const month = parseMonthUTC(sp.m) ?? new Date(Date.UTC(selected.getUTCFullYear(), selected.getUTCMonth(), 1, 0, 0, 0));
+  const todayUTC = new Date();
+  const selected = parseISODate(sp.d) ?? parseISODate(toISODate(todayUTC))!;
+  const month = parseMonth(sp.m) ?? new Date(Date.UTC(selected.getUTCFullYear(), selected.getUTCMonth(), 1, 0, 0, 0));
   const monthStart = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1, 0, 0, 0));
   const monthEndExclusive = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1, 0, 0, 0));
 
-  // Sessions for visible month
   const monthSessions = await prisma.session.findMany({
     where: { date: { gte: monthStart, lt: monthEndExclusive } },
     select: { id: true, date: true, _count: { select: { singers: true } } },
     orderBy: { date: "asc" },
   });
 
-  // Map day -> info (ALWAYS include sessionId if session exists, even if entries=0)
-  const dayInfo: Record<string, { sessionId: string; entries: number }> = {};
+  const dayInfo: Record<string, { sessionId: string; entries: number; hasSession: boolean }> = {};
   for (const s of monthSessions) {
-    const iso = isoDateUTC(s.date);
-    dayInfo[iso] = { sessionId: s.id, entries: s._count.singers ?? 0 };
+    const iso = toISODate(s.date);
+    dayInfo[iso] = {
+      sessionId: s.id,
+      entries: s._count.singers ?? 0,
+      hasSession: true,
+    };
   }
 
-  // LIST VIEW
   let listSessions:
     | Array<{
         id: string;
@@ -93,8 +87,8 @@ export default async function RosterPage({
     | null = null;
 
   if (view === "list") {
-    const from = parseISODateUTC(sp.from) ?? null;
-    const to = parseISODateUTC(sp.to) ?? null;
+    const from = parseISODate(sp.from) ?? null;
+    const to = parseISODate(sp.to) ?? null;
 
     listSessions = await prisma.session.findMany({
       where: {
@@ -131,7 +125,7 @@ export default async function RosterPage({
               <CardTitle>Roster</CardTitle>
               <div className="mt-1 text-sm text-gray-600">
                 {view === "calendar"
-                  ? "Calendar view (default). Tap a day to open its session."
+                  ? "Tap a day to open the session (edit mode will create if missing)."
                   : "List view. Search + date range available."}
               </div>
             </div>
@@ -163,8 +157,8 @@ export default async function RosterPage({
           {view === "calendar" ? (
             <RosterCalendarClient
               canEdit={canEdit}
-              initialMonth={monthKeyUTC(monthStart)}
-              initialSelected={isoDateUTC(selected)}
+              initialMonth={monthKey(monthStart)}
+              initialSelected={toISODate(selected)}
               initialDayInfo={dayInfo}
             />
           ) : (

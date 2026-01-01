@@ -10,7 +10,6 @@ type SingerLite = { id: string; name: string; gender: string | null };
 type BhajanLite = {
   id: string;
   title: string;
-  raga: string | null;
   lyrics: string | null;
   meaning: string | null;
   referenceGentsPitch: string | null;
@@ -69,10 +68,6 @@ export function SessionSingersGrid(props: {
   const singerById = useMemo(() => new Map(props.singers.map((s) => [s.id, s])), [props.singers]);
   const pitchListId = `pitch-options-${props.sessionId}`;
 
-  // Column widths (tuned to reduce cramped look + keep Bhajan narrower)
-  const COL_SINGER = 180;
-  const COL_BHAJAN = 260;
-
   const [rows, setRows] = useState<RowState[]>(
     props.initialRows.map((r) => ({
       _localId: r.id,
@@ -92,19 +87,19 @@ export function SessionSingersGrid(props: {
     }))
   );
 
-  const [search, setSearch] = useState<Record<string, { q: string; items: { id: string; title: string }[]; open: boolean }>>(
-    {}
-  );
+  const [search, setSearch] = useState<
+    Record<string, { q: string; items: { id: string; title: string }[]; open: boolean }>
+  >({});
 
   async function bhajanSearch(q: string) {
-    const res = await fetch(`/api/bhajans/search?q=${encodeURIComponent(q)}`);
+    const res = await fetch(`/api/bhajans/search?q=${encodeURIComponent(q)}`, { cache: "no-store" });
     if (!res.ok) return [];
     const data = await res.json();
     return (data.items || []) as { id: string; title: string }[];
   }
 
   async function fetchBhajan(id: string): Promise<BhajanLite | null> {
-    const res = await fetch(`/api/bhajans/by-id?id=${encodeURIComponent(id)}`);
+    const res = await fetch(`/api/bhajans/by-id?id=${encodeURIComponent(id)}`, { cache: "no-store" });
     if (!res.ok) return null;
     const data = await res.json();
     return (data.bhajan || null) as BhajanLite | null;
@@ -123,7 +118,7 @@ export function SessionSingersGrid(props: {
       ...prev,
       {
         _localId: id,
-        id: null as any, // keep compatible with existing action type
+        id,
         singerId: firstSinger?.id || "",
         singerName: firstSinger?.name,
         singerGender: firstSinger?.gender ?? null,
@@ -134,7 +129,7 @@ export function SessionSingersGrid(props: {
         alternativeTablaPitch: null,
         recommendedPitch: null,
         raga: null,
-        _detailsOpen: false,
+        _detailsOpen: true,
         _bhajan: null,
       },
     ]);
@@ -193,7 +188,7 @@ export function SessionSingersGrid(props: {
   }
 
   function onConfirmedPitchChange(localId: string, confirmed: string) {
-    const tabla = confirmed ? props.suggestions.pitchToTabla[confirmed] ?? "" : "";
+    const tabla = confirmed ? (props.suggestions.pitchToTabla[confirmed] ?? "") : "";
     setRows((prev) =>
       prev.map((r) => {
         if (r._localId !== localId) return r;
@@ -224,7 +219,7 @@ export function SessionSingersGrid(props: {
     if (!props.canEdit) return;
     startTransition(async () => {
       const payload: SingerRowInput[] = rows.map((r) => ({
-        id: (r as any).id,
+        id: r.id,
         singerId: r.singerId,
         bhajanId: r.bhajanId,
         bhajanTitle: r.bhajanTitle,
@@ -244,8 +239,8 @@ export function SessionSingersGrid(props: {
     if (!row || !props.canEdit) return;
 
     startTransition(async () => {
-      if ((row as any).id && !String((row as any).id).startsWith("new_")) {
-        await deleteSingerRow((row as any).id);
+      if (row.id && !String(row.id).startsWith("new_")) {
+        await deleteSingerRow(row.id);
       }
       setRows((prev) => prev.filter((r) => r._localId !== localId));
       router.refresh();
@@ -261,13 +256,7 @@ export function SessionSingersGrid(props: {
       </datalist>
 
       <div className="flex items-center justify-between gap-3">
-        <div>
-          <div className="text-sm font-semibold">Roster entries</div>
-          <div className="mt-1 text-xs text-gray-600">
-            Confirmed Pitch is the main field. Recommended/Tabla are adjuncts.
-          </div>
-        </div>
-
+        <div className="text-sm font-semibold">Bhajans for this day</div>
         {props.canEdit ? (
           <div className="flex items-center gap-2">
             <Button onClick={addRow}>Add row</Button>
@@ -278,178 +267,172 @@ export function SessionSingersGrid(props: {
         ) : null}
       </div>
 
-      {/* ✅ Always keep grid (including on phone) via horizontal scroll */}
-      <div className="-mx-3 overflow-x-auto px-3">
-        <div className="min-w-[980px]">
-          {/* Header row */}
-          <div className="sticky top-0 z-40 rounded-2xl border bg-white">
-            <div
-              className="grid items-center gap-2 px-2 py-2 text-xs font-semibold text-gray-700"
-              style={{
-                gridTemplateColumns: `${COL_SINGER}px ${COL_BHAJAN}px 190px 180px 120px 110px`,
-              }}
-            >
-              <div className="sticky left-0 z-50 bg-white px-2 py-2 rounded-xl">Singer</div>
-              <div
-                className="sticky z-40 bg-white px-2 py-2 rounded-xl"
-                style={{ left: COL_SINGER }}
-              >
-                Bhajan
-              </div>
-              <div className="px-2 py-2">Confirmed Pitch</div>
-              <div className="px-2 py-2">Recommended</div>
-              <div className="px-2 py-2">Tabla</div>
-              <div className="px-2 py-2 text-right">Actions</div>
-            </div>
-          </div>
+      <div className="rounded-2xl border bg-white">
+        <div className="overflow-x-auto">
+          <table className="min-w-[980px] w-full text-sm">
+            <thead className="sticky top-0 z-40 bg-white">
+              <tr className="border-b">
+                <th className="sticky left-0 z-50 bg-white px-3 py-2 text-left font-semibold w-[170px]">
+                  Singer
+                </th>
+                <th className="sticky left-[170px] z-40 bg-white px-3 py-2 text-left font-semibold w-[260px]">
+                  Bhajan
+                </th>
+                <th className="px-3 py-2 text-left font-semibold w-[170px] bg-black/[0.03]">
+                  <span className="inline-flex items-center gap-2">
+                    <span className="h-2 w-2 rounded-full bg-black/40" />
+                    Confirmed Pitch
+                  </span>
+                </th>
+                <th className="px-3 py-2 text-left font-semibold w-[170px]">Recommended Pitch</th>
+                <th className="px-3 py-2 text-left font-semibold w-[140px]">Tabla</th>
+                <th className="px-3 py-2 text-right font-semibold w-[90px]"> </th>
+              </tr>
+            </thead>
 
-          {/* Rows */}
-          <div className="mt-2 grid gap-2">
-            {rows.map((r) => {
-              const s = search[r._localId] || { q: r.bhajanTitle || "", items: [], open: false };
+            <tbody>
+              {rows.map((r) => {
+                const s = search[r._localId] || { q: r.bhajanTitle || "", items: [], open: false };
 
-              return (
-                <div key={r._localId} className="rounded-2xl border bg-white">
-                  <div
-                    className="grid items-start gap-2 px-2 py-2"
-                    style={{
-                      gridTemplateColumns: `${COL_SINGER}px ${COL_BHAJAN}px 190px 180px 120px 110px`,
-                    }}
-                  >
-                    {/* Singer (sticky) */}
-                    <div className="sticky left-0 z-30 bg-white px-2 py-2 rounded-xl">
-                      {props.canEdit ? (
-                        <select
-                          value={r.singerId}
-                          onChange={(e) => onSingerChange(r._localId, e.target.value)}
-                          className="w-full rounded-xl border px-3 py-2 text-sm"
-                        >
-                          {props.singers.map((x) => (
-                            <option key={x.id} value={x.id}>
-                              {x.name}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <div className="text-sm font-medium">{r.singerName}</div>
-                      )}
-
-                      <div className="mt-1 text-[11px] text-gray-600">
-                        {r.singerGender ? `Gender: ${r.singerGender}` : "Gender: —"}
-                      </div>
-                    </div>
-
-                    {/* Bhajan (sticky) — narrower + no overlap */}
-                    <div
-                      className="sticky z-20 bg-white px-2 py-2 rounded-xl"
-                      style={{ left: COL_SINGER }}
-                    >
-                      <div className="relative">
+                return (
+                  <>
+                    <tr key={r._localId} className="border-b align-top">
+                      {/* Singer (sticky) */}
+                      <td className="sticky left-0 z-30 bg-white px-3 py-2">
                         {props.canEdit ? (
-                          <>
-                            <Input
-                              value={s.q}
-                              placeholder="Search masterlist…"
-                              onChange={(e) => onSearchChange(r._localId, e.target.value)}
-                            />
-
-                            {s.open && s.items.length > 0 ? (
-                              <div className="absolute z-50 mt-1 w-full max-h-64 overflow-auto rounded-xl border bg-white shadow">
-                                {s.items.map((it) => (
-                                  <button
-                                    type="button"
-                                    key={it.id}
-                                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                                    onClick={() => onPickBhajan(r._localId, it.id)}
-                                  >
-                                    {it.title}
-                                  </button>
-                                ))}
-                              </div>
-                            ) : null}
-                          </>
-                        ) : (
-                          <div className="text-sm whitespace-normal break-words">{r.bhajanTitle ?? "—"}</div>
-                        )}
-                      </div>
-
-                      {r.bhajanTitle ? (
-                        <div className="mt-1">
-                          <button
-                            type="button"
-                            onClick={() => toggleDetails(r._localId)}
-                            className="text-xs underline underline-offset-2"
+                          <select
+                            value={r.singerId}
+                            onChange={(e) => onSingerChange(r._localId, e.target.value)}
+                            className="w-full rounded-xl border px-3 py-2 text-sm"
                           >
-                            {r._detailsOpen ? "Hide lyrics/meaning" : "Show lyrics/meaning"}
-                          </button>
+                            {props.singers.map((x) => (
+                              <option key={x.id} value={x.id}>
+                                {x.name}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <div className="font-medium">{r.singerName}</div>
+                        )}
+                        <div className="mt-1 text-xs text-gray-600">{r.singerGender ? r.singerGender : "—"}</div>
+                      </td>
+
+                      {/* Bhajan (sticky, narrower) */}
+                      <td className="sticky left-[170px] z-20 bg-white px-3 py-2">
+                        <div className="relative">
+                          {props.canEdit ? (
+                            <>
+                              <Input
+                                value={s.q}
+                                placeholder="Search masterlist…"
+                                onChange={(e) => onSearchChange(r._localId, e.target.value)}
+                              />
+                              {s.open && s.items.length > 0 ? (
+                                <div className="absolute z-50 mt-1 w-full max-h-64 overflow-auto rounded-xl border bg-white shadow">
+                                  {s.items.map((it) => (
+                                    <button
+                                      type="button"
+                                      key={it.id}
+                                      className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                                      onClick={() => onPickBhajan(r._localId, it.id)}
+                                    >
+                                      {it.title}
+                                    </button>
+                                  ))}
+                                </div>
+                              ) : null}
+                            </>
+                          ) : (
+                            <div className="whitespace-normal break-words">{r.bhajanTitle ?? "—"}</div>
+                          )}
+
+                          {r.bhajanTitle ? (
+                            <div className="mt-1">
+                              <button
+                                type="button"
+                                onClick={() => toggleDetails(r._localId)}
+                                className="text-xs underline underline-offset-2"
+                              >
+                                {r._detailsOpen ? "Hide lyrics/meaning" : "Show lyrics/meaning"}
+                              </button>
+                            </div>
+                          ) : null}
                         </div>
-                      ) : null}
-                    </div>
+                      </td>
 
-                    {/* Confirmed pitch (stands out + not hidden by sticky cols) */}
-                    <div className="px-2 py-2">
-                      <Input
-                        list={pitchListId}
-                        value={r.confirmedPitch ?? ""}
-                        placeholder="Confirmed"
-                        onChange={(e) => onConfirmedPitchChange(r._localId, e.target.value)}
-                        disabled={!props.canEdit}
-                        className="bg-violet-50 ring-2 ring-violet-200"
-                      />
-                      <div className="mt-1 text-[11px] text-gray-600">Main pitch</div>
-                    </div>
+                      {/* Confirmed pitch (highlight) */}
+                      <td className="px-3 py-2 bg-black/[0.03]">
+                        <Input
+                          list={pitchListId}
+                          value={r.confirmedPitch ?? ""}
+                          placeholder="Confirmed"
+                          onChange={(e) => onConfirmedPitchChange(r._localId, e.target.value)}
+                          disabled={!props.canEdit}
+                          className="font-semibold"
+                        />
+                      </td>
 
-                    {/* Recommended */}
-                    <div className="px-2 py-2">
-                      <Input
-                        list={pitchListId}
-                        value={r.recommendedPitch ?? ""}
-                        placeholder="Recommended"
-                        onChange={(e) => updateRow(r._localId, { recommendedPitch: e.target.value })}
-                        disabled={!props.canEdit}
-                      />
-                    </div>
+                      {/* Recommended pitch */}
+                      <td className="px-3 py-2">
+                        <Input
+                          list={pitchListId}
+                          value={r.recommendedPitch ?? ""}
+                          placeholder="Recommended"
+                          onChange={(e) => updateRow(r._localId, { recommendedPitch: e.target.value })}
+                          disabled={!props.canEdit}
+                        />
+                      </td>
 
-                    {/* Tabla */}
-                    <div className="px-2 py-2">
-                      <Input value={r.confirmedPitch ? r.alternativeTablaPitch ?? "" : ""} placeholder="Tabla" disabled />
-                    </div>
+                      {/* Tabla pitch */}
+                      <td className="px-3 py-2">
+                        <Input value={r.confirmedPitch ? (r.alternativeTablaPitch ?? "") : ""} placeholder="Tabla" disabled />
+                      </td>
 
-                    {/* Actions */}
-                    <div className="px-2 py-2 flex justify-end">
-                      {props.canEdit ? (
-                        <Button onClick={() => removeRow(r._localId)} className="border-red-300 text-red-700 hover:bg-red-50">
-                          Delete
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
+                      {/* Delete */}
+                      <td className="px-3 py-2 text-right">
+                        {props.canEdit ? (
+                          <Button
+                            onClick={() => removeRow(r._localId)}
+                            className="border-red-300 text-red-700 hover:bg-red-50"
+                          >
+                            Delete
+                          </Button>
+                        ) : null}
+                      </td>
+                    </tr>
 
-                  {/* Lyrics/Meaning */}
-                  {r.bhajanTitle && r._detailsOpen ? (
-                    <div className="mx-2 mb-2 rounded-xl border bg-gray-50 p-3 text-sm">
-                      <div className="grid md:grid-cols-2 gap-3">
-                        <div>
-                          <div className="text-xs font-semibold text-gray-700 mb-1">Lyrics</div>
-                          <div className="whitespace-pre-wrap">{r._bhajan ? r._bhajan.lyrics ?? "—" : "Loading…"}</div>
-                        </div>
-                        <div>
-                          <div className="text-xs font-semibold text-gray-700 mb-1">Meaning</div>
-                          <div className="whitespace-pre-wrap">{r._bhajan ? r._bhajan.meaning ?? "—" : "Loading…"}</div>
-                        </div>
-                      </div>
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
+                    {/* Details row */}
+                    {r.bhajanTitle && r._detailsOpen ? (
+                      <tr key={`${r._localId}_details`} className="border-b">
+                        <td colSpan={6} className="px-3 py-3 bg-gray-50">
+                          <div className="grid md:grid-cols-2 gap-4 text-sm">
+                            <div>
+                              <div className="text-xs font-semibold text-gray-700 mb-1">Lyrics</div>
+                              <div className="whitespace-pre-wrap">
+                                {r._bhajan ? (r._bhajan.lyrics ?? "—") : "Loading…"}
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-xs font-semibold text-gray-700 mb-1">Meaning</div>
+                              <div className="whitespace-pre-wrap">
+                                {r._bhajan ? (r._bhajan.meaning ?? "—") : "Loading…"}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : null}
+                  </>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 
       {props.canEdit ? (
         <div className="text-xs text-gray-600">
-          Tip: select a bhajan from the dropdown (not just typing) to link it to the masterlist. Tabla auto-fills only after Confirmed Pitch is set.
+          Tip: pick a bhajan from the dropdown (not just typing) to link it to the masterlist. Recommended pitch auto-fills from the masterlist using singer gender.
         </div>
       ) : null}
     </div>
