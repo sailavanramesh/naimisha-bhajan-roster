@@ -1,35 +1,80 @@
+import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
+import { Card, CardContent, CardHeader, CardTitle, Button } from "@/components/ui";
 
-export default async function BhajanPage({ params }: { params: { id: string } }) {
-  const b = await prisma.bhajan.findUnique({ where: { id: params.id } });
-  if (!b) return <div>Not found</div>;
+export default async function BhajanPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+
+  const bhajan = await prisma.bhajan.findUnique({
+    where: { id },
+  });
+
+  if (!bhajan) {
+    return (
+      <div className="grid gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Bhajan not found</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm text-gray-600 mb-3">
+              This bhajan may have been deleted or the link is incorrect.
+            </div>
+            <Link href="/bhajans">
+              <Button>Back to Bhajans</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-4">
       <Card>
         <CardHeader>
-          <CardTitle>{b.title}</CardTitle>
-          <div className="mt-2 text-sm text-gray-600">
-            {b.deity ? `Deity: ${b.deity}` : "Deity: —"} · {b.language ? `Language: ${b.language}` : "Language: —"} · {b.raga ? `Raga: ${b.raga}` : "Raga: —"}
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <CardTitle>{bhajan.title}</CardTitle>
+              <div className="mt-2 text-sm text-gray-600">
+                {bhajan.raga ? `Raga: ${bhajan.raga}` : "Raga: —"}
+              </div>
+            </div>
+
+            <Link href="/bhajans">
+              <Button>Back</Button>
+            </Link>
           </div>
         </CardHeader>
+
         <CardContent className="grid gap-4">
-          {b.url ? <div className="text-sm"><a className="underline" href={b.url} target="_blank">Source</a></div> : null}
-
-          {b.meaning ? (
-            <div>
-              <div className="text-sm font-semibold mb-1">Meaning</div>
-              <pre className="whitespace-pre-wrap rounded-xl border bg-white p-3 text-sm">{b.meaning}</pre>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="rounded-2xl border bg-white p-3">
+              <div className="text-xs font-semibold text-gray-700">Gents pitch</div>
+              <div className="mt-1 text-sm">{bhajan.referenceGentsPitch ?? "—"}</div>
             </div>
-          ) : null}
 
-          {b.lyrics ? (
-            <div>
-              <div className="text-sm font-semibold mb-1">Lyrics</div>
-              <pre className="whitespace-pre-wrap rounded-xl border bg-white p-3 text-sm">{b.lyrics}</pre>
+            <div className="rounded-2xl border bg-white p-3">
+              <div className="text-xs font-semibold text-gray-700">Ladies pitch</div>
+              <div className="mt-1 text-sm">{bhajan.referenceLadiesPitch ?? "—"}</div>
             </div>
-          ) : null}
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-2xl border bg-white p-3">
+              <div className="text-xs font-semibold text-gray-700 mb-2">Lyrics</div>
+              <div className="text-sm whitespace-pre-wrap">{bhajan.lyrics ?? "—"}</div>
+            </div>
+
+            <div className="rounded-2xl border bg-white p-3">
+              <div className="text-xs font-semibold text-gray-700 mb-2">Meaning</div>
+              <div className="text-sm whitespace-pre-wrap">{bhajan.meaning ?? "—"}</div>
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
