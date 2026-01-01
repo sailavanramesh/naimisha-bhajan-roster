@@ -12,10 +12,12 @@ import {
 export default async function SessionPage({
   params,
 }: {
-  params: { id: string };
+  params: Promise<{ id: string }>;
 }) {
+  const { id } = await params;
+
   const session = await prisma.session.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: {
       singers: {
         include: { singer: true, bhajan: true },
@@ -27,7 +29,7 @@ export default async function SessionPage({
 
   if (!session) return <div>Not found</div>;
 
-  // ✅ Next.js 15: cookies() is async-typed; await it before calling .get()
+  // Next.js 15: cookies() is async-typed; await it before calling .get()
   const cookieStore = await cookies();
   const canEdit = cookieStore.get("edit")?.value === "1";
 
