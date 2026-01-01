@@ -3,17 +3,19 @@ import { prisma } from "@/lib/db";
 import { cookies } from "next/headers";
 import { Card, CardContent, CardHeader, CardTitle, Button, Input } from "@/components/ui";
 import { SessionSingersGrid } from "./SessionSingersGrid";
-import { updateSessionNotes, addInstrumentRow, deleteInstrumentRow } from "./actions";
+import {
+  updateSessionNotes,
+  addInstrumentRow,
+  deleteInstrumentRow,
+} from "./actions";
 
 export default async function SessionPage({
   params,
 }: {
-  params: Promise<{ id: string }>;
+  params: { id: string };
 }) {
-  const { id } = await params;
-
   const session = await prisma.session.findUnique({
-    where: { id },
+    where: { id: params.id },
     include: {
       singers: {
         include: { singer: true, bhajan: true },
@@ -25,9 +27,13 @@ export default async function SessionPage({
 
   if (!session) return <div>Not found</div>;
 
-  const canEdit = cookies().get("edit")?.value === "1";
+  // ✅ Next.js 15: cookies() is async-typed; await it before calling .get()
+  const cookieStore = await cookies();
+  const canEdit = cookieStore.get("edit")?.value === "1";
 
-  const allSingers = canEdit ? await prisma.singer.findMany({ orderBy: { name: "asc" } }) : [];
+  const allSingers = canEdit
+    ? await prisma.singer.findMany({ orderBy: { name: "asc" } })
+    : [];
 
   const initialRows = session.singers.map((x) => ({
     id: x.id,
@@ -51,20 +57,14 @@ export default async function SessionPage({
   });
 
   // Suggestions (server-side, fast)
-  const [pitchOptions, tablaMapRows] = await Promise.all([
-    prisma.pitchLookup.findMany({
-      select: { label: true },
-      orderBy: { label: "asc" },
-    }),
-    prisma.pitchLookup.findMany({
-      select: { label: true, tablaPitch: true },
-      orderBy: { label: "asc" },
-    }),
-  ]);
+  const pitchOptions = await prisma.pitchLookup.findMany({
+    select: { label: true, tablaPitch: true },
+    orderBy: { label: "asc" },
+  });
 
   const pitchToTabla: Record<string, string> = {};
-  for (const r of tablaMapRows) {
-    if (r.label && r.tablaPitch) pitchToTabla[r.label] = r.tablaPitch;
+  for (const p of pitchOptions) {
+    if (p.label) pitchToTabla[p.label] = p.tablaPitch ?? "";
   }
 
   const suggestions = {
@@ -103,8 +103,7 @@ export default async function SessionPage({
             <div className="mt-2 rounded-xl border bg-amber-50 p-3 text-sm">
               <div className="font-medium">Read-only mode</div>
               <div className="text-gray-700">
-                To edit, open the special edit link that includes the key (for example:{" "}
-                <span className="font-mono">?k=…</span>).
+                To edit, open the special edit link that includes the key (for example: <span className="font-mono">?k=…</span>).
               </div>
             </div>
           )}
