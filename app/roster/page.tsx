@@ -5,7 +5,6 @@ import { Card, CardContent, CardHeader, CardTitle, Input, Button } from "@/compo
 import { RosterCalendarClient } from "./RosterCalendarClient";
 
 function toISODate(d: Date) {
-  // Keep day-level stable; we store as YYYY-MM-DD.
   return d.toISOString().slice(0, 10);
 }
 
@@ -31,14 +30,6 @@ function monthKey(d: Date) {
   return `${y}-${m}`;
 }
 
-function startOfWeekMondayUTC(d: Date) {
-  // Monday=0 ... Sunday=6
-  const day = (d.getUTCDay() + 6) % 7;
-  const out = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
-  out.setUTCDate(out.getUTCDate() - day);
-  return out;
-}
-
 function addDaysUTC(d: Date, n: number) {
   const out = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
   out.setUTCDate(out.getUTCDate() + n);
@@ -57,21 +48,25 @@ export default async function RosterPage({
     d?: string;
   }>;
 }) {
+  // ✅ Next 15: searchParams is async-typed in your setup
   const sp = await searchParams;
 
-  const canEdit = cookies().get("edit")?.value === "1";
+  // ✅ Next 15: cookies() is async-typed
+  const cookieStore = await cookies();
+  const canEdit = cookieStore.get("edit")?.value === "1";
 
   const view = sp.view === "list" ? "list" : "calendar";
   const q = (sp.q ?? "").trim();
 
   // Calendar params
-  const todayUTC = new Date(); // used only as a fallback seed
+  const todayUTC = new Date();
   const selected = parseISODate(sp.d) ?? parseISODate(toISODate(todayUTC))!;
-  const month = parseMonth(sp.m) ?? new Date(Date.UTC(selected.getUTCFullYear(), selected.getUTCMonth(), 1));
+  const month =
+    parseMonth(sp.m) ?? new Date(Date.UTC(selected.getUTCFullYear(), selected.getUTCMonth(), 1));
   const monthStart = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1));
   const monthEndExclusive = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1));
 
-  // Pull sessions for the visible month (good enough for desktop month + mobile week strip)
+  // Pull sessions for the visible month
   const monthSessions = await prisma.session.findMany({
     where: {
       date: { gte: monthStart, lt: monthEndExclusive },
@@ -89,18 +84,11 @@ export default async function RosterPage({
   for (const s of monthSessions) {
     const iso = toISODate(s.date);
     const entries = s._count.singers ?? 0;
-    // Only show “activity” for sessions that actually have roster rows (bhajans)
-    if (entries > 0) {
-      dayInfo[iso] = { sessionId: s.id, entries };
-    } else {
-      // Keep sessionId available even if entries = 0 (optional).
-      // We won’t show a dot for 0, but selection can still open the session.
-      dayInfo[iso] = { sessionId: s.id, entries: 0 };
-    }
+    // Store all sessions, but UI can decide whether to show a dot/badge
+    dayInfo[iso] = { sessionId: s.id, entries };
   }
 
-  // LIST VIEW (optional)
-  // Adds a simple date-range form (from/to). Defaults to recent 200.
+  // LIST VIEW
   let listSessions:
     | Array<{
         id: string;
