@@ -21,6 +21,11 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
 
   if (!session) return <div>Not found</div>;
 
+  // ✅ capture primitives so TS doesn't think `session` might be null inside server actions
+  const sessionId = session.id;
+  const sessionNotes = session.notes ?? "";
+  const sessionDate = session.date;
+
   const cookieStore = await cookies();
   const canEdit = cookieStore.get("edit")?.value === "1";
 
@@ -40,7 +45,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
     raga: x.raga,
   }));
 
-  const dateLabel = new Date(session.date).toLocaleDateString(undefined, {
+  const dateLabel = new Date(sessionDate).toLocaleDateString(undefined, {
     weekday: "long",
     year: "numeric",
     month: "short",
@@ -66,13 +71,13 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
 
   async function onUpdateNotes(formData: FormData) {
     "use server";
-    await updateSessionNotes(session.id, String(formData.get("notes") || ""));
+    await updateSessionNotes(sessionId, String(formData.get("notes") || ""));
   }
 
   async function onAddInstrument(formData: FormData) {
     "use server";
     await addInstrumentRow(
-      session.id,
+      sessionId,
       String(formData.get("instrument") || ""),
       String(formData.get("person") || "")
     );
@@ -95,7 +100,8 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
             <div className="mt-2 rounded-xl border bg-amber-50 p-3 text-sm">
               <div className="font-medium">Read-only mode</div>
               <div className="text-gray-700">
-                To edit, open the special edit link that includes the key (for example: <span className="font-mono">?k=…</span>).
+                To edit, open the special edit link that includes the key (for example:{" "}
+                <span className="font-mono">?k=…</span>).
               </div>
             </div>
           )}
@@ -105,7 +111,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
           {/* ✅ Main roster first */}
           <SessionSingersGrid
             canEdit={canEdit}
-            sessionId={session.id}
+            sessionId={sessionId}
             singers={allSingers}
             initialRows={initialRows}
             suggestions={suggestions}
@@ -164,7 +170,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
               <form action={onUpdateNotes} className="grid gap-2">
                 <textarea
                   name="notes"
-                  defaultValue={session.notes ?? ""}
+                  defaultValue={sessionNotes}
                   className="min-h-[80px] w-full rounded-xl border p-3 text-sm outline-none focus:ring-2 focus:ring-black/10"
                   placeholder="Session notes…"
                 />
@@ -173,9 +179,7 @@ export default async function SessionPage({ params }: { params: Promise<{ id: st
                 </div>
               </form>
             ) : (
-              <div className="rounded-xl border bg-white p-3 text-sm whitespace-pre-wrap">
-                {session.notes ?? "—"}
-              </div>
+              <div className="rounded-xl border bg-white p-3 text-sm whitespace-pre-wrap">{sessionNotes || "—"}</div>
             )}
           </div>
 
