@@ -29,6 +29,9 @@ export default async function SessionPage({
 
   if (!session) return <div>Not found</div>;
 
+  // ✅ Freeze values we need so server actions don’t “see” session as possibly null
+  const sessionId = session.id;
+
   // Next.js 15: cookies() is async-typed; await it before calling .get()
   const cookieStore = await cookies();
   const canEdit = cookieStore.get("edit")?.value === "1";
@@ -76,13 +79,13 @@ export default async function SessionPage({
 
   async function onUpdateNotes(formData: FormData) {
     "use server";
-    await updateSessionNotes(session.id, String(formData.get("notes") || ""));
+    await updateSessionNotes(sessionId, String(formData.get("notes") || ""));
   }
 
   async function onAddInstrument(formData: FormData) {
     "use server";
     await addInstrumentRow(
-      session.id,
+      sessionId,
       String(formData.get("instrument") || ""),
       String(formData.get("person") || "")
     );
@@ -137,7 +140,7 @@ export default async function SessionPage({
           {/* Grid editor for bhajans/singers */}
           <SessionSingersGrid
             canEdit={canEdit}
-            sessionId={session.id}
+            sessionId={sessionId}
             singers={allSingers}
             initialRows={initialRows}
             suggestions={suggestions}
