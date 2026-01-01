@@ -48,24 +48,26 @@ function addDaysUTC(d: Date, n: number) {
 export default async function RosterPage({
   searchParams,
 }: {
-  searchParams: {
+  searchParams: Promise<{
     view?: string;
     q?: string;
     from?: string;
     to?: string;
     m?: string;
     d?: string;
-  };
+  }>;
 }) {
+  const sp = await searchParams;
+
   const canEdit = cookies().get("edit")?.value === "1";
 
-  const view = searchParams.view === "list" ? "list" : "calendar";
-  const q = (searchParams.q ?? "").trim();
+  const view = sp.view === "list" ? "list" : "calendar";
+  const q = (sp.q ?? "").trim();
 
   // Calendar params
   const todayUTC = new Date(); // used only as a fallback seed
-  const selected = parseISODate(searchParams.d) ?? parseISODate(toISODate(todayUTC))!;
-  const month = parseMonth(searchParams.m) ?? new Date(Date.UTC(selected.getUTCFullYear(), selected.getUTCMonth(), 1));
+  const selected = parseISODate(sp.d) ?? parseISODate(toISODate(todayUTC))!;
+  const month = parseMonth(sp.m) ?? new Date(Date.UTC(selected.getUTCFullYear(), selected.getUTCMonth(), 1));
   const monthStart = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1));
   const monthEndExclusive = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1));
 
@@ -109,8 +111,8 @@ export default async function RosterPage({
     | null = null;
 
   if (view === "list") {
-    const from = parseISODate(searchParams.from) ?? null;
-    const to = parseISODate(searchParams.to) ?? null;
+    const from = parseISODate(sp.from) ?? null;
+    const to = parseISODate(sp.to) ?? null;
 
     listSessions = await prisma.session.findMany({
       where: {
@@ -186,8 +188,8 @@ export default async function RosterPage({
             <>
               <form className="grid gap-2 md:grid-cols-4">
                 <Input name="q" defaultValue={q} placeholder="Search singer / bhajan / notes…" />
-                <Input name="from" type="date" defaultValue={searchParams.from ?? ""} />
-                <Input name="to" type="date" defaultValue={searchParams.to ?? ""} />
+                <Input name="from" type="date" defaultValue={sp.from ?? ""} />
+                <Input name="to" type="date" defaultValue={sp.to ?? ""} />
                 <Button type="submit">Apply</Button>
                 <input type="hidden" name="view" value="list" />
               </form>
