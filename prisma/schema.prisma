@@ -1,0 +1,146 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Singer {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  gender    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessionSingers SessionSinger[]
+  festivalBhajans FestivalBhajan[]
+}
+
+model Bhajan {
+  id        String   @id @default(cuid())
+  title     String   @unique
+  url       String?
+  singers   String?
+  meaning   String?
+  lyrics    String?
+  audio     String?
+  deity     String?
+  language  String?
+  raga      String?
+  beat      String?
+  level     String?
+  tempo     String?
+  referenceGentsPitch  String?
+  referenceLadiesPitch String?
+  musicNotesForFirstLine String?
+  notesRange String?
+  tutorial  String?
+  sheetMusic String?
+  songTags  String?
+  glossaryTerms String?
+  debugFile String?
+  video     String?
+  generalComments String?
+  karaokeTracksForPractice String?
+  goldenVoice String?
+  instrumental String?
+  extra      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessionSingers SessionSinger[]
+  festivalBhajans FestivalBhajan[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  date      DateTime @unique
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  singers     SessionSinger[]
+  instruments SessionInstrument[]
+}
+
+model SessionSinger {
+  id        String   @id @default(cuid())
+  sessionId String
+  singerId  String
+  bhajanId  String?
+  slot      Int?
+
+  bhajanTitle String?
+  festivalBhajanTitle String?
+  inputOnlyCustomBhajan String?
+
+  confirmedPitch String?
+  alternativeTablaPitch String?
+  recommendedPitch String?
+  raga    String?
+  lyrics  String?
+  meaning String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  singer  Singer  @relation(fields: [singerId], references: [id], onDelete: Cascade)
+  bhajan   Bhajan? @relation(fields: [bhajanId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId])
+  @@index([singerId])
+  @@index([bhajanId])
+}
+
+model SessionInstrument {
+  id        String   @id @default(cuid())
+  sessionId String
+  instrument String
+  person     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+}
+
+model PitchLookup {
+  id        String @id @default(cuid())
+  label     String @unique
+  tablaPitch String?
+  value     Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model InstrumentPerson {
+  id        String @id @default(cuid())
+  instrument String
+  person     String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([instrument, person], name: "instrument_person")
+}
+
+model FestivalBhajan {
+  id       String @id @default(cuid())
+  singerId String
+  bhajanId String?
+  title    String
+  order    Int?
+
+  singer Singer @relation(fields: [singerId], references: [id], onDelete: Cascade)
+  bhajan  Bhajan? @relation(fields: [bhajanId], references: [id], onDelete: SetNull)
+
+  @@index([singerId])
+}

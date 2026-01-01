@@ -1,0 +1,27 @@
+# dependencies
+node_modules
+
+# next build output
+.next
+out
+
+# env files
+.env
+.env.local
+.env.*.local
+
+# OS junk
+.DS_Store
+
+# prisma local dev db (if you still have it)
+prisma/dev.db
+prisma/dev.db-journal
+
+# logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# misc
+*.zip
