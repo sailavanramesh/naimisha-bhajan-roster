@@ -6,8 +6,14 @@ import { SessionSingersGrid } from "./SessionSingersGrid";
 import { getPitchSuggestions } from "@/lib/pitchSuggestions";
 import { deleteInstrumentRow, updateSessionNotes } from "./actions";
 
-export default async function RosterSessionPage({ params }: { params: { id: string } }) {
-  const sessionId = params.id;
+export default async function RosterSessionPage({
+  params,
+}: {
+  // Next.js 15 App Router typing expects params/searchParams to be Promises.
+  // Vercel's type-check enforces this.
+  params: Promise<{ id: string }>;
+}) {
+  const { id: sessionId } = await params;
 
   const c = await cookies();
   const canEdit = c.get("edit")?.value === "1";

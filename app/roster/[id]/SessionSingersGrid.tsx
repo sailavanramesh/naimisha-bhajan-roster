@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { Input, Button } from "@/components/ui";
-import type { PitchSuggestionPayload } from "@/lib/pitchSuggestions";
 import { computeRecommendedPitch } from "@/lib/computeRecommendedPitch";
+import { updateSessionSingerRow, deleteSessionSingerRow, addSessionSingerRow } from "./actions";
 
-type Singer = { id: string; name: string; gender?: string | null };
+type Singer = { id: string; name: string };
 
 type Row = {
   id: string;
-  singerId: string;
+  singerId: string | null;
   singerName: string;
   bhajanId: string | null;
   bhajanTitle: string;
@@ -20,244 +20,269 @@ type Row = {
   notes: string;
 };
 
+type Suggestions = {
+  pitches: string[];
+  pitchToTabla: Record<string, string>;
+};
+
 export function SessionSingersGrid(props: {
   canEdit: boolean;
   sessionId: string;
   singers: Singer[];
   initialRows: Row[];
-  suggestions: PitchSuggestionPayload;
+  suggestions: Suggestions;
 }) {
-  const [rows, setRows] = useState<Row[]>(props.initialRows);
-  const [saving, startTransition] = useTransition();
-  const saveTimer = useRef<number | null>(null);
+  const { canEdit, sessionId, singers, initialRows, suggestions } = props;
+  const [rows, setRows] = useState<Row[]>(initialRows);
+  const [isPending, startTransition] = useTransition();
 
   // Pitch list for datalist
   const pitchListId = "pitch-list";
 
+  // quick lookup singer by id
   const singerById = useMemo(() => {
     const m = new Map<string, Singer>();
-    for (const s of props.singers) m.set(s.id, s);
+    for (const s of singers) m.set(s.id, s);
     return m;
-  }, [props.singers]);
-
-  function scheduleSave(nextRows: Row[]) {
-    if (!props.canEdit) return;
-    setRows(nextRows);
-
-    if (saveTimer.current) window.clearTimeout(saveTimer.current);
-    saveTimer.current = window.setTimeout(() => {
-      startTransition(async () => {
-        await fetch("/api/roster/save", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ sessionId: props.sessionId, rows: nextRows }),
-        });
-      });
-    }, 400);
-  }
+  }, [singers]);
 
   function updateRow(id: string, patch: Partial<Row>) {
-    const next = rows.map((r) => (r.id === id ? { ...r, ...patch } : r));
-    scheduleSave(next);
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+    if (!canEdit) return;
+
+    startTransition(async () => {
+      await updateSessionSingerRow(id, patch);
+    });
   }
 
-  function addRow() {
-    if (!props.canEdit) return;
-    const id = `new_${Math.random().toString(16).slice(2)}`;
-    const next: Row[] = [
-      ...rows,
-      {
-        id,
-        singerId: "",
-        singerName: "",
-        bhajanId: null,
-        bhajanTitle: "",
-        confirmedPitch: "",
-        recommendedPitch: "",
-        tabla: "",
-        notes: "",
-      },
-    ];
-    scheduleSave(next);
+  async function onAddRow() {
+    if (!canEdit) return;
+    startTransition(async () => {
+      const newRow = await addSessionSingerRow(sessionId);
+      setRows((prev) => [...prev, newRow]);
+    });
   }
 
-  function deleteRow(id: string) {
-    if (!props.canEdit) return;
-    const next = rows.filter((r) => r.id !== id);
-    scheduleSave(next);
+  function onDeleteRow(id: string) {
+    if (!canEdit) return;
+    startTransition(async () => {
+      await deleteSessionSingerRow(id);
+      setRows((prev) => prev.filter((r) => r.id !== id));
+    });
   }
 
-  // Autocompute recommended pitch if missing
+  // Auto-calc recommended pitch & tabla whenever singer/bhajan/confirmed pitch changes
   useEffect(() => {
-    if (!props.suggestions?.pitches?.length) return;
+    if (!canEdit) return;
 
-    let changed = false;
-    const next = rows.map((r) => {
-      const singer = r.singerId ? singerById.get(r.singerId) : undefined;
-      const gender = singer?.gender ?? null;
+    let cancelled = false;
+    const run = async () => {
+      const next = rows.map((r) => {
+        const computed = computeRecommendedPitch({
+          singerName: r.singerName,
+          bhajanTitle: r.bhajanTitle,
+          confirmedPitch: r.confirmedPitch,
+          suggestions,
+        });
 
-      const recomputed = computeRecommendedPitch({
-        pitches: props.suggestions.pitches,
-        pitchToTabla: props.suggestions.pitchToTabla,
-        singerGender: gender,
-        bhajanTitle: r.bhajanTitle,
-        confirmedPitch: r.confirmedPitch,
+        return {
+          ...r,
+          recommendedPitch: computed.recommendedPitch,
+          tabla: computed.tabla,
+        };
       });
 
-      if (recomputed && recomputed !== r.recommendedPitch) {
-        changed = true;
-        return { ...r, recommendedPitch: recomputed };
-      }
-      return r;
-    });
+      if (cancelled) return;
 
-    if (changed) {
-      // do NOT trigger save loop here; only update state locally
+      // Only write changes back + persist if actually changed
+      const patches: Array<{ id: string; patch: Partial<Row> }> = [];
+      for (let i = 0; i < rows.length; i++) {
+        const before = rows[i];
+        const after = next[i];
+        const patch: Partial<Row> = {};
+        if ((before.recommendedPitch ?? "") !== (after.recommendedPitch ?? "")) patch.recommendedPitch = after.recommendedPitch;
+        if ((before.tabla ?? "") !== (after.tabla ?? "")) patch.tabla = after.tabla;
+        if (Object.keys(patch).length) patches.push({ id: before.id, patch });
+      }
+
+      if (!patches.length) return;
+
+      // Update local first
       setRows(next);
-    }
-  }, [rows, props.suggestions, singerById]);
+
+      // Persist in background
+      startTransition(async () => {
+        for (const p of patches) {
+          await updateSessionSingerRow(p.id, p.patch);
+        }
+      });
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows.map((r) => `${r.singerId}|${r.bhajanTitle}|${r.confirmedPitch}`).join("::")]);
 
   return (
     <div className="grid gap-3">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-2">
         <div className="text-sm font-semibold">Roster</div>
-
-        <div className="flex items-center gap-2">
-          <div className="text-xs text-gray-600">{saving ? "Saving…" : "Saved"}</div>
-          {props.canEdit ? (
-            <Button type="button" onClick={addRow}>
-              Add row
-            </Button>
-          ) : null}
-        </div>
+        {canEdit ? (
+          <Button type="button" onClick={onAddRow} disabled={isPending}>
+            Add row
+          </Button>
+        ) : null}
       </div>
 
-      {/* Datalist for pitch suggestions */}
       <datalist id={pitchListId}>
-        {props.suggestions.pitches.map((p) => (
+        {suggestions.pitches.map((p) => (
           <option key={p} value={p} />
         ))}
       </datalist>
 
-      <div className="overflow-x-auto rounded-2xl border bg-white">
-        <table className="min-w-[1040px] w-full text-sm">
+      <div className="overflow-x-auto rounded-2xl border">
+        <table className="min-w-[1220px] w-full text-sm">
           <thead className="bg-slate-50">
-            <tr className="border-b">
-              {/* Sticky left columns */}
-              <th className="sticky left-0 z-50 bg-slate-50 px-3 py-2 text-left font-semibold w-[190px]">Singer</th>
-              <th className="sticky left-[190px] z-50 bg-slate-50 px-3 py-2 text-left font-semibold w-[220px] border-l">
+            <tr className="text-xs text-slate-600">
+              <th className="sticky left-0 z-50 bg-slate-50 px-3 py-2 text-left font-semibold w-[190px] shadow-[2px_0_0_rgba(15,23,42,0.08)]">
+                Singer
+              </th>
+              <th className="sticky left-[190px] z-50 bg-slate-50 px-3 py-2 text-left font-semibold w-[170px] border-l shadow-[2px_0_0_rgba(15,23,42,0.08)]">
                 Bhajan
               </th>
-
-              <th className="px-3 py-2 text-left font-semibold w-[220px]">Confirmed Pitch</th>
-              <th className="px-3 py-2 text-left font-semibold w-[220px]">Recommended Pitch</th>
-              <th className="px-3 py-2 text-left font-semibold w-[140px]">Tabla</th>
-              <th className="px-3 py-2 text-left font-semibold w-[220px]">Notes</th>
-              <th className="px-3 py-2 text-left font-semibold w-[90px]"> </th>
+              <th className="px-3 py-2 text-left font-semibold w-[200px]">Confirmed Pitch</th>
+              <th className="px-3 py-2 text-left font-semibold w-[200px]">Recommended Pitch</th>
+              <th className="px-3 py-2 text-left font-semibold w-[120px]">Tabla</th>
+              <th className="px-3 py-2 text-left font-semibold w-[250px]">Notes</th>
+              {canEdit ? <th className="px-3 py-2 text-left font-semibold w-[90px]">Actions</th> : null}
             </tr>
           </thead>
 
-          <tbody>
-            {rows.map((r) => (
-              <tr key={r.id} className="border-b last:border-b-0 align-top">
-                {/* Singer (sticky) */}
-                <td className="sticky left-0 z-30 bg-white px-3 py-2 w-[190px]">
-                  {props.canEdit ? (
-                    <select
-                      className="w-full rounded-xl border bg-white px-3 py-2 text-sm"
-                      value={r.singerId}
-                      onChange={(e) => {
-                        const singerId = e.target.value;
-                        const singer = singerById.get(singerId);
-                        updateRow(r.id, {
-                          singerId,
-                          singerName: singer?.name ?? "",
-                        });
-                      }}
+          <tbody className="divide-y">
+            {rows.map((r) => {
+              const singer = r.singerId ? singerById.get(r.singerId) : undefined;
+              const rp = r.recommendedPitch ?? "";
+              const tabla = r.tabla ?? "";
+
+              return (
+                <tr key={r.id} className="align-top">
+                  {/* Singer */}
+                  <td className="sticky left-0 z-30 bg-white px-3 py-2 w-[190px] shadow-[2px_0_0_rgba(15,23,42,0.08)]">
+                    {canEdit ? (
+                      <select
+                        className="w-full rounded-xl border px-3 py-2 text-sm"
+                        value={r.singerId ?? ""}
+                        onChange={(e) => {
+                          const nextId = e.target.value || null;
+                          const nextName = nextId ? singerById.get(nextId)?.name ?? "" : "";
+                          updateRow(r.id, { singerId: nextId, singerName: nextName });
+                        }}
+                      >
+                        <option value="">—</option>
+                        {singers.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="text-sm text-slate-900 truncate">{singer?.name || r.singerName || "—"}</div>
+                    )}
+                  </td>
+
+                  {/* Bhajan */}
+                  <td className="sticky left-[190px] z-20 bg-white px-3 py-2 w-[170px] border-l shadow-[2px_0_0_rgba(15,23,42,0.08)]">
+                    {canEdit ? (
+                      <div className="grid gap-1">
+                        <Input
+                          value={r.bhajanTitle ?? ""}
+                          placeholder="Bhajan title…"
+                          onChange={(e) => updateRow(r.id, { bhajanTitle: e.target.value })}
+                        />
+                        {r.bhajanId ? (
+                          <Link href={`/bhajans/${r.bhajanId}`} className="text-xs text-indigo-700 underline">
+                            View bhajan
+                          </Link>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-slate-900 whitespace-normal break-words leading-5">{r.bhajanTitle || "—"}</div>
+                    )}
+                  </td>
+
+                  {/* Confirmed pitch */}
+                  <td className="px-3 py-2">
+                    {canEdit ? (
+                      <Input
+                        list={pitchListId}
+                        value={r.confirmedPitch ?? ""}
+                        placeholder="Confirmed"
+                        title={r.confirmedPitch ?? ""}
+                        className="w-full min-w-[170px]"
+                        onChange={(e) => updateRow(r.id, { confirmedPitch: e.target.value })}
+                      />
+                    ) : (
+                      <div className="rounded-xl border bg-white px-3 py-2 text-sm whitespace-normal break-words leading-5">
+                        {r.confirmedPitch || "—"}
+                      </div>
+                    )}
+                  </td>
+
+                  {/* Recommended pitch (locked) */}
+                  <td className="px-3 py-2">
+                    <div
+                      className="rounded-xl border bg-slate-50 px-3 py-2 text-sm whitespace-normal break-words leading-5"
+                      title={rp}
                     >
-                      <option value="">Select…</option>
-                      {props.singers.map((s) => (
-                        <option key={s.id} value={s.id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div className="text-sm">{r.singerName || "—"}</div>
-                  )}
-                </td>
+                      {rp || "—"}
+                    </div>
+                  </td>
 
-                {/* Bhajan (sticky) */}
-                <td className="sticky left-[190px] z-20 bg-white px-3 py-2 w-[220px] border-l">
-                  {props.canEdit ? (
+                  {/* Tabla (locked) */}
+                  <td className="px-3 py-2">
+                    <div
+                      className="rounded-xl border bg-slate-50 px-3 py-2 text-sm whitespace-normal break-words leading-5"
+                      title={tabla}
+                    >
+                      {tabla || "—"}
+                    </div>
+                  </td>
+
+                  {/* Notes */}
+                  <td className="px-3 py-2">
                     <Input
-                      value={r.bhajanTitle}
-                      placeholder="Bhajan…"
-                      onChange={(e) => updateRow(r.id, { bhajanTitle: e.target.value })}
+                      value={r.notes ?? ""}
+                      placeholder="Notes…"
+                      disabled={!canEdit}
+                      title={r.notes ?? ""}
+                      onChange={(e) => updateRow(r.id, { notes: e.target.value })}
+                      className="w-full"
                     />
-                  ) : (
-                    <div className="text-sm whitespace-normal break-words">{r.bhajanTitle || "—"}</div>
-                  )}
-                </td>
+                  </td>
 
-                {/* Confirmed pitch */}
-                <td className="px-3 py-2">
-                  <Input
-                    list={pitchListId}
-                    value={r.confirmedPitch ?? ""}
-                    placeholder="Confirmed"
-                    onChange={(e) => updateRow(r.id, { confirmedPitch: e.target.value })}
-                    disabled={!props.canEdit}
-                  />
-                </td>
-
-                {/* Recommended pitch (LOCKED – non-editable like Tabla) */}
-                <td className="px-3 py-2">
-                  <Input
-                    list={pitchListId}
-                    value={r.recommendedPitch ?? ""}
-                    placeholder="Recommended"
-                    disabled={true}
-                  />
-                </td>
-
-                {/* Tabla */}
-                <td className="px-3 py-2">
-                  <Input value={r.tabla ?? ""} placeholder="Tabla" disabled={true} />
-                </td>
-
-                {/* Notes */}
-                <td className="px-3 py-2">
-                  {props.canEdit ? (
-                    <Input value={r.notes ?? ""} placeholder="Notes…" onChange={(e) => updateRow(r.id, { notes: e.target.value })} />
-                  ) : (
-                    <div className="text-sm whitespace-normal break-words">{r.notes || "—"}</div>
-                  )}
-                </td>
-
-                {/* Actions */}
-                <td className="px-3 py-2 text-right">
-                  {props.canEdit ? (
-                    <Button type="button" className="border-red-300 text-red-700 hover:bg-red-50" onClick={() => deleteRow(r.id)}>
-                      Delete
-                    </Button>
-                  ) : (
-                    <Link className="text-xs underline underline-offset-2" href={`/singers/${r.singerId}`}>
-                      Singer
-                    </Link>
-                  )}
-                </td>
-              </tr>
-            ))}
+                  {/* Actions */}
+                  {canEdit ? (
+                    <td className="px-3 py-2">
+                      <Button
+                        type="button"
+                        className="border-red-300 text-red-700 hover:bg-red-50"
+                        onClick={() => onDeleteRow(r.id)}
+                        disabled={isPending}
+                      >
+                        Delete
+                      </Button>
+                    </td>
+                  ) : null}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
 
-      {!props.canEdit ? (
-        <div className="text-xs text-gray-600">
-          Read-only mode: open your editable link to add/edit rows.
-        </div>
-      ) : null}
+      {isPending ? <div className="text-xs text-slate-500">Saving…</div> : null}
     </div>
   );
 }
