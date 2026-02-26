@@ -9,8 +9,6 @@ import { deleteInstrumentRow, updateSessionNotes } from "./actions";
 export default async function RosterSessionPage({
   params,
 }: {
-  // Next.js 15 App Router typing expects params/searchParams to be Promises.
-  // Vercel's type-check enforces this.
   params: Promise<{ id: string }>;
 }) {
   const { id: sessionId } = await params;
@@ -21,12 +19,19 @@ export default async function RosterSessionPage({
   const session = await prisma.session.findUnique({
     where: { id: sessionId },
     include: {
-      singers: { include: { singer: true, bhajan: true }, orderBy: { sortOrder: "asc" } },
+      singers: {
+        include: { singer: true, bhajan: true },
+        // ✅ FIX: sortOrder does not exist in schema. Use slot + createdAt.
+        orderBy: [{ slot: "asc" }, { createdAt: "asc" }],
+      },
       instruments: { orderBy: { createdAt: "asc" } },
     },
   });
 
   if (!session) return <div>Not found</div>;
+
+  // Capture stable IDs after null-check (avoids TS narrowing issues in server actions)
+  const sid = session.id;
 
   const allSingers = canEdit ? await prisma.singer.findMany({ orderBy: { name: "asc" } }) : [];
 
@@ -38,15 +43,15 @@ export default async function RosterSessionPage({
     bhajanTitle: r.bhajanTitle ?? r.bhajan?.title ?? "",
     confirmedPitch: r.confirmedPitch ?? "",
     recommendedPitch: r.recommendedPitch ?? "",
-    tabla: r.tabla ?? "",
-    notes: r.notes ?? "",
+    tabla: r.alternativeTablaPitch ?? "", // keep consistent with schema field
+    notes: r.festivalBhajanTitle ?? "", // if you had a notes field in the grid, adjust as needed
   }));
 
   const suggestions = await getPitchSuggestions();
 
   async function onUpdateNotes(formData: FormData) {
     "use server";
-    await updateSessionNotes(session.id, String(formData.get("notes") || ""));
+    await updateSessionNotes(sid, String(formData.get("notes") || ""));
   }
 
   async function onAddInstrument(formData: FormData) {
@@ -56,7 +61,7 @@ export default async function RosterSessionPage({
     if (!instrument) return;
 
     await prisma.sessionInstrument.create({
-      data: { sessionId: session.id, instrument, person: person || null },
+      data: { sessionId: sid, instrument, person: person || null },
     });
   }
 
@@ -86,9 +91,7 @@ export default async function RosterSessionPage({
           </div>
         </CardHeader>
 
-        {/* ✅ Notes at the bottom (as requested) */}
         <CardContent className="grid gap-6">
-          {/* Main roster */}
           <SessionSingersGrid
             canEdit={canEdit}
             sessionId={sessionId}
@@ -175,9 +178,7 @@ export default async function RosterSessionPage({
                   </div>
                 </form>
               ) : (
-                <div className="rounded-xl border bg-white p-3 text-sm whitespace-pre-wrap">
-                  {session.notes ?? "—"}
-                </div>
+                <div className="rounded-xl border bg-white p-3 text-sm whitespace-pre-wrap">{session.notes ?? "—"}</div>
               )}
             </div>
           </details>
