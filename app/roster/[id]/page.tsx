@@ -21,7 +21,7 @@ export default async function RosterSessionPage({
     include: {
       singers: {
         include: { singer: true, bhajan: true },
-        // ✅ FIX: sortOrder does not exist in schema. Use slot + createdAt.
+        // ✅ FIX: sortOrder does not exist
         orderBy: [{ slot: "asc" }, { createdAt: "asc" }],
       },
       instruments: { orderBy: { createdAt: "asc" } },
@@ -30,21 +30,22 @@ export default async function RosterSessionPage({
 
   if (!session) return <div>Not found</div>;
 
-  // Capture stable IDs after null-check (avoids TS narrowing issues in server actions)
   const sid = session.id;
 
   const allSingers = canEdit ? await prisma.singer.findMany({ orderBy: { name: "asc" } }) : [];
 
-  const initialRows = session.singers.map((r) => ({
-    id: r.id,
-    singerId: r.singerId,
-    singerName: r.singer?.name ?? "",
-    bhajanId: r.bhajanId,
-    bhajanTitle: r.bhajanTitle ?? r.bhajan?.title ?? "",
-    confirmedPitch: r.confirmedPitch ?? "",
-    recommendedPitch: r.recommendedPitch ?? "",
-    tabla: r.alternativeTablaPitch ?? "", // keep consistent with schema field
-    notes: r.festivalBhajanTitle ?? "", // if you had a notes field in the grid, adjust as needed
+  const initialRows = session.singers.map((x) => ({
+    id: x.id,
+    singerId: x.singerId,
+    singerName: x.singer.name,
+    singerGender: x.singer.gender,
+    bhajanId: x.bhajanId,
+    bhajanTitle: x.bhajanTitle,
+    festivalBhajanTitle: x.festivalBhajanTitle,
+    confirmedPitch: x.confirmedPitch,
+    alternativeTablaPitch: x.alternativeTablaPitch,
+    recommendedPitch: x.recommendedPitch,
+    raga: x.raga,
   }));
 
   const suggestions = await getPitchSuggestions();
@@ -100,7 +101,6 @@ export default async function RosterSessionPage({
             suggestions={suggestions}
           />
 
-          {/* Collapsible: Instruments */}
           <details className="rounded-2xl border bg-white">
             <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold flex items-center justify-between">
               <span>Instruments</span>
@@ -155,7 +155,6 @@ export default async function RosterSessionPage({
             </div>
           </details>
 
-          {/* Collapsible: Notes */}
           <details className="rounded-2xl border bg-white">
             <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold flex items-center justify-between">
               <span>Notes</span>
