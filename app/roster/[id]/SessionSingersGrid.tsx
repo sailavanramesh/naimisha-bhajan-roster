@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui";
 import { deleteSingerRow, upsertSessionSingerRows, type SingerRowInput } from "./actions";
 
@@ -19,9 +20,7 @@ type RowState = SingerRowInput & {
   _localId: string;
   singerName?: string;
   singerGender?: string | null;
-
-  // local UI state
-  _bhajanQuery?: string; // what user typed
+  _bhajanQuery?: string;
 };
 
 function normalizeGender(g?: string | null): "gents" | "ladies" | null {
@@ -39,6 +38,8 @@ function pickRecommendedPitch(singerGender: string | null | undefined, b?: Bhaja
   if (g === "gents") return b.referenceGentsPitch ?? b.referenceLadiesPitch ?? "";
   return b.referenceGentsPitch ?? b.referenceLadiesPitch ?? "";
 }
+
+type BhSearchState = { q: string; items: { id: string; title: string }[]; open: boolean; loading: boolean };
 
 export function SessionSingersGrid(props: {
   canEdit: boolean;
@@ -63,7 +64,6 @@ export function SessionSingersGrid(props: {
   };
 }) {
   const [isPending, startTransition] = useTransition();
-
   const singerById = useMemo(() => new Map(props.singers.map((s) => [s.id, s])), [props.singers]);
 
   const [rows, setRows] = useState<RowState[]>(
@@ -84,17 +84,45 @@ export function SessionSingersGrid(props: {
     }))
   );
 
-  // --- Bhajan search state (per-row) ---
-  const [bhSearch, setBhSearch] = useState<
-    Record<string, { q: string; items: { id: string; title: string }[]; open: boolean; loading: boolean }>
-  >({});
+  const [bhSearch, setBhSearch] = useState<Record<string, BhSearchState>>({});
 
-  // --- Pitch suggestion UI for Confirmed Pitch (per-row) ---
-  const [pitchUI, setPitchUI] = useState<
-    Record<string, { q: string; open: boolean }>
-  >({});
+  // Confirmed pitch UI state (dropdown)
+  const [pitchUI, setPitchUI] = useState<Record<string, { q: string; open: boolean }>>({});
 
-  const pitchBoxRef = useRef<Record<string, HTMLDivElement | null>>({});
+  // --- Bhajan dropdown portal state ---
+  const [bhPortal, setBhPortal] = useState<{
+    open: boolean;
+    localId: string | null;
+    anchorRect: DOMRect | null;
+    items: { id: string; title: string }[];
+    loading: boolean;
+  }>({ open: false, localId: null, anchorRect: null, items: [], loading: false });
+
+  const bhInputRef = useRef<Record<string, HTMLInputElement | null>>({});
+
+  // Reposition portal on scroll/resize
+  useEffect(() => {
+    function onMove() {
+      if (!bhPortal.open || !bhPortal.localId) return;
+      const el = bhInputRef.current[bhPortal.localId];
+      if (!el) return;
+      setBhPortal((p) => ({ ...p, anchorRect: el.getBoundingClientRect() }));
+    }
+    window.addEventListener("scroll", onMove, true);
+    window.addEventListener("resize", onMove);
+    return () => {
+      window.removeEventListener("scroll", onMove, true);
+      window.removeEventListener("resize", onMove);
+    };
+  }, [bhPortal.open, bhPortal.localId]);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setBhPortal((p) => ({ ...p, open: false }));
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
 
   function updateRow(localId: string, patch: Partial<RowState>) {
     setRows((prev) => prev.map((r) => (r._localId === localId ? { ...r, ...patch } : r)));
@@ -109,14 +137,12 @@ export function SessionSingersGrid(props: {
       {
         _localId: id,
         id,
-        singerId: "",               // ✅ do NOT default singer
+        singerId: "",
         singerName: undefined,
         singerGender: null,
-
         bhajanId: null,
         bhajanTitle: null,
         festivalBhajanTitle: null,
-
         confirmedPitch: null,
         alternativeTablaPitch: null,
         recommendedPitch: null,
@@ -131,20 +157,7 @@ export function SessionSingersGrid(props: {
 
   function onSingerChange(localId: string, singerId: string) {
     const s = singerById.get(singerId);
-    setRows((prev) =>
-      prev.map((r) => {
-        if (r._localId !== localId) return r;
-
-        // If there is already a selected bhajanId, we can auto-fill recommended pitch if empty
-        // (We only have bhajan pitches after fetching by-id, so we do it on pick.)
-        return {
-          ...r,
-          singerId,
-          singerName: s?.name,
-          singerGender: s?.gender ?? null,
-        };
-      })
-    );
+    updateRow(localId, { singerId, singerName: s?.name, singerGender: s?.gender ?? null });
   }
 
   async function bhajanSearch(q: string) {
@@ -162,17 +175,22 @@ export function SessionSingersGrid(props: {
   }
 
   async function onBhajanQueryChange(localId: string, q: string) {
-    // Update local text + treat it as free text until user picks a masterlist option
     updateRow(localId, { _bhajanQuery: q, bhajanTitle: q || null, bhajanId: null });
 
     if (!q.trim()) {
       setBhSearch((prev) => ({ ...prev, [localId]: { q, items: [], open: false, loading: false } }));
+      setBhPortal((p) => (p.localId === localId ? { ...p, open: false } : p));
       return;
     }
 
     setBhSearch((prev) => ({ ...prev, [localId]: { q, items: prev[localId]?.items || [], open: true, loading: true } }));
     const items = await bhajanSearch(q);
     setBhSearch((prev) => ({ ...prev, [localId]: { q, items, open: true, loading: false } }));
+
+    const el = bhInputRef.current[localId];
+    if (el) {
+      setBhPortal({ open: true, localId, anchorRect: el.getBoundingClientRect(), items, loading: false });
+    }
   }
 
   async function onPickBhajan(localId: string, bhajanId: string) {
@@ -181,10 +199,8 @@ export function SessionSingersGrid(props: {
     setRows((prev) =>
       prev.map((r) => {
         if (r._localId !== localId) return r;
-
         const auto = pickRecommendedPitch(r.singerGender ?? null, b);
         const keepExisting = (r.recommendedPitch || "").trim().length > 0;
-
         return {
           ...r,
           bhajanId,
@@ -196,25 +212,20 @@ export function SessionSingersGrid(props: {
       })
     );
 
-    setBhSearch((prev) => ({ ...prev, [localId]: { ...(prev[localId] || { q: "", items: [], open: false, loading: false }), open: false } }));
+    setBhPortal((p) => ({ ...p, open: false }));
   }
 
   function onConfirmedPitchChange(localId: string, confirmed: string) {
     const tabla = confirmed ? (props.suggestions.pitchToTabla[confirmed] ?? "") : "";
-
     setRows((prev) =>
-      prev.map((r) => {
-        if (r._localId !== localId) return r;
-        return {
-          ...r,
-          confirmedPitch: confirmed || null,
-          alternativeTablaPitch: confirmed ? (tabla || null) : null,
-        };
-      })
+      prev.map((r) =>
+        r._localId === localId
+          ? { ...r, confirmedPitch: confirmed || null, alternativeTablaPitch: confirmed ? (tabla || null) : null }
+          : r
+      )
     );
   }
 
-  // Custom pitch dropdown for textarea (so it can wrap)
   function setPitchQuery(localId: string, q: string) {
     setPitchUI((prev) => ({ ...prev, [localId]: { q, open: true } }));
     onConfirmedPitchChange(localId, q);
@@ -229,10 +240,15 @@ export function SessionSingersGrid(props: {
     setPitchUI((prev) => ({ ...prev, [localId]: { ...(prev[localId] || { q: "" }), open: false } }));
   }
 
+  function filteredPitchOptions(localId: string) {
+    const q = (pitchUI[localId]?.q || "").toLowerCase().trim();
+    if (!q) return props.suggestions.pitches.slice(0, 25);
+    return props.suggestions.pitches.filter((p) => p.toLowerCase().includes(q)).slice(0, 25);
+  }
+
   function saveAll() {
     if (!props.canEdit) return;
 
-    // ✅ require singer selected for any row being saved
     const missingSinger = rows.some((r) => !r.singerId);
     if (missingSinger) {
       alert("Please select a singer for each row before saving.");
@@ -251,7 +267,6 @@ export function SessionSingersGrid(props: {
         recommendedPitch: r.recommendedPitch,
         raga: r.raga,
       }));
-
       await upsertSessionSingerRows(props.sessionId, payload);
     });
   }
@@ -261,23 +276,49 @@ export function SessionSingersGrid(props: {
     if (!row || !props.canEdit) return;
 
     startTransition(async () => {
-      if (row.id && !String(row.id).startsWith("new_")) {
-        await deleteSingerRow(row.id);
-      }
+      if (row.id && !String(row.id).startsWith("new_")) await deleteSingerRow(row.id);
       setRows((prev) => prev.filter((r) => r._localId !== localId));
     });
   }
 
-  function filteredPitchOptions(localId: string) {
-    const q = (pitchUI[localId]?.q || "").toLowerCase().trim();
-    if (!q) return props.suggestions.pitches.slice(0, 25);
-    return props.suggestions.pitches
-      .filter((p) => p.toLowerCase().includes(q))
-      .slice(0, 25);
-  }
+  const portalEl =
+    bhPortal.open && bhPortal.anchorRect
+      ? createPortal(
+          <div
+            style={{
+              position: "fixed",
+              left: Math.max(8, Math.min(window.innerWidth - 8, bhPortal.anchorRect.left)),
+              top: bhPortal.anchorRect.bottom + 6,
+              width: Math.min(bhPortal.anchorRect.width, window.innerWidth - 16),
+              maxHeight: Math.min(320, window.innerHeight - (bhPortal.anchorRect.bottom + 16)),
+              zIndex: 9999,
+            }}
+            className="overflow-auto rounded-xl border bg-white shadow-xl"
+          >
+            {bhPortal.loading ? <div className="px-3 py-2 text-xs text-gray-600">Searching…</div> : null}
+            {bhPortal.items.length === 0 && !bhPortal.loading ? (
+              <div className="px-3 py-2 text-xs text-gray-600">No matches.</div>
+            ) : null}
+            {bhPortal.items.map((it) => (
+              <button
+                key={it.id}
+                type="button"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => onPickBhajan(bhPortal.localId!, it.id)}
+              >
+                {it.title}
+              </button>
+            ))}
+          </div>,
+          document.body
+        )
+      : null;
 
   return (
     <div className="grid gap-3">
+      {portalEl}
+
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-semibold">Roster entries</div>
         {props.canEdit ? (
@@ -291,36 +332,31 @@ export function SessionSingersGrid(props: {
       </div>
 
       <div className="overflow-x-auto rounded-2xl border bg-white">
-        <table className="min-w-[1040px] w-full text-sm">
+        <table className="min-w-[1120px] w-full text-sm table-fixed">
           <thead className="bg-slate-50">
             <tr className="border-b">
-              <th className="sticky left-0 z-50 bg-slate-50 px-3 py-2 text-left font-semibold w-[180px] border-r shadow-sm">
+              <th className="sticky left-0 z-50 bg-slate-50 px-3 py-2 text-left font-semibold w-[190px] border-r shadow-sm">
                 Singer
               </th>
-              <th className="sticky left-[180px] z-40 bg-slate-50 px-3 py-2 text-left font-semibold w-[260px] border-r shadow-sm">
+              <th className="sticky left-[190px] z-40 bg-slate-50 px-3 py-2 text-left font-semibold w-[340px] border-r shadow-sm">
                 Bhajan
               </th>
-              <th className="px-3 py-2 text-left font-semibold min-w-[240px]">
-                Confirmed Pitch
-              </th>
-              <th className="px-3 py-2 text-left font-semibold min-w-[240px]">
-                Recommended Pitch
-              </th>
+              <th className="px-3 py-2 text-left font-semibold w-[280px]">Confirmed Pitch</th>
+              <th className="px-3 py-2 text-left font-semibold w-[260px]">Recommended Pitch</th>
               <th className="px-3 py-2 text-left font-semibold w-[140px]">Tabla</th>
-              {props.canEdit ? <th className="px-3 py-2 text-right font-semibold w-[110px]"> </th> : null}
+              {props.canEdit ? <th className="px-3 py-2 text-right font-semibold w-[110px]" /> : null}
             </tr>
           </thead>
 
           <tbody>
             {rows.map((r) => {
-              const bs = bhSearch[r._localId] || { q: r._bhajanQuery || "", items: [], open: false, loading: false };
               const pu = pitchUI[r._localId] || { q: r.confirmedPitch ?? "", open: false };
               const pitchOptions = filteredPitchOptions(r._localId);
 
               return (
                 <tr key={r._localId} className="border-b align-top">
-                  {/* Singer (sticky) */}
-                  <td className="sticky left-0 z-30 bg-white px-3 py-2 w-[180px] border-r shadow-sm">
+                  {/* Singer */}
+                  <td className="sticky left-0 z-30 bg-white px-3 py-2 w-[190px] border-r shadow-sm">
                     {props.canEdit ? (
                       <select
                         value={r.singerId || ""}
@@ -337,80 +373,64 @@ export function SessionSingersGrid(props: {
                     ) : (
                       <div className="text-sm font-medium">{r.singerName ?? "—"}</div>
                     )}
-
                     <div className="mt-1 text-xs text-gray-600">{r.singerGender ?? "—"}</div>
                   </td>
 
-                  {/* Bhajan (sticky) */}
-                  <td className="sticky left-[180px] z-20 bg-white px-3 py-2 w-[260px] border-r shadow-sm">
+                  {/* Bhajan */}
+                  <td className="sticky left-[190px] z-20 bg-white px-3 py-2 w-[340px] border-r shadow-sm">
                     {props.canEdit ? (
-                      <div className="relative">
-                        <input
-                          value={r._bhajanQuery ?? ""}
-                          placeholder="Search masterlist…"
-                          onChange={(e) => onBhajanQueryChange(r._localId, e.target.value)}
-                          onFocus={() => {
-                            if ((r._bhajanQuery || "").trim()) {
-                              setBhSearch((prev) => ({
-                                ...prev,
-                                [r._localId]: { ...(prev[r._localId] || bs), open: true },
-                              }));
-                            }
-                          }}
-                          className="w-full rounded-xl border px-3 py-2 text-sm"
-                        />
-
-                        {bs.open && (bs.loading || bs.items.length > 0) ? (
-                          <div className="absolute z-[80] mt-1 w-full max-h-64 overflow-auto rounded-xl border bg-white shadow">
-                            {bs.loading ? (
-                              <div className="px-3 py-2 text-xs text-gray-600">Searching…</div>
-                            ) : null}
-
-                            {bs.items.map((it) => (
-                              <button
-                                key={it.id}
-                                type="button"
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                                onClick={() => onPickBhajan(r._localId, it.id)}
-                              >
-                                {it.title}
-                              </button>
-                            ))}
-                          </div>
-                        ) : null}
-
-                        {r.bhajanId ? (
-                          <div className="mt-1 text-[11px] text-gray-500">
-                            Linked to masterlist
-                          </div>
-                        ) : null}
-                      </div>
+                      <input
+                        ref={(el) => {
+                          bhInputRef.current[r._localId] = el;
+                        }}
+                        value={r._bhajanQuery ?? ""}
+                        placeholder="Search masterlist…"
+                        onChange={(e) => onBhajanQueryChange(r._localId, e.target.value)}
+                        onFocus={() => {
+                          const q = (r._bhajanQuery || "").trim();
+                          if (!q) return;
+                          // show existing options immediately if we have them
+                          const existing = bhSearch[r._localId]?.items || [];
+                          const el = bhInputRef.current[r._localId];
+                          if (el) {
+                            setBhPortal({
+                              open: true,
+                              localId: r._localId,
+                              anchorRect: el.getBoundingClientRect(),
+                              items: existing,
+                              loading: false,
+                            });
+                          }
+                        }}
+                        onBlur={() => {
+                          setTimeout(() => setBhPortal((p) => ({ ...p, open: false })), 150);
+                        }}
+                        className="w-full rounded-xl border px-3 py-2 text-sm"
+                      />
                     ) : (
                       <div className="whitespace-normal break-words leading-5">
                         {r.bhajanTitle ?? r.festivalBhajanTitle ?? "—"}
                       </div>
                     )}
+
+                    {r.bhajanId ? <div className="mt-1 text-[11px] text-gray-500">Linked to masterlist</div> : null}
                   </td>
 
-                  {/* Confirmed Pitch (main) */}
+                  {/* Confirmed Pitch */}
                   <td className="px-3 py-2">
                     {props.canEdit ? (
-                      <div className="relative" ref={(el) => { pitchBoxRef.current[r._localId] = el; }}>
+                      <div className="relative">
                         <textarea
                           value={pu.q}
                           placeholder="Confirmed (main)"
                           onChange={(e) => setPitchQuery(r._localId, e.target.value)}
                           onFocus={() => setPitchUI((prev) => ({ ...prev, [r._localId]: { q: pu.q, open: true } }))}
-                          onBlur={() => {
-                            // tiny delay so click on dropdown works
-                            setTimeout(() => closePitch(r._localId), 120);
-                          }}
+                          onBlur={() => setTimeout(() => closePitch(r._localId), 120)}
                           className="w-full rounded-xl border px-3 py-2 text-sm leading-5 whitespace-pre-wrap resize-y min-h-[44px] focus:ring-2 focus:ring-black/10"
                           rows={2}
                         />
-
                         {pu.open && pitchOptions.length > 0 ? (
-                          <div className="absolute z-[70] mt-1 w-full max-h-64 overflow-auto rounded-xl border bg-white shadow">
+                          <div className="absolute z-[60] mt-1 w-full max-h-64 overflow-auto rounded-xl border bg-white shadow">
                             {pitchOptions.map((p) => (
                               <button
                                 key={p}
@@ -449,10 +469,7 @@ export function SessionSingersGrid(props: {
                   {/* Delete */}
                   {props.canEdit ? (
                     <td className="px-3 py-2 text-right">
-                      <Button
-                        onClick={() => removeRow(r._localId)}
-                        className="border-red-300 text-red-700 hover:bg-red-50"
-                      >
+                      <Button onClick={() => removeRow(r._localId)} className="border-red-300 text-red-700 hover:bg-red-50">
                         Delete
                       </Button>
                     </td>
@@ -463,10 +480,6 @@ export function SessionSingersGrid(props: {
           </tbody>
         </table>
       </div>
-
-      {!props.canEdit ? (
-        <div className="text-xs text-gray-600">Read-only mode: open your edit link to add/edit rows.</div>
-      ) : null}
     </div>
   );
 }
