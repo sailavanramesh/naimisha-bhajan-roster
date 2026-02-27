@@ -1,36 +1,30 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 
-function parseISODateOnly(s: string) {
+export const runtime = "nodejs";
+
+function parseISODateUTC(s: string) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
   if (!m) return null;
-  const y = Number(m[1]);
-  const mo = Number(m[2]) - 1;
-  const d = Number(m[3]);
-  const start = new Date(Date.UTC(y, mo, d, 0, 0, 0));
-  const end = new Date(Date.UTC(y, mo, d + 1, 0, 0, 0));
-  return { start, end, day: start };
+  const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0));
+  return isNaN(dt.getTime()) ? null : dt;
 }
 
-export async function POST(req: Request) {
-  const body = await req.json().catch(() => null);
+export async function POST(req: NextRequest) {
+  const body = await req.json().catch(() => ({}));
   const date = String(body?.date || "");
-  const range = parseISODateOnly(date);
+  const dt = parseISODateUTC(date);
+  if (!dt) return NextResponse.json({ error: "Invalid date" }, { status: 400 });
 
-  if (!range) return NextResponse.json({ sessionId: null }, { status: 400 });
-
-  // Find existing session for that day
-  const existing = await prisma.session.findFirst({
-    where: { date: { gte: range.start, lt: range.end } },
+  const existing = await prisma.session.findUnique({
+    where: { date: dt },
     select: { id: true },
-    orderBy: { date: "asc" },
   });
 
   if (existing) return NextResponse.json({ sessionId: existing.id });
 
-  // Create one at UTC midnight for that date
   const created = await prisma.session.create({
-    data: { date: range.day },
+    data: { date: dt },
     select: { id: true },
   });
 

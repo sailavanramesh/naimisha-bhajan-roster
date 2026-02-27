@@ -13,15 +13,14 @@ export default async function RosterSessionPage({
 }) {
   const { id: sessionId } = await params;
 
-  const c = await cookies();
-  const canEdit = c.get("edit")?.value === "1";
+  const cookieStore = await cookies();
+  const canEdit = cookieStore.get("edit")?.value === "1";
 
   const session = await prisma.session.findUnique({
     where: { id: sessionId },
     include: {
       singers: {
         include: { singer: true, bhajan: true },
-        // ✅ FIX: sortOrder does not exist
         orderBy: [{ slot: "asc" }, { createdAt: "asc" }],
       },
       instruments: { orderBy: { createdAt: "asc" } },
@@ -32,7 +31,9 @@ export default async function RosterSessionPage({
 
   const sid = session.id;
 
-  const allSingers = canEdit ? await prisma.singer.findMany({ orderBy: { name: "asc" } }) : [];
+  const allSingers = canEdit
+    ? await prisma.singer.findMany({ orderBy: { name: "asc" } })
+    : [];
 
   const initialRows = session.singers.map((x) => ({
     id: x.id,
@@ -66,18 +67,18 @@ export default async function RosterSessionPage({
     });
   }
 
+  const dateLabel = new Date(session.date).toLocaleDateString(undefined, {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
   return (
     <div className="grid gap-4">
       <Card>
         <CardHeader>
-          <CardTitle>
-            {new Date(session.date).toLocaleDateString(undefined, {
-              weekday: "long",
-              year: "numeric",
-              month: "long",
-              day: "numeric",
-            })}
-          </CardTitle>
+          <CardTitle>{dateLabel}</CardTitle>
 
           <div className="mt-2 flex items-center gap-2 text-sm">
             {canEdit ? (
@@ -87,12 +88,13 @@ export default async function RosterSessionPage({
             )}
 
             <Link href="/roster" className="underline underline-offset-2">
-              Back
+              Back to roster
             </Link>
           </div>
         </CardHeader>
 
         <CardContent className="grid gap-6">
+          {/* Main roster grid */}
           <SessionSingersGrid
             canEdit={canEdit}
             sessionId={sessionId}
@@ -101,6 +103,7 @@ export default async function RosterSessionPage({
             suggestions={suggestions}
           />
 
+          {/* Collapsible: Instruments */}
           <details className="rounded-2xl border bg-white">
             <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold flex items-center justify-between">
               <span>Instruments</span>
@@ -155,6 +158,7 @@ export default async function RosterSessionPage({
             </div>
           </details>
 
+          {/* Collapsible: Notes */}
           <details className="rounded-2xl border bg-white">
             <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold flex items-center justify-between">
               <span>Notes</span>
@@ -177,16 +181,12 @@ export default async function RosterSessionPage({
                   </div>
                 </form>
               ) : (
-                <div className="rounded-xl border bg-white p-3 text-sm whitespace-pre-wrap">{session.notes ?? "—"}</div>
+                <div className="rounded-xl border bg-white p-3 text-sm whitespace-pre-wrap">
+                  {session.notes ?? "—"}
+                </div>
               )}
             </div>
           </details>
-
-          <div className="text-sm">
-            <Link href="/roster" className="underline underline-offset-2">
-              Back to roster
-            </Link>
-          </div>
         </CardContent>
       </Card>
     </div>

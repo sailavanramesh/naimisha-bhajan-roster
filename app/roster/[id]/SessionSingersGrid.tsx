@@ -10,7 +10,14 @@ type RowState = SingerRowInput & {
   _localId: string;
   singerName?: string;
   singerGender?: string | null;
+  _pitchOpen?: boolean;
 };
+
+function matchPitches(all: string[], q: string) {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return all.slice(0, 8);
+  return all.filter((p) => p.toLowerCase().includes(needle)).slice(0, 8);
+}
 
 export function SessionSingersGrid(props: {
   canEdit: boolean;
@@ -37,7 +44,6 @@ export function SessionSingersGrid(props: {
   const [isPending, startTransition] = useTransition();
 
   const singerById = useMemo(() => new Map(props.singers.map((s) => [s.id, s])), [props.singers]);
-  const pitchListId = `pitch-options-${props.sessionId}`;
 
   const [rows, setRows] = useState<RowState[]>(
     props.initialRows.map((r) => ({
@@ -53,6 +59,7 @@ export function SessionSingersGrid(props: {
       alternativeTablaPitch: r.alternativeTablaPitch,
       recommendedPitch: r.recommendedPitch,
       raga: r.raga,
+      _pitchOpen: false,
     }))
   );
 
@@ -76,6 +83,7 @@ export function SessionSingersGrid(props: {
         alternativeTablaPitch: null,
         recommendedPitch: null,
         raga: null,
+        _pitchOpen: false,
       },
     ]);
   }
@@ -101,7 +109,6 @@ export function SessionSingersGrid(props: {
         return {
           ...r,
           confirmedPitch: confirmed || null,
-          // ✅ only populate tabla if confirmed pitch is set
           alternativeTablaPitch: confirmed ? (tabla || null) : null,
         };
       })
@@ -131,23 +138,15 @@ export function SessionSingersGrid(props: {
     if (!row || !props.canEdit) return;
 
     startTransition(async () => {
-      // delete from DB if persisted
       if (row.id && !String(row.id).startsWith("new_")) {
         await deleteSingerRow(row.id);
       }
-      // remove from UI immediately
       setRows((prev) => prev.filter((r) => r._localId !== localId));
     });
   }
 
   return (
     <div className="grid gap-3">
-      <datalist id={pitchListId}>
-        {props.suggestions.pitches.map((p) => (
-          <option key={p} value={p} />
-        ))}
-      </datalist>
-
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-semibold">Roster entries</div>
         {props.canEdit ? (
@@ -167,97 +166,105 @@ export function SessionSingersGrid(props: {
               <th className="sticky left-0 z-50 bg-slate-50 px-3 py-2 text-left font-semibold w-[190px] border-r shadow-sm">
                 Singer
               </th>
-              <th className="sticky left-[190px] z-40 bg-slate-50 px-3 py-2 text-left font-semibold w-[220px] border-r shadow-sm">
+              <th className="sticky left-[190px] z-40 bg-slate-50 px-3 py-2 text-left font-semibold w-[200px] border-r shadow-sm">
                 Bhajan
               </th>
-              <th className="px-3 py-2 text-left font-semibold min-w-[220px]">
-                Confirmed Pitch
-              </th>
-              <th className="px-3 py-2 text-left font-semibold min-w-[220px]">
-                Recommended Pitch
-              </th>
+              <th className="px-3 py-2 text-left font-semibold min-w-[240px]">Confirmed Pitch</th>
+              <th className="px-3 py-2 text-left font-semibold min-w-[240px]">Recommended Pitch</th>
               <th className="px-3 py-2 text-left font-semibold w-[160px]">Tabla</th>
               {props.canEdit ? <th className="px-3 py-2 text-right font-semibold w-[110px]"> </th> : null}
             </tr>
           </thead>
 
           <tbody>
-            {rows.map((r) => (
-              <tr key={r._localId} className="border-b align-top">
-                {/* Singer (sticky) */}
-                <td className="sticky left-0 z-30 bg-white px-3 py-2 w-[190px] border-r shadow-sm">
-                  {props.canEdit ? (
-                    <select
-                      value={r.singerId}
-                      onChange={(e) => onSingerChange(r._localId, e.target.value)}
-                      className="w-full rounded-xl border px-3 py-2 text-sm"
-                    >
-                      {props.singers.map((x) => (
-                        <option key={x.id} value={x.id}>
-                          {x.name}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div className="text-sm font-medium">{r.singerName ?? "—"}</div>
-                  )}
-                  <div className="mt-1 text-xs text-gray-600">
-                    {r.singerGender ? r.singerGender : "—"}
-                  </div>
-                </td>
+            {rows.map((r) => {
+              const matches = matchPitches(props.suggestions.pitches, r.confirmedPitch ?? "");
 
-                {/* Bhajan (sticky, narrower) */}
-                <td className="sticky left-[190px] z-20 bg-white px-3 py-2 w-[220px] border-r shadow-sm">
-                  <div className="whitespace-normal break-words leading-5">
-                    {r.bhajanTitle ?? r.festivalBhajanTitle ?? "—"}
-                  </div>
-                </td>
-
-                {/* Confirmed pitch (editable) */}
-                <td className="px-3 py-2">
-                  {props.canEdit ? (
-                    <textarea
-                      value={r.confirmedPitch ?? ""}
-                      placeholder="Confirmed"
-                      onChange={(e) => onConfirmedPitchChange(r._localId, e.target.value)}
-                      className="w-full rounded-xl border px-3 py-2 text-sm leading-5 whitespace-pre-wrap resize-y min-h-[44px]"
-                      rows={2}
-                      list={pitchListId as any}
-                    />
-                  ) : (
-                    <div className="rounded-xl border bg-white px-3 py-2 whitespace-normal break-words leading-5">
-                      {r.confirmedPitch ?? "—"}
-                    </div>
-                  )}
-                </td>
-
-                {/* Recommended pitch (locked) */}
-                <td className="px-3 py-2">
-                  <div className="rounded-xl border bg-slate-50 px-3 py-2 whitespace-normal break-words leading-5">
-                    {r.recommendedPitch ?? "—"}
-                  </div>
-                </td>
-
-                {/* Tabla (locked) */}
-                <td className="px-3 py-2">
-                  <div className="rounded-xl border bg-slate-50 px-3 py-2 whitespace-normal break-words leading-5">
-                    {r.confirmedPitch ? (r.alternativeTablaPitch ?? "—") : "—"}
-                  </div>
-                </td>
-
-                {/* Delete */}
-                {props.canEdit ? (
-                  <td className="px-3 py-2 text-right">
-                    <Button
-                      onClick={() => removeRow(r._localId)}
-                      className="border-red-300 text-red-700 hover:bg-red-50"
-                    >
-                      Delete
-                    </Button>
+              return (
+                <tr key={r._localId} className="border-b align-top">
+                  <td className="sticky left-0 z-30 bg-white px-3 py-2 w-[190px] border-r shadow-sm">
+                    {props.canEdit ? (
+                      <select
+                        value={r.singerId}
+                        onChange={(e) => onSingerChange(r._localId, e.target.value)}
+                        className="w-full rounded-xl border px-3 py-2 text-sm"
+                      >
+                        {props.singers.map((x) => (
+                          <option key={x.id} value={x.id}>
+                            {x.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="text-sm font-medium">{r.singerName ?? "—"}</div>
+                    )}
+                    <div className="mt-1 text-xs text-gray-600">{r.singerGender ? r.singerGender : "—"}</div>
                   </td>
-                ) : null}
-              </tr>
-            ))}
+
+                  <td className="sticky left-[190px] z-20 bg-white px-3 py-2 w-[200px] border-r shadow-sm">
+                    <div className="whitespace-normal break-words leading-5">
+                      {r.bhajanTitle ?? r.festivalBhajanTitle ?? "—"}
+                    </div>
+                  </td>
+
+                  <td className="px-3 py-2">
+                    {props.canEdit ? (
+                      <div className="relative">
+                        <textarea
+                          value={r.confirmedPitch ?? ""}
+                          placeholder="Confirmed"
+                          onChange={(e) => onConfirmedPitchChange(r._localId, e.target.value)}
+                          onFocus={() => updateRow(r._localId, { _pitchOpen: true })}
+                          onBlur={() => setTimeout(() => updateRow(r._localId, { _pitchOpen: false }), 120)}
+                          className="w-full rounded-xl border px-3 py-2 text-sm leading-5 whitespace-pre-wrap resize-y min-h-[44px]"
+                          rows={2}
+                        />
+
+                        {r._pitchOpen && matches.length > 0 ? (
+                          <div className="absolute z-20 mt-1 w-full rounded-xl border bg-white shadow max-h-56 overflow-auto">
+                            {matches.map((p) => (
+                              <button
+                                key={p}
+                                type="button"
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                                onMouseDown={(e) => e.preventDefault()}
+                                onClick={() => onConfirmedPitchChange(r._localId, p)}
+                              >
+                                {p}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <div className="rounded-xl border bg-white px-3 py-2 whitespace-normal break-words leading-5">
+                        {r.confirmedPitch ?? "—"}
+                      </div>
+                    )}
+                  </td>
+
+                  <td className="px-3 py-2">
+                    <div className="rounded-xl border bg-slate-50 px-3 py-2 whitespace-normal break-words leading-5">
+                      {r.recommendedPitch ?? "—"}
+                    </div>
+                  </td>
+
+                  <td className="px-3 py-2">
+                    <div className="rounded-xl border bg-slate-50 px-3 py-2 whitespace-normal break-words leading-5">
+                      {r.confirmedPitch ? (r.alternativeTablaPitch ?? "—") : "—"}
+                    </div>
+                  </td>
+
+                  {props.canEdit ? (
+                    <td className="px-3 py-2 text-right">
+                      <Button onClick={() => removeRow(r._localId)} className="border-red-300 text-red-700 hover:bg-red-50">
+                        Delete
+                      </Button>
+                    </td>
+                  ) : null}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

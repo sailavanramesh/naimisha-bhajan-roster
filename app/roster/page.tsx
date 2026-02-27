@@ -2,7 +2,7 @@ import Link from "next/link";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle, Input, Button } from "@/components/ui";
-import { RosterCalendarClient } from "./RosterCalendarClient";
+import RosterCalendarClient from "./RosterCalendarClient";
 
 function toISODate(d: Date) {
   return d.toISOString().slice(0, 10);
