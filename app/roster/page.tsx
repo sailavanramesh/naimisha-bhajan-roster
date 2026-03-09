@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle, Input, Button } from "@/components/ui";
 import RosterCalendarClient from "./RosterCalendarClient";
 
+export const dynamic = "force-dynamic";
 function toISODate(d: Date) {
   return d.toISOString().slice(0, 10);
 }

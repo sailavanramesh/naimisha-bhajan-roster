@@ -6,6 +6,7 @@ import { SessionSingersGrid } from "./SessionSingersGrid";
 import { getPitchSuggestions } from "@/lib/pitchSuggestions";
 import { deleteInstrumentRow, updateSessionNotes } from "./actions";
 
+export const dynamic = "force-dynamic";
 export default async function RosterSessionPage({
   params,
 }: {
