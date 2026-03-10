@@ -6,8 +6,15 @@ import RosterCalendarClient from "./RosterCalendarClient";
 import { EnableEditForm } from "@/components/EnableEditForm";
 
 export const dynamic = "force-dynamic";
-function toISODate(d: Date) {
+function toISODateUTC(d: Date) {
   return d.toISOString().slice(0, 10);
+}
+
+function toISODateLocal(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function parseISODate(s?: string | null): Date | null {
@@ -58,7 +65,7 @@ export default async function RosterPage({
   const q = (sp.q ?? "").trim();
 
   const todayUTC = new Date();
-  const selected = parseISODate(sp.d) ?? parseISODate(toISODate(todayUTC))!;
+  const selected = parseISODate(sp.d) ?? parseISODate(toISODateUTC(todayUTC))!;
   const month = parseMonth(sp.m) ?? new Date(Date.UTC(selected.getUTCFullYear(), selected.getUTCMonth(), 1, 0, 0, 0));
   const monthStart = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1, 0, 0, 0));
   const monthEndExclusive = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1, 0, 0, 0));
@@ -71,12 +78,17 @@ export default async function RosterPage({
 
   const dayInfo: Record<string, { sessionId: string; entries: number; hasSession: boolean }> = {};
   for (const s of monthSessions) {
-    const iso = toISODate(s.date);
-    dayInfo[iso] = {
+    const value = {
       sessionId: s.id,
       entries: s._count.singers ?? 0,
       hasSession: true,
     };
+
+    const utcKey = toISODateUTC(s.date);
+    const localKey = toISODateLocal(s.date);
+
+    dayInfo[utcKey] = value;
+    if (!dayInfo[localKey]) dayInfo[localKey] = value;
   }
 
   let listSessions:
@@ -163,7 +175,7 @@ export default async function RosterPage({
             <RosterCalendarClient
               canEdit={canEdit}
               initialMonth={monthKey(monthStart)}
-              initialSelected={toISODate(selected)}
+              initialSelected={toISODateUTC(selected)}
               initialDayInfo={dayInfo}
             />
           ) : (
