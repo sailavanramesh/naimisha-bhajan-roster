@@ -4,42 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
-type DashboardData = {
-  upcoming: Array<{
-    id: string;
-    date: Date;
-    singers: Array<{ singer: { name: string } }>;
-  }>;
-  masterCount: number;
-  sessionCount: number;
-  singerCount: number;
-};
-
-async function getDashboardData(): Promise<DashboardData | null> {
-  try {
-    const today = new Date();
-    const in30 = new Date(today);
-    in30.setDate(in30.getDate() + 30);
-
-    const [upcoming, masterCount, sessionCount, singerCount] = await Promise.all([
-      prisma.session.findMany({
-        where: { date: { gte: today, lte: in30 } },
-        orderBy: { date: "asc" },
-        take: 12,
-        include: { singers: { include: { singer: true } } },
-      }),
-      prisma.bhajan.count(),
-      prisma.session.count(),
-      prisma.singer.count(),
-    ]);
-
-    return { upcoming, masterCount, sessionCount, singerCount };
-  } catch (err) {
-    console.error("Dashboard query failed", err);
-    return null;
-  }
-}
-
 export default async function Page() {
   const data = await getDashboardData();
 
