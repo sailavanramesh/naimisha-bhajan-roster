@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle, Input } from "@/components/ui";
 
+export const dynamic = "force-dynamic";
 export default async function BhajansPage({
   searchParams,
 }: {

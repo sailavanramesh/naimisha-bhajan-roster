@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import { fetchMonthInfo, createSessionForDate } from "./calendarActions";
@@ -54,6 +54,7 @@ export default function RosterCalendarClient(props: {
   const [selected, setSelected] = useState<string>(initialSelected);
   const [dayInfo, setDayInfo] = useState<Record<string, DayInfo>>(initialDayInfo);
   const [isPending, startTransition] = useTransition();
+  const loadedMonthsRef = useRef<Set<string>>(new Set([initialMonth]));
 
   const monthDate = useMemo(() => {
     const [y, m] = currentMonth.split("-").map((x) => Number(x));
@@ -61,7 +62,8 @@ export default function RosterCalendarClient(props: {
   }, [currentMonth]);
 
   async function ensureMonthLoaded(nextMonthKey: string) {
-    if (dayInfo && Object.keys(dayInfo).length && currentMonth === nextMonthKey) return;
+    if (loadedMonthsRef.current.has(nextMonthKey)) return;
+    loadedMonthsRef.current.add(nextMonthKey);
 
     startTransition(async () => {
       const data = await fetchMonthInfo(nextMonthKey);

@@ -19,6 +19,13 @@ function isoDateUTC(d: Date) {
   return `${y}-${m}-${day}`;
 }
 
+function isoDateLocal(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const m = url.searchParams.get("m") || "";
@@ -38,8 +45,14 @@ export async function GET(req: NextRequest) {
 
   const dayInfo: Record<string, { sessionId: string; entries: number }> = {};
   for (const s of sessions) {
-    dayInfo[isoDateUTC(s.date)] = { sessionId: s.id, entries: s._count.singers ?? 0 };
+    const value = { sessionId: s.id, entries: s._count.singers ?? 0 };
+    const utcKey = isoDateUTC(s.date);
+    const localKey = isoDateLocal(s.date);
+
+    dayInfo[utcKey] = value;
+    if (!dayInfo[localKey]) dayInfo[localKey] = value;
   }
+
 
   return NextResponse.json({ dayInfo }, { status: 200 });
 }

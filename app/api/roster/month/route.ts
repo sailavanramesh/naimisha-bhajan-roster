@@ -17,6 +17,13 @@ function isoDayUTC(d: Date) {
   return d.toISOString().slice(0, 10);
 }
 
+function isoDayLocal(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const month = searchParams.get("month") || "";
@@ -42,10 +49,16 @@ export async function GET(req: Request) {
   const days: Record<string, { sessionId: string; entries: number; hasSession: boolean }> = {};
 
   for (const s of sessions) {
-    const key = isoDayUTC(s.date);
     const entries = s._count.singers ?? 0;
-    days[key] = { sessionId: s.id, entries, hasSession: true };
+    const value = { sessionId: s.id, entries, hasSession: true };
+
+    const utcKey = isoDayUTC(s.date);
+    const localKey = isoDayLocal(s.date);
+
+    days[utcKey] = value;
+    if (!days[localKey]) days[localKey] = value;
   }
+
 
   return NextResponse.json({ days });
 }
