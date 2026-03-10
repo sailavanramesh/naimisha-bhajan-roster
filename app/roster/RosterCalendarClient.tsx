@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import { fetchMonthInfo, createSessionForDate } from "./calendarActions";
@@ -54,6 +54,7 @@ export default function RosterCalendarClient(props: {
   const [selected, setSelected] = useState<string>(initialSelected);
   const [dayInfo, setDayInfo] = useState<Record<string, DayInfo>>(initialDayInfo);
   const [isPending, startTransition] = useTransition();
+  const loadedMonthsRef = useRef<Set<string>>(new Set([initialMonth]));
 
   const monthDate = useMemo(() => {
     const [y, m] = currentMonth.split("-").map((x) => Number(x));
@@ -61,7 +62,8 @@ export default function RosterCalendarClient(props: {
   }, [currentMonth]);
 
   async function ensureMonthLoaded(nextMonthKey: string) {
-    if (dayInfo && Object.keys(dayInfo).length && currentMonth === nextMonthKey) return;
+    if (loadedMonthsRef.current.has(nextMonthKey)) return;
+    loadedMonthsRef.current.add(nextMonthKey);
 
     startTransition(async () => {
       const data = await fetchMonthInfo(nextMonthKey);
@@ -106,6 +108,14 @@ export default function RosterCalendarClient(props: {
   }
 
   const selectedInfo = dayInfo[selected];
+  const selectedLabel = fromISODate(selected).toLocaleDateString(undefined, {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+  const selectedHasSession = !!selectedInfo?.sessionId;
+  const selectedEntries = selectedInfo?.entries ?? 0;
 
   return (
     <div className="grid gap-3">
@@ -176,19 +186,30 @@ export default function RosterCalendarClient(props: {
       </div>
 
       <div className="rounded-2xl border bg-white p-3 text-sm">
-        <div className="font-semibold">
-          Selected: {fromISODate(selected).toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="font-semibold">{selectedLabel}</div>
+          <div className="flex items-center gap-2 text-xs">
+            <span
+              className={[
+                "rounded-full border px-2 py-1",
+                selectedHasSession ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700",
+              ].join(" ")}
+            >
+              {selectedHasSession ? "Session exists" : "No session"}
+            </span>
+            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-slate-700">
+              {selectedEntries} row{selectedEntries === 1 ? "" : "s"}
+            </span>
+          </div>
         </div>
 
-        {selectedInfo?.sessionId ? (
-          <div className="mt-1 text-slate-700">
-            Session exists{typeof selectedInfo.entries === "number" ? ` (${selectedInfo.entries} row${selectedInfo.entries === 1 ? "" : "s"})` : ""}.
-          </div>
-        ) : canEdit ? (
-          <div className="mt-1 text-slate-700">No session yet. Click the day to create one and jump in.</div>
-        ) : (
-          <div className="mt-1 text-slate-700">No session for this day.</div>
-        )}
+        <div className="mt-2 text-slate-700">
+          {selectedHasSession
+            ? "Tap the day again to open the session details."
+            : canEdit
+              ? "No session yet — tap this day to create one instantly."
+              : "This day is read-only and currently has no session."}
+        </div>
       </div>
 
       {isPending ? <div className="text-xs text-slate-500">Loading…</div> : null}
