@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle, Input, Button } from "@/components/ui";
 import RosterCalendarClient from "./RosterCalendarClient";
+import { EnableEditForm } from "@/components/EnableEditForm";
 
 export const dynamic = "force-dynamic";
 function toISODate(d: Date) {
@@ -147,9 +148,12 @@ export default async function RosterPage({
               <span className="text-gray-700"> — this browser can edit.</span>
             </div>
           ) : (
-            <div className="rounded-2xl border bg-amber-50 px-3 py-2 text-sm">
-              <span className="font-medium">Read-only</span>
-              <span className="text-gray-700"> — open your edit link to enable editing.</span>
+            <div className="rounded-2xl border bg-amber-50 px-3 py-2 text-sm grid gap-2">
+              <div>
+                <span className="font-medium">Read-only</span>
+                <span className="text-gray-700"> — enter your edit key here to enable editing in this browser.</span>
+              </div>
+              <EnableEditForm returnTo={`/roster?view=${view}`} />
             </div>
           )}
         </CardHeader>
