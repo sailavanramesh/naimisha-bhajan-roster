@@ -2,21 +2,58 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 
+export const dynamic = "force-dynamic";
+
 export default async function Page() {
-  const today = new Date();
-  const in30 = new Date(today);
-  in30.setDate(in30.getDate() + 30);
+  const data = await (async () => {
+    try {
+      const today = new Date();
+      const in30 = new Date(today);
+      in30.setDate(in30.getDate() + 30);
 
-  const upcoming = await prisma.session.findMany({
-    where: { date: { gte: today, lte: in30 } },
-    orderBy: { date: "asc" },
-    take: 12,
-    include: { singers: { include: { singer: true } } },
-  });
+      const [upcoming, masterCount, sessionCount, singerCount] = await Promise.all([
+        prisma.session.findMany({
+          where: { date: { gte: today, lte: in30 } },
+          orderBy: { date: "asc" },
+          take: 12,
+          include: { singers: { include: { singer: true } } },
+        }),
+        prisma.bhajan.count(),
+        prisma.session.count(),
+        prisma.singer.count(),
+      ]);
 
-  const masterCount = await prisma.bhajan.count();
-  const sessionCount = await prisma.session.count();
-  const singerCount = await prisma.singer.count();
+      return { upcoming, masterCount, sessionCount, singerCount };
+    } catch (err) {
+      console.error("Dashboard query failed", err);
+      return null;
+    }
+  })();
+
+  if (!data) {
+    return (
+      <div className="grid gap-4">
+        <Card>
+          <CardHeader>
+            <CardTitle>Database setup required</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-2 text-sm text-gray-700">
+            <p>The app could not connect to the database in this environment.</p>
+            <p>
+              On Vercel, set <code>DATABASE_URL</code> (and redeploy). If you are using Prisma Accelerate or a pooled
+              connection, also set <code>DIRECT_URL</code>.
+            </p>
+            <p>
+              After setting env vars, run migrations/seed and redeploy. See project <code>README.md</code> for setup
+              steps.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const { upcoming, masterCount, sessionCount, singerCount } = data;
 
   return (
     <div className="grid gap-4">
