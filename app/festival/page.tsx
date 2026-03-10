@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 
+export const dynamic = "force-dynamic";
 export default async function FestivalPage() {
   const singers = await prisma.singer.findMany({
     orderBy: { name: "asc" },

@@ -5,7 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle, Input, Button } from "@/compo
 import { SessionSingersGrid } from "./SessionSingersGrid";
 import { getPitchSuggestions } from "@/lib/pitchSuggestions";
 import { deleteInstrumentRow, updateSessionNotes } from "./actions";
+import { EnableEditForm } from "@/components/EnableEditForm";
 
+export const dynamic = "force-dynamic";
 export default async function RosterSessionPage({
   params,
 }: {
@@ -67,6 +69,11 @@ export default async function RosterSessionPage({
     });
   }
 
+  const sessionDay = new Date(session.date);
+  const rosterDay = sessionDay.toISOString().slice(0, 10);
+  const rosterMonth = `${sessionDay.getUTCFullYear()}-${String(sessionDay.getUTCMonth() + 1).padStart(2, "0")}`;
+  const backToRosterHref = `/roster?view=calendar&m=${rosterMonth}&d=${rosterDay}`;
+
   const dateLabel = new Date(session.date).toLocaleDateString(undefined, {
     weekday: "long",
     year: "numeric",
@@ -80,16 +87,20 @@ export default async function RosterSessionPage({
         <CardHeader>
           <CardTitle>{dateLabel}</CardTitle>
 
-          <div className="mt-2 flex items-center gap-2 text-sm">
-            {canEdit ? (
-              <span className="rounded-xl border bg-green-50 px-3 py-1">Edit mode ON</span>
-            ) : (
-              <span className="rounded-xl border bg-amber-50 px-3 py-1">Read-only</span>
-            )}
+          <div className="mt-2 grid gap-2 text-sm">
+            <div className="flex items-center gap-2">
+              {canEdit ? (
+                <span className="rounded-xl border bg-green-50 px-3 py-1">Edit mode ON</span>
+              ) : (
+                <span className="rounded-xl border bg-amber-50 px-3 py-1">Read-only</span>
+              )}
 
-            <Link href="/roster" className="underline underline-offset-2">
-              Back to roster
-            </Link>
+              <Link href={backToRosterHref} className="underline underline-offset-2">
+                Back to roster
+              </Link>
+            </div>
+
+            {!canEdit ? <EnableEditForm returnTo={`/roster/${sessionId}`} compact /> : null}
           </div>
         </CardHeader>
 
