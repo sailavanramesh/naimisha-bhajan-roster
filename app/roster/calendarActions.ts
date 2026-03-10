@@ -1,15 +1,15 @@
 export async function fetchMonthInfo(monthKey: string): Promise<{
-  dayInfo: Record<string, { hasSession: boolean; entries: number; sessionId?: string }>;
+  dayInfo: Record<string, { hasSession: boolean; entries: number; sessionId?: string; summary?: string | null }>;
 }> {
   const res = await fetch(`/roster/month?m=${encodeURIComponent(monthKey)}`, { cache: "no-store" });
   if (!res.ok) return { dayInfo: {} };
 
   const data = await res.json();
-  const src = (data?.dayInfo || {}) as Record<string, { sessionId: string; entries: number }>;
+  const src = (data?.dayInfo || {}) as Record<string, { sessionId: string; entries: number; summary?: string | null }>;
 
-  const dayInfo: Record<string, { hasSession: boolean; entries: number; sessionId?: string }> = {};
+  const dayInfo: Record<string, { hasSession: boolean; entries: number; sessionId?: string; summary?: string | null }> = {};
   for (const [k, v] of Object.entries(src)) {
-    dayInfo[k] = { hasSession: true, entries: Number(v.entries ?? 0), sessionId: v.sessionId };
+    dayInfo[k] = { hasSession: true, entries: Number(v.entries ?? 0), sessionId: v.sessionId, summary: v.summary ?? null };
   }
   return { dayInfo };
 }

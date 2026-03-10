@@ -3,9 +3,18 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle, Input, Button } from "@/components/ui";
 import RosterCalendarClient from "./RosterCalendarClient";
+import { EnableEditForm } from "@/components/EnableEditForm";
 
-function toISODate(d: Date) {
+export const dynamic = "force-dynamic";
+function toISODateUTC(d: Date) {
   return d.toISOString().slice(0, 10);
+}
+
+function toISODateLocal(d: Date) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 
 function parseISODate(s?: string | null): Date | null {
@@ -28,6 +37,18 @@ function monthKey(d: Date) {
   const y = d.getUTCFullYear();
   const m = String(d.getUTCMonth() + 1).padStart(2, "0");
   return `${y}-${m}`;
+}
+
+function buildDaySummary(
+  singers: Array<{ singer: { name: string }; bhajanTitle: string | null }>
+) {
+  const parts = singers
+    .slice(0, 3)
+    .map((x) => `${x.singer.name}${x.bhajanTitle ? ` — ${x.bhajanTitle}` : ""}`)
+    .filter(Boolean);
+  if (!parts.length) return null;
+  const suffix = singers.length > 3 ? " …" : "";
+  return parts.join(" · ") + suffix;
 }
 
 function addDaysUTC(d: Date, n: number) {
@@ -56,25 +77,40 @@ export default async function RosterPage({
   const q = (sp.q ?? "").trim();
 
   const todayUTC = new Date();
-  const selected = parseISODate(sp.d) ?? parseISODate(toISODate(todayUTC))!;
+  const selected = parseISODate(sp.d) ?? parseISODate(toISODateUTC(todayUTC))!;
   const month = parseMonth(sp.m) ?? new Date(Date.UTC(selected.getUTCFullYear(), selected.getUTCMonth(), 1, 0, 0, 0));
   const monthStart = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1, 0, 0, 0));
   const monthEndExclusive = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1, 0, 0, 0));
 
   const monthSessions = await prisma.session.findMany({
     where: { date: { gte: monthStart, lt: monthEndExclusive } },
-    select: { id: true, date: true, _count: { select: { singers: true } } },
+    select: {
+      id: true,
+      date: true,
+      _count: { select: { singers: true } },
+      singers: {
+        select: { bhajanTitle: true, singer: { select: { name: true } } },
+        orderBy: [{ slot: "asc" }, { createdAt: "asc" }],
+        take: 3,
+      },
+    },
     orderBy: { date: "asc" },
   });
 
-  const dayInfo: Record<string, { sessionId: string; entries: number; hasSession: boolean }> = {};
+  const dayInfo: Record<string, { sessionId: string; entries: number; hasSession: boolean; summary?: string | null }> = {};
   for (const s of monthSessions) {
-    const iso = toISODate(s.date);
-    dayInfo[iso] = {
+    const value = {
       sessionId: s.id,
       entries: s._count.singers ?? 0,
       hasSession: true,
+      summary: buildDaySummary(s.singers),
     };
+
+    const utcKey = toISODateUTC(s.date);
+    const localKey = toISODateLocal(s.date);
+
+    dayInfo[utcKey] = value;
+    if (!dayInfo[localKey]) dayInfo[localKey] = value;
   }
 
   let listSessions:
@@ -146,9 +182,12 @@ export default async function RosterPage({
               <span className="text-gray-700"> — this browser can edit.</span>
             </div>
           ) : (
-            <div className="rounded-2xl border bg-amber-50 px-3 py-2 text-sm">
-              <span className="font-medium">Read-only</span>
-              <span className="text-gray-700"> — open your edit link to enable editing.</span>
+            <div className="rounded-2xl border bg-amber-50 px-3 py-2 text-sm grid gap-2">
+              <div>
+                <span className="font-medium">Read-only</span>
+                <span className="text-gray-700"> — enter your edit key here to enable editing in this browser.</span>
+              </div>
+              <EnableEditForm returnTo={`/roster?view=${view}`} />
             </div>
           )}
         </CardHeader>
@@ -158,7 +197,7 @@ export default async function RosterPage({
             <RosterCalendarClient
               canEdit={canEdit}
               initialMonth={monthKey(monthStart)}
-              initialSelected={toISODate(selected)}
+              initialSelected={toISODateUTC(selected)}
               initialDayInfo={dayInfo}
             />
           ) : (
