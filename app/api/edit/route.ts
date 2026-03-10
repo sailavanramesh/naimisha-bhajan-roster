@@ -11,6 +11,7 @@ export async function GET(req: Request) {
 
   // optional redirect target, default roster
   const r = url.searchParams.get("r") ?? "/roster";
+  const safeRedirect = r.startsWith("/") ? r : "/roster";
 
   if (!expected) {
     return NextResponse.json(
@@ -20,7 +21,7 @@ export async function GET(req: Request) {
   }
 
   // Always redirect somewhere human-friendly
-  const res = NextResponse.redirect(new URL(r, url.origin));
+  const res = NextResponse.redirect(new URL(safeRedirect, url.origin));
 
   if (k !== expected) {
     // invalid key -> ensure cookie is cleared
