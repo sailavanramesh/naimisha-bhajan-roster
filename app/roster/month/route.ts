@@ -26,6 +26,18 @@ function isoDateLocal(d: Date) {
   return `${y}-${m}-${day}`;
 }
 
+function buildDaySummary(
+  singers: Array<{ singer: { name: string }; bhajanTitle: string | null }>
+) {
+  const parts = singers
+    .slice(0, 3)
+    .map((x) => `${x.singer.name}${x.bhajanTitle ? ` — ${x.bhajanTitle}` : ""}`)
+    .filter(Boolean);
+  if (!parts.length) return null;
+  const suffix = singers.length > 3 ? " …" : "";
+  return parts.join(" · ") + suffix;
+}
+
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const m = url.searchParams.get("m") || "";
@@ -39,13 +51,22 @@ export async function GET(req: NextRequest) {
 
   const sessions = await prisma.session.findMany({
     where: { date: { gte: monthStart, lt: monthEndExclusive } },
-    select: { id: true, date: true, _count: { select: { singers: true } } },
+    select: {
+      id: true,
+      date: true,
+      _count: { select: { singers: true } },
+      singers: {
+        select: { bhajanTitle: true, singer: { select: { name: true } } },
+        orderBy: [{ slot: "asc" }, { createdAt: "asc" }],
+        take: 3,
+      },
+    },
     orderBy: { date: "asc" },
   });
 
-  const dayInfo: Record<string, { sessionId: string; entries: number }> = {};
+  const dayInfo: Record<string, { sessionId: string; entries: number; summary?: string | null }> = {};
   for (const s of sessions) {
-    const value = { sessionId: s.id, entries: s._count.singers ?? 0 };
+    const value = { sessionId: s.id, entries: s._count.singers ?? 0, summary: buildDaySummary(s.singers) };
     const utcKey = isoDateUTC(s.date);
     const localKey = isoDateLocal(s.date);
 

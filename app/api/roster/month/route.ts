@@ -24,6 +24,18 @@ function isoDayLocal(d: Date) {
   return `${y}-${m}-${day}`;
 }
 
+function buildDaySummary(
+  singers: Array<{ singer: { name: string }; bhajanTitle: string | null }>
+) {
+  const parts = singers
+    .slice(0, 3)
+    .map((x) => `${x.singer.name}${x.bhajanTitle ? ` — ${x.bhajanTitle}` : ""}`)
+    .filter(Boolean);
+  if (!parts.length) return null;
+  const suffix = singers.length > 3 ? " …" : "";
+  return parts.join(" · ") + suffix;
+}
+
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
   const month = searchParams.get("month") || "";
@@ -41,16 +53,21 @@ export async function GET(req: Request) {
       id: true,
       date: true,
       _count: { select: { singers: true } },
+      singers: {
+        select: { bhajanTitle: true, singer: { select: { name: true } } },
+        orderBy: [{ slot: "asc" }, { createdAt: "asc" }],
+        take: 3,
+      },
     },
     orderBy: { date: "asc" },
   });
 
   // days[YYYY-MM-DD] = { sessionId, entries, hasSession }
-  const days: Record<string, { sessionId: string; entries: number; hasSession: boolean }> = {};
+  const days: Record<string, { sessionId: string; entries: number; hasSession: boolean; summary?: string | null }> = {};
 
   for (const s of sessions) {
     const entries = s._count.singers ?? 0;
-    const value = { sessionId: s.id, entries, hasSession: true };
+    const value = { sessionId: s.id, entries, hasSession: true, summary: buildDaySummary(s.singers) };
 
     const utcKey = isoDayUTC(s.date);
     const localKey = isoDayLocal(s.date);

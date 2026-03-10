@@ -1,14 +1,15 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui";
+import { Button, Input } from "@/components/ui";
 import { fetchMonthInfo, createSessionForDate } from "./calendarActions";
 
 type DayInfo = {
   hasSession: boolean;
   entries: number;
   sessionId?: string;
+  summary?: string | null;
 };
 
 function toISODate(d: Date) {
@@ -53,6 +54,7 @@ export default function RosterCalendarClient(props: {
   const [currentMonth, setCurrentMonth] = useState<string>(initialMonth);
   const [selected, setSelected] = useState<string>(initialSelected);
   const [dayInfo, setDayInfo] = useState<Record<string, DayInfo>>(initialDayInfo);
+  const [jumpDate, setJumpDate] = useState<string>(initialSelected);
   const [isPending, startTransition] = useTransition();
   const loadedMonthsRef = useRef<Set<string>>(new Set([initialMonth]));
 
@@ -73,6 +75,11 @@ export default function RosterCalendarClient(props: {
 
   useEffect(() => {
     ensureMonthLoaded(currentMonth);
+
+    const prev = monthKey(new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() - 1, 1)));
+    const next = monthKey(new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + 1, 1)));
+    ensureMonthLoaded(prev);
+    ensureMonthLoaded(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentMonth]);
 
@@ -81,6 +88,7 @@ export default function RosterCalendarClient(props: {
 
   async function onDayClick(dateISO: string) {
     setSelected(dateISO);
+    setJumpDate(dateISO);
 
     const info = dayInfo[dateISO];
     const existing = info?.sessionId;
@@ -91,12 +99,11 @@ export default function RosterCalendarClient(props: {
 
     if (!canEdit) return;
 
-    // Create and navigate
     startTransition(async () => {
       const created = await createSessionForDate(dateISO);
       setDayInfo((prev) => ({
         ...prev,
-        [dateISO]: { hasSession: true, entries: 0, sessionId: created.id },
+        [dateISO]: { hasSession: true, entries: 0, sessionId: created.id, summary: null },
       }));
       router.push(`/roster/${created.id}`);
     });
@@ -105,6 +112,23 @@ export default function RosterCalendarClient(props: {
   function navMonth(delta: number) {
     const next = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + delta, 1));
     setCurrentMonth(monthKey(next));
+  }
+
+  function goToday() {
+    const today = toISODate(new Date());
+    const dt = fromISODate(today);
+    setSelected(today);
+    setJumpDate(today);
+    setCurrentMonth(monthKey(monthStartUTC(dt)));
+  }
+
+  function onJumpToDate(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!jumpDate) return;
+    const dt = fromISODate(jumpDate);
+    if (Number.isNaN(dt.getTime())) return;
+    setSelected(jumpDate);
+    setCurrentMonth(monthKey(monthStartUTC(dt)));
   }
 
   const selectedInfo = dayInfo[selected];
@@ -119,25 +143,24 @@ export default function RosterCalendarClient(props: {
 
   return (
     <div className="grid gap-3">
-      <div className="flex items-center justify-between gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm font-semibold">
           {monthDate.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
         </div>
-        <div className="flex items-center gap-2">
-          <Button type="button" onClick={() => navMonth(-1)} disabled={isPending}>
-            Prev
-          </Button>
-          <Button type="button" onClick={() => navMonth(1)} disabled={isPending}>
-            Next
-          </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" onClick={() => navMonth(-1)} disabled={isPending}>Prev</Button>
+          <Button type="button" onClick={goToday} disabled={isPending}>Today</Button>
+          <Button type="button" onClick={() => navMonth(1)} disabled={isPending}>Next</Button>
+          <form className="flex items-center gap-2" onSubmit={onJumpToDate}>
+            <Input type="date" value={jumpDate} onChange={(e) => setJumpDate(e.target.value)} className="h-10" />
+            <Button type="submit" disabled={isPending}>Go</Button>
+          </form>
         </div>
       </div>
 
       <div className="grid grid-cols-7 gap-2 text-xs text-slate-600">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
-          <div key={d} className="text-center">
-            {d}
-          </div>
+          <div key={d} className="text-center">{d}</div>
         ))}
       </div>
 
@@ -148,7 +171,6 @@ export default function RosterCalendarClient(props: {
           const isSelected = date === selected;
 
           const info = dayInfo[date];
-          // Be permissive: if we have a sessionId, treat it as an existing session.
           const hasSession = !!info?.sessionId || !!info?.hasSession;
           const entries = info?.entries ?? 0;
 
@@ -164,17 +186,13 @@ export default function RosterCalendarClient(props: {
               ].join(" ")}
             >
               <div className="text-xs">{d.getUTCDate()}</div>
-
-              {/* indicator */}
               {hasSession ? (
                 <div className="absolute bottom-1 left-1/2 -translate-x-1/2">
                   {entries > 0 ? (
-                    <div
-                      className={[
-                        "h-1.5 w-6 rounded-full",
-                        entries >= 8 ? "bg-indigo-600/50" : entries >= 4 ? "bg-indigo-600/35" : "bg-indigo-600/20",
-                      ].join(" ")}
-                    />
+                    <div className={[
+                      "h-1.5 w-6 rounded-full",
+                      entries >= 8 ? "bg-indigo-600/50" : entries >= 4 ? "bg-indigo-600/35" : "bg-indigo-600/20",
+                    ].join(" ")} />
                   ) : (
                     <div className="h-1.5 w-1.5 rounded-full border border-black/15 bg-white/80" />
                   )}
@@ -189,12 +207,10 @@ export default function RosterCalendarClient(props: {
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="font-semibold">{selectedLabel}</div>
           <div className="flex items-center gap-2 text-xs">
-            <span
-              className={[
-                "rounded-full border px-2 py-1",
-                selectedHasSession ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700",
-              ].join(" ")}
-            >
+            <span className={[
+              "rounded-full border px-2 py-1",
+              selectedHasSession ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700",
+            ].join(" ")}>
               {selectedHasSession ? "Session exists" : "No session"}
             </span>
             <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-slate-700">
@@ -202,6 +218,12 @@ export default function RosterCalendarClient(props: {
             </span>
           </div>
         </div>
+
+        {selectedInfo?.summary ? (
+          <div className="mt-2 rounded-xl border bg-slate-50 px-3 py-2 text-slate-700">
+            {selectedInfo.summary}
+          </div>
+        ) : null}
 
         <div className="mt-2 text-slate-700">
           {selectedHasSession

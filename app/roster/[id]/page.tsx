@@ -69,6 +69,11 @@ export default async function RosterSessionPage({
     });
   }
 
+  const sessionDay = new Date(session.date);
+  const rosterDay = sessionDay.toISOString().slice(0, 10);
+  const rosterMonth = `${sessionDay.getUTCFullYear()}-${String(sessionDay.getUTCMonth() + 1).padStart(2, "0")}`;
+  const backToRosterHref = `/roster?view=calendar&m=${rosterMonth}&d=${rosterDay}`;
+
   const dateLabel = new Date(session.date).toLocaleDateString(undefined, {
     weekday: "long",
     year: "numeric",
@@ -90,7 +95,7 @@ export default async function RosterSessionPage({
                 <span className="rounded-xl border bg-amber-50 px-3 py-1">Read-only</span>
               )}
 
-              <Link href="/roster" className="underline underline-offset-2">
+              <Link href={backToRosterHref} className="underline underline-offset-2">
                 Back to roster
               </Link>
             </div>

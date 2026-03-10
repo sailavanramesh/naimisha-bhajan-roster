@@ -39,6 +39,18 @@ function monthKey(d: Date) {
   return `${y}-${m}`;
 }
 
+function buildDaySummary(
+  singers: Array<{ singer: { name: string }; bhajanTitle: string | null }>
+) {
+  const parts = singers
+    .slice(0, 3)
+    .map((x) => `${x.singer.name}${x.bhajanTitle ? ` — ${x.bhajanTitle}` : ""}`)
+    .filter(Boolean);
+  if (!parts.length) return null;
+  const suffix = singers.length > 3 ? " …" : "";
+  return parts.join(" · ") + suffix;
+}
+
 function addDaysUTC(d: Date, n: number) {
   const out = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0));
   out.setUTCDate(out.getUTCDate() + n);
@@ -72,16 +84,26 @@ export default async function RosterPage({
 
   const monthSessions = await prisma.session.findMany({
     where: { date: { gte: monthStart, lt: monthEndExclusive } },
-    select: { id: true, date: true, _count: { select: { singers: true } } },
+    select: {
+      id: true,
+      date: true,
+      _count: { select: { singers: true } },
+      singers: {
+        select: { bhajanTitle: true, singer: { select: { name: true } } },
+        orderBy: [{ slot: "asc" }, { createdAt: "asc" }],
+        take: 3,
+      },
+    },
     orderBy: { date: "asc" },
   });
 
-  const dayInfo: Record<string, { sessionId: string; entries: number; hasSession: boolean }> = {};
+  const dayInfo: Record<string, { sessionId: string; entries: number; hasSession: boolean; summary?: string | null }> = {};
   for (const s of monthSessions) {
     const value = {
       sessionId: s.id,
       entries: s._count.singers ?? 0,
       hasSession: true,
+      summary: buildDaySummary(s.singers),
     };
 
     const utcKey = toISODateUTC(s.date);
