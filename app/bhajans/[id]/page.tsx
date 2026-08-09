@@ -223,6 +223,47 @@ export default async function BhajanPage({
             </article>
           </section>
 
+          {/* Who has sung it */}
+          <section className="grid gap-2">
+            <h2 className="text-sm font-semibold">Who has sung this</h2>
+            {sungBy.length === 0 ? (
+              <p className="text-sm text-on-surface-muted">
+                Nobody in the group has sung this yet.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-[12px] border border-rule-surface">
+                <table className="w-full text-sm">
+                  <thead className="bg-panel text-left">
+                    <tr className="border-b border-rule-surface">
+                      <th className="px-3 py-2 font-semibold">Singer</th>
+                      <th className="px-3 py-2 font-semibold">Date</th>
+                      <th className="px-3 py-2 font-semibold">Sang at</th>
+                      <th className="px-3 py-2 font-semibold">vs reference</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sungBy.map((r, i) => (
+                      <tr key={`${r.singerName}-${i}`} className="border-b border-rule-surface last:border-b-0">
+                        <td className="px-3 py-2">{r.singerName}</td>
+                        <td className="px-3 py-2 font-mono tabular-nums text-xs text-on-surface-muted">
+                          {r.date.toISOString().slice(0, 10)}
+                        </td>
+                        <td className="px-3 py-2 font-mono tabular-nums">
+                          {r.confirmedPitch ?? "—"}
+                        </td>
+                        <td
+                          className={r.delta ? "px-3 py-2 font-mono tabular font-semibold text-kumkum" : "px-3 py-2 font-mono tabular font-semibold"}
+                        >
+                          {signed(r.delta)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
           {/* Predictions for everyone else */}
           {predictions.length > 0 ? (
             <section className="grid gap-2">
@@ -284,47 +325,6 @@ export default async function BhajanPage({
               </div>
             </section>
           ) : null}
-
-          {/* Who has sung it */}
-          <section className="grid gap-2">
-            <h2 className="text-sm font-semibold">Who has sung this</h2>
-            {sungBy.length === 0 ? (
-              <p className="text-sm text-on-surface-muted">
-                Nobody in the group has sung this yet.
-              </p>
-            ) : (
-              <div className="overflow-x-auto rounded-[12px] border border-rule-surface">
-                <table className="w-full text-sm">
-                  <thead className="bg-panel text-left">
-                    <tr className="border-b border-rule-surface">
-                      <th className="px-3 py-2 font-semibold">Singer</th>
-                      <th className="px-3 py-2 font-semibold">Date</th>
-                      <th className="px-3 py-2 font-semibold">Sang at</th>
-                      <th className="px-3 py-2 font-semibold">vs reference</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sungBy.map((r, i) => (
-                      <tr key={`${r.singerName}-${i}`} className="border-b border-rule-surface last:border-b-0">
-                        <td className="px-3 py-2">{r.singerName}</td>
-                        <td className="px-3 py-2 font-mono tabular-nums text-xs text-on-surface-muted">
-                          {r.date.toISOString().slice(0, 10)}
-                        </td>
-                        <td className="px-3 py-2 font-mono tabular-nums">
-                          {r.confirmedPitch ?? "—"}
-                        </td>
-                        <td
-                          className={r.delta ? "px-3 py-2 font-mono tabular font-semibold text-kumkum" : "px-3 py-2 font-mono tabular font-semibold"}
-                        >
-                          {signed(r.delta)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
 
           {/* Ladder for the most recent performance */}
           {mostRecent ? (

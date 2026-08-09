@@ -27,7 +27,7 @@ export default async function BhajansPage({
       { raga: { contains: q, mode: "insensitive" } },
     ];
   }
-  if (deity) where.deity = deity;
+  if (deity) where.deities = { some: { deity: { name: deity } } };
   if (lang) where.language = lang;
 
   const [items, deities, langs] = await Promise.all([
@@ -37,11 +37,11 @@ export default async function BhajansPage({
       take: 500,
       include: { deities: { include: { deity: true } } },
     }),
-    prisma.bhajan.findMany({
-      distinct: ["deity"],
-      select: { deity: true },
-      orderBy: { deity: "asc" },
-    }),
+    // The raw `deity` column holds combined strings like
+    // "Ganesha, Rama, Krishna, Vittala, Subrahmanya, Guru", so a distinct query
+    // over it produced dozens of unusable combinations. The join table holds
+    // the 21 real deities, and a bhajan with several appears under each.
+    prisma.deity.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
     prisma.bhajan.findMany({
       distinct: ["language"],
       select: { language: true },
@@ -49,7 +49,7 @@ export default async function BhajansPage({
     }),
   ]);
 
-  const deityOptions = deities.map((d) => d.deity).filter(Boolean) as string[];
+  const deityOptions = deities.map((d) => d.name);
   const langOptions = langs.map((l) => l.language).filter(Boolean) as string[];
 
   return (

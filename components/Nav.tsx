@@ -104,8 +104,8 @@ export function Nav() {
       {/* Desktop sidebar */}
       <aside
         className={clsx(
-          "no-print hidden md:flex md:sticky md:top-0 md:h-screen md:flex-col md:border-r md:border-rule md:bg-ground-raised md:p-3",
-          expanded ? "md:w-64" : "md:w-20"
+          "no-print hidden lg:flex lg:sticky lg:top-0 lg:h-screen lg:flex-col lg:border-r lg:border-rule lg:bg-ground-raised lg:p-3",
+          expanded ? "lg:w-64" : "lg:w-20"
         )}
       >
         <div className="flex items-center justify-between gap-2 px-1 pb-3">
@@ -132,7 +132,7 @@ export function Nav() {
       </aside>
 
       {/* Mobile top-left trigger */}
-      <div className="no-print md:hidden fixed left-3 top-3 z-50">
+      <div className="no-print lg:hidden fixed left-3 top-3 z-50">
         <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open navigation">
           <Hamburger open={false} />
         </button>
@@ -140,7 +140,7 @@ export function Nav() {
 
       {/* Mobile drawer */}
       {mobileOpen ? (
-        <div className="md:hidden fixed inset-0 z-50">
+        <div className="lg:hidden fixed inset-0 z-50">
           <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
           <div className="absolute left-0 top-0 h-full w-[82%] max-w-[320px] bg-ground-raised border-r border-rule p-3">
             <div className="flex items-center justify-between px-1 pb-3">

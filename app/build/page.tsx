@@ -149,7 +149,10 @@ export default async function BuildPage({
     {
       deities: list(sp, "deity"),
       excludeDeities: list(sp, "notdeity"),
-      languages: list(sp, "lang"),
+      // Default to the languages the group actually sings in. The masterlist
+      // has 40, most of them one-offs, and an unfiltered pool kept suggesting
+      // Japanese and Zulu. Explicitly clearing the facet still opens it up.
+      languages: sp.lang === undefined ? PRIMARY_LANGUAGES : list(sp, "lang"),
       tempos: list(sp, "tempo"),
       levels: list(sp, "level"),
       requireLyrics: one(sp, "lyrics") === "1",
@@ -305,8 +308,8 @@ export default async function BuildPage({
                     .map((l) => l.name)
                     .filter((l) => !PRIMARY_LANGUAGES.includes(l))}
                   moreLabel="Other languages"
-                  selected={list(sp, "lang")}
-                  clearHref={list(sp, "lang").length ? href(sp, { lang: undefined }) : undefined}
+                  selected={sp.lang === undefined ? PRIMARY_LANGUAGES : list(sp, "lang")}
+                  clearHref={list(sp, "lang").length ? href(sp, { lang: "" }) : undefined}
                 />
                 <MultiField
                   label="Tempo"

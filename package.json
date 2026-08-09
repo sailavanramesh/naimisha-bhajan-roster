@@ -15,7 +15,8 @@
     "test": "vitest",
     "test:run": "vitest run",
     "db:templates": "tsx scripts/seedTemplates.ts",
-    "db:eligibility": "tsx scripts/seedEligibility.ts"
+    "db:eligibility": "tsx scripts/seedEligibility.ts",
+    "db:backfill-text": "tsx scripts/backfillText.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",

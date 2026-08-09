@@ -64,6 +64,19 @@ function nz(v: unknown): string | null {
   return s === '' ? null : s;
 }
 
+/**
+ * For MULTI-LINE text: lyrics, meaning, notes.
+ *
+ * `norm()` collapses every run of whitespace to a single space, which is right
+ * for a singer's name and catastrophic for a song. Using it on lyrics flattened
+ * 3,593 of 3,613 verses into one unreadable paragraph. This only trims the ends
+ * and normalises line endings.
+ */
+function text(v: unknown): string | null {
+  const s = String(v ?? '').replace(/\r\n?/g, '\n').trim();
+  return s === '' ? null : s;
+}
+
 const melbourneParts = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'Australia/Melbourne',
   year: 'numeric',
@@ -446,14 +459,14 @@ async function main() {
 
   const bhajanData = [...bhajanByTitle.entries()].map(([title, r]) => ({
     title,
-    url: nz(r['url']), singers: nz(r['singers']), meaning: nz(r['meaning']), lyrics: nz(r['lyrics']),
+    url: nz(r['url']), singers: nz(r['singers']), meaning: text(r['meaning']), lyrics: text(r['lyrics']),
     audio: nz(r['audio']), deity: nz(r['deity']), language: nz(r['language']), raga: nz(r['raga']),
     beat: nz(r['beat']), level: nz(r['level']), tempo: nz(r['tempo']),
     referenceGentsPitch: nz(r['reference_gents_pitch']), referenceLadiesPitch: nz(r['reference_ladies_pitch']),
-    musicNotesForFirstLine: nz(r['music_notes_for_first_line']), notesRange: nz(r['notes_range']),
+    musicNotesForFirstLine: text(r['music_notes_for_first_line']), notesRange: nz(r['notes_range']),
     tutorial: nz(r['tutorial']), sheetMusic: nz(r['sheet_music']), songTags: nz(r['song_tags']),
-    glossaryTerms: nz(r['glossary_terms']), debugFile: nz(r['debug_file']), video: nz(r['video']),
-    generalComments: nz(r['general_comments']), karaokeTracksForPractice: nz(r['karaoke_tracks_for_practice']),
+    glossaryTerms: text(r['glossary_terms']), debugFile: nz(r['debug_file']), video: nz(r['video']),
+    generalComments: text(r['general_comments']), karaokeTracksForPractice: text(r['karaoke_tracks_for_practice']),
     goldenVoice: nz(r['golden_voice']), instrumental: nz(r['instrumental']), extra: nz(r['Column 1']),
   }));
   for (const part of chunk(bhajanData, CHUNK)) {
