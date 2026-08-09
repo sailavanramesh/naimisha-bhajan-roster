@@ -9,6 +9,60 @@ import { semitoneDelta } from "@/lib/pitch";
 
 export const dynamic = "force-dynamic";
 
+type BhajanLinks = {
+  url: string | null;
+  video: string | null;
+  audio: string | null;
+  tutorial: string | null;
+  sheetMusic: string | null;
+  karaokeTracksForPractice: string | null;
+};
+
+/** The first URL in a cell — a few hold several, whitespace separated. */
+function firstUrl(value: string | null): string | null {
+  if (!value) return null;
+  const match = value.match(/https?:\/\/[^\s,;]+/);
+  return match ? match[0] : null;
+}
+
+function ResourceLinks({ bhajan }: { bhajan: BhajanLinks }) {
+  const links: Array<{ href: string; label: string; note?: string }> = [];
+  const add = (raw: string | null, label: string, note?: string) => {
+    const href = firstUrl(raw);
+    if (href) links.push({ href, label, note });
+  };
+
+  add(bhajan.url, "Sai Rhythms", "the song's page");
+  add(bhajan.video, "Video", "YouTube");
+  add(bhajan.audio, "Audio");
+  add(bhajan.tutorial, "Tutorial");
+  add(bhajan.sheetMusic, "Sheet music");
+  add(bhajan.karaokeTracksForPractice, "Karaoke track");
+
+  if (links.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {links.map((l) => (
+        <a
+          key={l.label}
+          href={l.href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 rounded-full border border-brass/40 bg-brass/[0.10] px-3 py-1.5 text-sm text-on-surface transition-colors hover:bg-brass/20"
+        >
+          {l.label}
+          {l.note ? (
+            <span className="text-[11px] text-on-surface-muted">{l.note}</span>
+          ) : null}
+          <span aria-hidden className="text-[11px] text-on-surface-muted">↗</span>
+          <span className="sr-only">(opens in a new tab)</span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
 function signed(n: number | null): string {
   if (n === null) return "—";
   return n > 0 ? `+${n}` : String(n);
@@ -90,8 +144,23 @@ export default async function BhajanPage({
           <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle>{bhajan.title}</CardTitle>
-              <div className="mt-2 text-sm text-on-surface-muted">
-                {bhajan.raga ? `Raga: ${bhajan.raga}` : "Raga: —"}
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-on-surface-muted">
+                <span>{bhajan.raga ? `Raga: ${bhajan.raga}` : "Raga: —"}</span>
+                {/* Deliberately quiet. The group should be able to tell its own
+                    additions from the Sai Rhythms masterlist without the
+                    distinction being shouted at them. */}
+                {bhajan.origin === "local" ? (
+                  <span
+                    className="rounded-full border border-rule-surface px-2 py-0.5 text-[11px] text-on-surface-muted"
+                    title={
+                      bhajan.originNote
+                        ? `Added by the group — ${bhajan.originNote}`
+                        : "Added by the group, not from the Sai Rhythms masterlist"
+                    }
+                  >
+                    added by the group
+                  </span>
+                ) : null}
               </div>
             </div>
 
@@ -102,6 +171,11 @@ export default async function BhajanPage({
         </CardHeader>
 
         <CardContent className="grid gap-4">
+          {/* Links out. The masterlist carries a Sai Rhythms page for every
+              bhajan, plus media for many — all of it was previously stored and
+              never surfaced. Opened in a new tab so the roster is not lost. */}
+          <ResourceLinks bhajan={bhajan} />
+
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="rounded-[12px] border border-rule-surface bg-panel p-3">
               <div className="text-xs font-semibold text-on-surface-muted">Gents pitch</div>

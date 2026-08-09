@@ -55,6 +55,15 @@ enum RuleStrength {
   soft
 }
 
+/// Where a bhajan came from. Everything imported from data/roster.xlsx is
+/// `masterlist`; anything typed into the app afterwards is `local`, so the
+/// group can tell its own additions from the Sai Rhythms masterlist without
+/// the distinction being shouted at them.
+enum BhajanOrigin {
+  masterlist
+  local
+}
+
 enum Role {
   coordinator
   singer
@@ -109,6 +118,12 @@ model Bhajan {
   goldenVoice              String?
   instrumental             String?
   extra                    String?
+
+  /// See BhajanOrigin. Defaults to masterlist so the 3,607 imported rows are
+  /// unaffected by this column being added.
+  origin BhajanOrigin @default(masterlist)
+  /// Free-text note on a locally added bhajan — where it came from, who asked.
+  originNote String?
 
   /// Generated column maintained by Postgres — see the migration. Not
   /// selectable through the client; search via $queryRaw against the GIN index.

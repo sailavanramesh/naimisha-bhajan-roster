@@ -59,7 +59,15 @@ function href(sp: SP, changes: Record<string, string | undefined>): string {
     else params.set(k, v);
   }
   const qs = params.toString();
-  return qs ? `/build?${qs}` : "/build";
+  // `hash` anchors the result at the slot being acted on. The first click after
+  // a page load happens BEFORE React hydrates, so the Link is still a plain
+  // <a> and the browser does a full navigation — scroll={false} cannot apply
+  // yet, and the page jumped to the top. The anchor makes that first click land
+  // in the right place too; afterwards the client transition takes over and
+  // nothing scrolls at all.
+  const hash = changes.__hash ? `#${changes.__hash}` : "";
+  params.delete("__hash");
+  return (qs ? `/build?${params.toString()}` : "/build") + hash;
 }
 
 export default async function BuildPage({
@@ -394,7 +402,8 @@ export default async function BuildPage({
                   // SPEC §6: one orchestrated moment. Unlocked slots settle into
                   // place in sequence after a re-roll; locked ones stay put and
                   // carry no animation. `prefers-reduced-motion` disables it.
-                  className={`rounded-[12px] border border-rule-surface bg-panel p-3${slot.locked ? "" : " settle"}`}
+                  id={`slot-${slot.position}`}
+                  className={`scroll-mt-4 rounded-[12px] border border-rule-surface bg-panel p-3${slot.locked ? "" : " settle"}`}
                   style={slot.locked ? undefined : { animationDelay: `${(slot.position - 1) * 70}ms` }}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -452,7 +461,14 @@ export default async function BuildPage({
                           {slot.locked ? "Unlock" : "Lock"}
                         </Button>
                       </Link>
-                      <Link href={href(sp, { lock: serialiseLocks(new Map(otherLocks)), seed: nextSeed })} scroll={false}>
+                      <Link
+                        href={href(sp, {
+                          lock: serialiseLocks(new Map(otherLocks)),
+                          seed: nextSeed,
+                          __hash: `slot-${slot.position}`,
+                        })}
+                        scroll={false}
+                      >
                         <Button type="button" className="w-full text-xs">
                           Swap
                         </Button>
@@ -572,23 +588,30 @@ function MultiField({
       ) : null}
       <div className="flex max-h-44 flex-wrap items-start content-start gap-1 overflow-y-auto pr-1">
         {all.map((o) => (
-          <label
-            key={o}
-            className={
-              "cursor-pointer rounded-full border px-2 py-1 text-xs transition-colors " +
-              (chosen.has(o)
-                ? "border-brass/60 bg-brass/15 text-on-surface"
-                : "border-rule-surface hover:bg-panel-hover")
-            }
-          >
+          <label key={o} className="cursor-pointer">
             <input
               type="checkbox"
               name={name}
               value={o}
               defaultChecked={chosen.has(o)}
-              className="sr-only"
+              className="peer sr-only"
             />
-            {o === UNSPECIFIED ? "unspecified" : o}
+            {/*
+              Styled from the LIVE checkbox via peer-checked, not from server
+              state. Driving it from the server meant clicking a chip changed
+              nothing on screen until Apply was pressed, so it read as broken.
+            */}
+            <span
+              className={
+                "inline-block rounded-full border px-2 py-1 text-xs transition-colors " +
+                "border-rule-surface hover:bg-panel-hover " +
+                "peer-checked:border-brass peer-checked:bg-brass/20 peer-checked:font-semibold " +
+                "peer-checked:text-on-surface " +
+                "peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brass"
+              }
+            >
+              {o === UNSPECIFIED ? "unspecified" : o}
+            </span>
           </label>
         ))}
       </div>

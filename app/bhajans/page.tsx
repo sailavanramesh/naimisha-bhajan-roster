@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Button } from "@/components/ui";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle, Input } from "@/components/ui";
@@ -53,6 +54,11 @@ export default async function BhajansPage({
     <div className="grid gap-4">
       <Card>
         <CardHeader>
+          <div className="mb-2 flex justify-end">
+            <Link href="/bhajans/new">
+              <Button type="button" className="h-9 text-xs">Add a bhajan</Button>
+            </Link>
+          </div>
           <CardTitle>Bhajans</CardTitle>
           <div className="mt-2 text-sm text-on-surface-muted">
             Search by title / lyrics / meaning / raga. Filter by deity or language.
