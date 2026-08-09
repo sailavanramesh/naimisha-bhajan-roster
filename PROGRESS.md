@@ -126,8 +126,13 @@ else.
 ## Next
 
 1. Push `v2` once the `gh` scope is refreshed.
-2. **Phase 2 — session builder.** Filters, shape templates, seeded generation,
-   lock/re-roll, save as draft.
+2. **Phase 3 — rostering.** Scoring singers against slots, assignment,
+   availability, overrides that are never silently re-solved away,
+   explanations, instruments.
+
+Phases 4 (redesign) and 5 (festival mode, fairness dashboards, named auth)
+follow. Do not start Phase 4 until 1–3 work. Phase 5's Google sign-in needs a
+Google Cloud OAuth client, which only Sailavan can create.
 
 ---
 
@@ -268,6 +273,54 @@ arrive in Phase 3. See OPEN-QUESTIONS.
 
 ---
 
+## Phase 2 — session builder (complete)
+
+`lib/sessionBuilder.ts` (pure, seeded, 37 tests), `lib/candidateQueries.ts`,
+`lib/defaultTemplates.ts`, `scripts/seedTemplates.ts`, `lib/draftGuard.ts`
+(8 tests), and `app/build`.
+
+**All generator state lives in the URL** — seed, template, length, every
+filter, and which slots are locked. That is what makes a set reproducible and
+shareable, as SPEC §4.B requires, and it keeps the page a server component.
+Re-roll bumps a numeric seed suffix; swap locks everything else and re-rolls.
+
+**Two flaws that only appeared against real data.** Both passed a synthetic
+test pool and were caught by running the page against the live masterlist.
+There is now a regression suite mirroring the real proportions.
+
+1. *Soft rules as weight multipliers do not work.* Only ~7% of the masterlist
+   is Ganesha. Even a ×6 multiplier lost to the 3,000-odd non-matching
+   candidates, and the Ganesha opener almost never appeared. Soft rules now
+   draw from the **matching subset 85% of the time**, which behaves like a
+   habit regardless of pool composition and still never blocks generation.
+2. *Linear novelty erased the group's repertoire.* `1/(1+timesSung)` with
+   ~3,000 never-sung bhajans made every session three songs nobody knew.
+   Now `1/sqrt(1+timesSung)` — never-sung is still preferred, not dominant.
+
+Because of (2) there is also a **Repertoire control**: anything / only sung
+before / only never sung. "Only sung before" gives a 392-bhajan pool and
+produces sets the group can actually sing this week.
+
+**Drafts persist bhajans, not the seed.** The generator weights by days since
+last sung, so once new history is recorded the same seed no longer reproduces
+the same set. Storing "seed + template" would have quietly rotted.
+
+`lib/draftGuard.ts` refuses to overwrite any session that already has a singer
+or a confirmed pitch, and refuses to replace a published session at all. It is
+pure and unit-tested rather than buried in the server action.
+
+### Schema changes in Phase 2
+
+Both additive, both applied to the live database, **and the Phase 0 gate was
+re-run after each and still passes**.
+
+| Migration | Change | Why |
+|---|---|---|
+| `20260809020000_template_single_deity` | `SessionTemplate.singleDeity` | Festival mode, generalised beyond Shivaratri (SPEC §4.G). |
+| `20260809021000_slot_singer_optional` | `SessionSlot.singerId` nullable; FK `CASCADE` → `SET NULL` | A drafted set has bhajans but no singers until rostering. The FK change also means deleting a singer can never silently take 99 rows of `confirmedPitch` with it. |
+
+---
+
 ## OPEN-QUESTIONS
 
 The seven questions from §9 of the spec are **answered** — see `docs/SPEC.md`
@@ -302,6 +355,17 @@ Still genuinely open, none blocking:
    statistic named in SPEC §4.D, so it is logged rather than swapped in.
    Conservative choice taken meanwhile: compute and display the Sa band as
    information, but do not use it to flag anything yet.
+6. **How strong should the Ganesha opener be?** Set to 0.85, a little above the
+   140/188 (≈0.74) the history shows, on the reasoning that choosing the
+   template is itself a request for the shape. One number, easily changed:
+   `SOFT_RULE_PREFERENCE` in `lib/sessionBuilder.ts`.
+7. **Should the builder default to "only bhajans the group has sung"?** It
+   currently defaults to the whole masterlist, which suggests a lot of unknown
+   material. That is arguably right — it is how the group learns — but it may
+   be the wrong default for the common case of planning next week.
+8. **Is a session of entirely new bhajans ever wanted?** Nothing prevents it.
+   If not, the generator should cap how many never-sung bhajans land in one
+   set, which is a rule nobody has asked for yet.
 
 ### Also worth knowing
 
