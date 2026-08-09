@@ -12,10 +12,16 @@ open uncertainties.
 
 **Branch:** `v2` (branched from `main` @ `0788398`), **not yet pushed** — see
 [Blocked](#blocked).
-**Phase:** Phase 0 complete and green. Phase 1 (pitch intelligence) is next.
+**Phase:** **Phases 0–5 are complete and green.** What remains needs Sailavan —
+see [Next](#next).
 
 The database is seeded and live. `npm run build`, `npm run lint` and
-`npm run test:run` are all clean.
+`npm run test:run` are all clean: **167 tests, 1 skipped** (the skip is the
+database-backed gate, which skips only when `DATABASE_URL` is absent).
+
+**The Phase 0 gate has been re-run after every schema change since and still
+reproduces the CLAUDE.md offset table exactly.** If it ever fails, stop and
+report it — do not adjust the expected values.
 
 ### Blocked
 
@@ -125,19 +131,21 @@ else.
 
 ## Next
 
-1. Push `v2` once the `gh` scope is refreshed.
-2. **Phase 4 — redesign.** Apply the design direction in SPEC §6 across
-   everything, plus the print view and public share links. Phases 1–3 work, so
-   this is now unblocked.
-3. **Phase 5 — polish.** Festival mode, fairness dashboards, staleness
-   reports, named auth.
+**Phases 0–5 are built, tested and committed.** What remains is not code I can
+write:
 
-Phase 5's Google sign-in needs a Google Cloud OAuth client, which only
-Sailavan can create.
+1. **Push `v2`.** Still blocked on `gh auth refresh -s workflow`. Sixteen
+   commits are local and nothing has been deployed.
+2. **Named auth (SPEC §4.I Phase 2 / roadmap Phase 5).** Google sign-in via
+   Auth.js behind a coordinator-maintained email allowlist. It needs a Google
+   Cloud OAuth client ID and secret, which only Sailavan can create. The schema
+   is ready for it: `Singer.email` (unique) and `Singer.role` already exist.
+   `EDIT_KEY` + `middleware.ts` stays until then — do not rip it out.
+3. **Instrument rotation (SPEC §4.F).** The eligibility data is seeded
+   (`InstrumentPerson`, 16 rows) and `SessionInstrument` holds 424 real
+   assignments, but nothing scores them yet. It reuses `lib/rosterScoring.ts`
+   almost unchanged.
 
-Instruments were **not** included in Phase 3 despite SPEC §4.F listing them
-there. Singer rostering is the part that blocks Phase 4; instrument rotation
-reuses the same scoring and is smaller. It is carried into Phase 5.
 
 ---
 
@@ -362,6 +370,62 @@ and still be the best available choice.
 
 ---
 
+## Phase 4 — redesign (complete)
+
+The palette, typography and motion from SPEC §6, applied across every page.
+`app/globals.css` holds five tokens and nothing else; `tailwind.config.ts`
+exposes them so components never hand-mix colour.
+
+The ground is the lacquered harmonium case, surfaces are ivory keys, brass
+carries structure. **`--kumkum` appears in exactly one component** — the
+Shruti Ladder and the pitch figures. A separate `--warn` exists precisely so
+warnings are never tempted to borrow it, and the destructive button variant is
+carried by its label and outline rather than colour.
+
+Fonts are loaded with `next/font/google`: Faustina (display), IBM Plex Sans
+(UI), IBM Plex Mono with tabular figures (pitches, counts, deltas).
+
+**Accessibility problems in the inherited build, now fixed:** `*:focus-visible`
+was set to `outline: none` with nothing put back, which left the app unusable
+by keyboard; there was no skip link; controls were 40px. All three addressed,
+and `prefers-reduced-motion` is respected.
+
+One orchestrated moment, as the spec asks: after a re-roll the unlocked slots
+settle into place in sequence and locked ones stay put.
+
+`/roster/[id]/print` is the music-stand sheet — one page, large mono pitches,
+and the deviation **spelled out in words** because it is printed in black and
+white and colour cannot carry it there. It is public and read-only, so its URL
+is the share link.
+
+---
+
+## Phase 5 — polish (fairness and staleness complete; auth blocked)
+
+`lib/fairness.ts` (pure, 13 tests) and `/fairness`.
+
+Load is a **share of the group mean**, not an absolute count, so flagging
+survives a growing group or a changed window. Against the seeded data it reads
+Triveni 16 and Anvita 28 as under-used against Ashwin 133 and Sailavan 118, and
+states how many slots would bring each to the mean — an action, not a
+complaint.
+
+**"Never sung" and "gone stale" are deliberately separate.** A bhajan the group
+never knew is a candidate to learn and belongs on the Build page; only lapsed
+*known* bhajans are staleness. Staleness is measured over all history rather
+than the selected window, so a two-year lapse cannot disappear because the
+window is a year.
+
+The deity counts independently corroborate CLAUDE.md: Ganesha is the
+most-sung deity at 141, against the 140-of-188 opener habit.
+
+Festival mode works through the existing pieces — the `Festival (Shiva)`
+template constrains every slot to one deity, and each singer's festival list is
+already part of their repertoire score. It is not weighted *above* their known
+list; see OPEN-QUESTIONS.
+
+---
+
 ## OPEN-QUESTIONS
 
 The seven questions from §9 of the spec are **answered** — see `docs/SPEC.md`
@@ -407,6 +471,19 @@ Still genuinely open, none blocking:
 8. **Is a session of entirely new bhajans ever wanted?** Nothing prevents it.
    If not, the generator should cap how many never-sung bhajans land in one
    set, which is a rule nobody has asked for yet.
+9. **Should a singer's festival list outrank their known list in festival
+   mode?** SPEC §4.G says festival mode "prefers each singer's own festival
+   list". Today both count the same in `repertoireScore`. Weighting festival
+   entries higher inside a festival session is a small change to
+   `lib/rosterScoring.ts`, but it is a preference nobody has stated.
+10. **Is the ±35% fairness tolerance right?** `LOAD_TOLERANCE` in
+    `lib/fairness.ts`. Over all history it flags 3 singers under and 3 over out
+    of 11, which reads as useful rather than noisy — but it is a guess.
+11. **Should the roster page show the Shruti Ladder inline?** SPEC §4.D asks
+    for it "on the singer page, the bhajan page, and inline in the roster". It
+    is on the first two. The roster grid is dense and a 24-row ladder per slot
+    would overwhelm it; a compact variant is probably wanted, which is a design
+    decision rather than a bug.
 
 ### Also worth knowing
 
