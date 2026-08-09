@@ -10,7 +10,7 @@ import {
   type TemplateSpec,
 } from "@/lib/sessionBuilder";
 import { saveDraftSession } from "./actions";
-import { DeitySymbol } from "@/components/DeitySymbol";
+import { DeitySymbols } from "@/components/DeitySymbol";
 
 export const dynamic = "force-dynamic";
 
@@ -150,6 +150,13 @@ export default async function BuildPage({
   const seedCounter = Number(seed.slice(seed.lastIndexOf("#") + 1)) || 1;
   const nextSeed = `${seedBase}#${seedCounter + 1}`;
 
+  const FILTER_KEYS = ["deity", "notdeity", "lang", "tempo", "level", "lyrics", "audio", "ref", "sung"];
+  const activeFilters = FILTER_KEYS.filter((k) => (one(sp, k) ?? "") !== "" && one(sp, k) !== "any").length;
+  const clearAllHref = href(
+    sp,
+    Object.fromEntries(FILTER_KEYS.map((k) => [k, undefined])) as Record<string, undefined>,
+  );
+
   const chosenIds = result.slots.map((s) => s.candidate.id);
   const [singersByBhajan, allSingers] = await Promise.all([
     getSingersForBhajans(chosenIds),
@@ -240,6 +247,11 @@ export default async function BuildPage({
             <details className="rounded-[12px] border border-rule-surface bg-panel">
               <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold">
                 Filters
+                {activeFilters > 0 ? (
+                  <span className="ml-2 rounded-full border border-brass/50 bg-brass/15 px-2 py-0.5 text-[11px] font-normal">
+                    {activeFilters} active
+                  </span>
+                ) : null}
               </summary>
               <div className="grid gap-4 px-4 pb-4 md:grid-cols-2">
                 <MultiField
@@ -247,6 +259,7 @@ export default async function BuildPage({
                   name="deity"
                   options={facets.deities}
                   selected={list(sp, "deity")}
+                  clearHref={list(sp, "deity").length ? href(sp, { deity: undefined }) : undefined}
                 />
                 <MultiField
                   label="Language"
@@ -258,18 +271,21 @@ export default async function BuildPage({
                     .filter((l) => l.count >= 10 || list(sp, "lang").includes(l.name))
                     .map((l) => l.name)}
                   selected={list(sp, "lang")}
+                  clearHref={list(sp, "lang").length ? href(sp, { lang: undefined }) : undefined}
                 />
                 <MultiField
                   label="Tempo"
                   name="tempo"
                   options={facets.tempos}
                   selected={list(sp, "tempo")}
+                  clearHref={list(sp, "tempo").length ? href(sp, { tempo: undefined }) : undefined}
                 />
                 <MultiField
                   label="Level"
                   name="level"
                   options={facets.levels}
                   selected={list(sp, "level")}
+                  clearHref={list(sp, "level").length ? href(sp, { level: undefined }) : undefined}
                 />
 
                 <fieldset className="grid gap-1.5">
@@ -300,6 +316,21 @@ export default async function BuildPage({
                     />
                   </div>
                 </details>
+
+                <div className="flex flex-wrap items-center gap-3 md:col-span-2">
+                  {/* Unchecking chips one at a time and pressing Apply was the
+                      only way back to an unfiltered pool. This resets them. */}
+                  <Link href={clearAllHref}>
+                    <Button type="button" className="h-9 text-xs">
+                      Clear all filters
+                    </Button>
+                  </Link>
+                  <span className="text-xs text-on-surface-muted">
+                    {activeFilters === 0
+                      ? "No filters applied."
+                      : `${activeFilters} filter${activeFilters === 1 ? "" : "s"} applied — clearing goes back to the whole masterlist.`}
+                  </span>
+                </div>
 
                 <p className="text-xs text-on-surface-muted md:col-span-2">
                   Every facet offers <strong>unspecified</strong>: a third of the masterlist has
@@ -368,11 +399,7 @@ export default async function BuildPage({
                         href={`/bhajans/${slot.candidate.id}`}
                         className="mt-1 flex items-center gap-2 font-medium underline-offset-2 hover:underline"
                       >
-                        <DeitySymbol
-                          deity={slot.candidate.deities[0]}
-                          size={17}
-                          className="shrink-0 text-brass-ink"
-                        />
+                        <DeitySymbols deities={slot.candidate.deities} size={19} />
                         {slot.candidate.title}
                       </Link>
                       <div className="mt-1 text-xs text-on-surface-muted">
@@ -490,12 +517,14 @@ function MultiField({
   options,
   selected,
   allowUnspecified = true,
+  clearHref,
 }: {
   label: string;
   name: string;
   options: string[];
   selected: string[];
   allowUnspecified?: boolean;
+  clearHref?: string;
 }) {
   const chosen = new Set(selected);
   const all = allowUnspecified ? [UNSPECIFIED, ...options] : options;
@@ -508,6 +537,14 @@ function MultiField({
             <span className="ml-1 normal-case tracking-normal text-on-surface-muted">
               · {chosen.size} selected
             </span>
+          ) : null}
+          {clearHref ? (
+            <Link
+              href={clearHref}
+              className="ml-2 normal-case tracking-normal text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+            >
+              clear
+            </Link>
           ) : null}
         </legend>
       ) : null}
