@@ -28,3 +28,6 @@ pnpm-debug.log*
 
 # saved env (never commit)
 .env.save
+
+# typescript incremental build cache
+*.tsbuildinfo
