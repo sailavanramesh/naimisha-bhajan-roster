@@ -16,8 +16,17 @@ export const dynamic = "force-dynamic";
 
 type SP = Record<string, string | string[] | undefined>;
 
-/** The languages the group actually sings in. The rest are behind a toggle. */
+/** Offered as chips without needing the "Other languages" toggle. */
 const PRIMARY_LANGUAGES = ["Sanskrit / Hindi", "English", "Tamil", "Telugu"];
+
+/**
+ * Selected when the coordinator has not chosen any language.
+ *
+ * English is offered but NOT default: the masterlist's English entries are
+ * largely translated and Western-devotional pieces the group does not usually
+ * sing, so including them by default skewed the suggestions. It is one tap away.
+ */
+const DEFAULT_LANGUAGES = ["Sanskrit / Hindi", "Tamil", "Telugu"];
 
 const one = (sp: SP, key: string): string | undefined => {
   const v = sp[key];
@@ -152,7 +161,7 @@ export default async function BuildPage({
       // Default to the languages the group actually sings in. The masterlist
       // has 40, most of them one-offs, and an unfiltered pool kept suggesting
       // Japanese and Zulu. Explicitly clearing the facet still opens it up.
-      languages: sp.lang === undefined ? PRIMARY_LANGUAGES : list(sp, "lang"),
+      languages: sp.lang === undefined ? DEFAULT_LANGUAGES : list(sp, "lang"),
       tempos: list(sp, "tempo"),
       levels: list(sp, "level"),
       requireLyrics: one(sp, "lyrics") === "1",
@@ -308,7 +317,7 @@ export default async function BuildPage({
                     .map((l) => l.name)
                     .filter((l) => !PRIMARY_LANGUAGES.includes(l))}
                   moreLabel="Other languages"
-                  selected={sp.lang === undefined ? PRIMARY_LANGUAGES : list(sp, "lang")}
+                  selected={sp.lang === undefined ? DEFAULT_LANGUAGES : list(sp, "lang")}
                   clearHref={list(sp, "lang").length ? href(sp, { lang: "" }) : undefined}
                 />
                 <MultiField
