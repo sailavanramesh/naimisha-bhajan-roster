@@ -28,7 +28,16 @@ export default async function BhajansPage({
     ];
   }
   if (deity) where.deities = { some: { deity: { name: deity } } };
-  if (lang) where.language = lang;
+  /*
+   * Same condensation as the deities. `language` is a comma-joined string —
+   * "English, Sanskrit / Hindi, Spanish, Telugu" — so an exact match offered
+   * dozens of unusable combinations. Matching on containment means a bhajan in
+   * several languages appears under each of them, which is what you want.
+   *
+   * Unlike deities there is no join table for language, so this is done at
+   * query time. Normalising it properly is logged in PROGRESS.md.
+   */
+  if (lang) where.language = { contains: lang, mode: "insensitive" };
 
   const [items, deities, langs] = await Promise.all([
     prisma.bhajan.findMany({
@@ -50,7 +59,17 @@ export default async function BhajansPage({
   ]);
 
   const deityOptions = deities.map((d) => d.name);
-  const langOptions = langs.map((l) => l.language).filter(Boolean) as string[];
+  // Split the combined values into the distinct languages actually present,
+  // so the dropdown lists languages rather than combinations of them.
+  const langOptions = [
+    ...new Set(
+      langs
+        .map((l) => l.language)
+        .filter((v): v is string => typeof v === "string")
+        .flatMap((v) => v.split(",").map((x) => x.trim()))
+        .filter(Boolean),
+    ),
+  ].sort((a, b) => a.localeCompare(b));
 
   return (
     <div className="grid gap-4">
