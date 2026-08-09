@@ -2,8 +2,14 @@ import { prisma } from "@/lib/db";
 import { RepertoireKind } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 
+import { getRole, can } from "@/lib/auth";
+import { NoAccess } from "@/components/RequireRole";
+
 export const dynamic = "force-dynamic";
 export default async function FestivalPage() {
+  const role = await getRole();
+  if (!can(role, "viewAllPages")) return <NoAccess what="The festival page" role={role} />;
+
   const singers = await prisma.singer.findMany({
     orderBy: { name: "asc" },
     include: {
@@ -41,3 +47,4 @@ export default async function FestivalPage() {
     </div>
   );
 }
+

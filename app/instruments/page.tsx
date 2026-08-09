@@ -1,8 +1,14 @@
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 
+import { getRole, can } from "@/lib/auth";
+import { NoAccess } from "@/components/RequireRole";
+
 export const dynamic = "force-dynamic";
 export default async function InstrumentsPage() {
+  const role = await getRole();
+  if (!can(role, "viewAllPages")) return <NoAccess what="The instruments page" role={role} />;
+
   const sessions = await prisma.session.findMany({
     orderBy: { date: "desc" },
     take: 120,
@@ -45,3 +51,4 @@ export default async function InstrumentsPage() {
     </div>
   );
 }
+

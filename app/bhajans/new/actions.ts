@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { requireEdit } from "@/lib/requireEdit";
+import { requireCapability } from "@/lib/auth";
 import { BhajanOrigin } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -43,7 +43,7 @@ const NewBhajan = z.object({
  * invisible to the session builder.
  */
 export async function createBhajan(formData: FormData): Promise<void> {
-  await requireEdit();
+  await requireCapability("addBhajan");
 
   const raw = Object.fromEntries(
     [

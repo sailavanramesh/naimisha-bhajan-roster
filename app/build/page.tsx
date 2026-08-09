@@ -12,6 +12,9 @@ import {
 import { saveDraftSession } from "./actions";
 import { DeitySymbols } from "@/components/DeitySymbol";
 
+import { getRole, can } from "@/lib/auth";
+import { NoAccess } from "@/components/RequireRole";
+
 export const dynamic = "force-dynamic";
 
 type SP = Record<string, string | string[] | undefined>;
@@ -87,6 +90,9 @@ export default async function BuildPage({
 }: {
   searchParams: Promise<SP>;
 }) {
+  const role = await getRole();
+  if (!can(role, "buildSessions")) return <NoAccess what="Building a session" role={role} />;
+
   const sp = await searchParams;
 
   const date = one(sp, "date") ?? melbourneToday();
@@ -793,3 +799,4 @@ function SingerPicks({
     </div>
   );
 }
+

@@ -34,7 +34,7 @@ function Hamburger({ open }: { open: boolean }) {
   );
 }
 
-export function Nav() {
+export function Nav({ role = "viewer" }: { role?: string }) {
   const pathname = usePathname();
 
   const [expanded, setExpanded] = useState<boolean>(true);
@@ -66,9 +66,17 @@ export function Nav() {
     return parent?.href ?? "/";
   }, [pathname]);
 
+  // Members and viewers see only the reading surface. The list is filtered on
+  // the server, so a hidden page is not merely un-clicked — the page itself
+  // also checks.
+  const visible =
+    role === "editor"
+      ? ITEMS
+      : ITEMS.filter((i) => ["/", "/roster", "/bhajans", "/singers"].includes(i.href));
+
   const NavLinks = ({ collapsed }: { collapsed: boolean }) => (
     <nav className="grid gap-1">
-      {ITEMS.map((item) => {
+      {visible.map((item) => {
         const active = item.href === activeHref;
         return (
           <Link

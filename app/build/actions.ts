@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { requireEdit } from "@/lib/requireEdit";
+import { requireCapability } from "@/lib/auth";
 import { SessionStatus, SessionType } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -43,7 +43,7 @@ export type SaveResult = { ok: true; sessionId: string } | { ok: false; error: s
  * ever deletes a slot with a confirmed pitch.
  */
 export async function saveDraftSession(formData: FormData): Promise<void> {
-  await requireEdit();
+  await requireCapability("buildSessions");
   let rawSlots: unknown = [];
   try {
     rawSlots = JSON.parse(String(formData.get("slots") ?? "[]"));

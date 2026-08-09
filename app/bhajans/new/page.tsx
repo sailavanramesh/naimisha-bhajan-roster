@@ -8,6 +8,9 @@ import { EnableEditForm } from "@/components/EnableEditForm";
 import { TEMPO_ORDER } from "@/lib/sessionBuilder";
 import { createBhajan } from "./actions";
 
+import { getRole, can } from "@/lib/auth";
+import { NoAccess } from "@/components/RequireRole";
+
 export const dynamic = "force-dynamic";
 
 /**
@@ -19,6 +22,9 @@ export const dynamic = "force-dynamic";
  * the entry or invite invented data.
  */
 export default async function NewBhajanPage() {
+  const role = await getRole();
+  if (!can(role, "addBhajan")) return <NoAccess what="Adding a bhajan" role={role} />;
+
   const cookieStore = await cookies();
   const canEdit = cookieStore.get("edit")?.value === "1";
 
@@ -196,3 +202,4 @@ function Field({
     </label>
   );
 }
+

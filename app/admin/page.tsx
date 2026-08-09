@@ -13,6 +13,9 @@ import {
   removeRepertoireEntry,
 } from "./actions";
 
+import { getRole, can } from "@/lib/auth";
+import { NoAccess } from "@/components/RequireRole";
+
 export const dynamic = "force-dynamic";
 
 /**
@@ -27,6 +30,9 @@ export default async function AdminPage({
 }: {
   searchParams: Promise<{ singer?: string }>;
 }) {
+  const role = await getRole();
+  if (!can(role, "manageAllocations")) return <NoAccess what="The admin section" role={role} />;
+
   const sp = await searchParams;
   const cookieStore = await cookies();
   const canEdit = cookieStore.get("edit")?.value === "1";
@@ -250,3 +256,4 @@ export default async function AdminPage({
     </div>
   );
 }
+

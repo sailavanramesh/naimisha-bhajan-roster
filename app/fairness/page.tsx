@@ -3,6 +3,9 @@ import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle, Badge, Figure, SectionTitle } from "@/components/ui";
 import { summariseLoad, staleKnownBhajans, countBy, LOAD_TOLERANCE } from "@/lib/fairness";
 
+import { getRole, can } from "@/lib/auth";
+import { NoAccess } from "@/components/RequireRole";
+
 export const dynamic = "force-dynamic";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -12,6 +15,9 @@ export default async function FairnessPage({
 }: {
   searchParams: Promise<{ days?: string }>;
 }) {
+  const role = await getRole();
+  if (!can(role, "viewAllPages")) return <NoAccess what="The fairness dashboard" role={role} />;
+
   const sp = await searchParams;
   const windowDays = Number(sp.days ?? 365) || 365;
   const since = new Date(Date.now() - windowDays * DAY);
@@ -208,3 +214,4 @@ function CountList({ rows }: { rows: Array<{ name: string; count: number }> }) {
     </ul>
   );
 }
+

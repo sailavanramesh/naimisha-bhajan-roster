@@ -68,7 +68,13 @@ export default async function BhajansPage({
         </CardHeader>
 
         <CardContent>
-          <form className="grid gap-2 md:grid-cols-3 mb-4">
+          {/*
+            method="get" and a real submit button. Without them nothing ever
+            navigated: a form with more than one field does not implicitly
+            submit on Enter, and the selects had no handler, so typing "shiva"
+            and pressing Enter did nothing at all.
+          */}
+          <form method="get" action="/bhajans" className="mb-4 grid gap-2 md:grid-cols-[1fr_auto_auto_auto]">
             <Input name="q" defaultValue={q} placeholder="Search…" />
 
             <select
@@ -96,10 +102,20 @@ export default async function BhajansPage({
                 </option>
               ))}
             </select>
+            <div className="flex gap-2">
+              <Button type="submit" variant="primary">Search</Button>
+              {q || deity || lang ? (
+                <Link href="/bhajans">
+                  <Button type="button">Clear</Button>
+                </Link>
+              ) : null}
+            </div>
           </form>
 
-          <div className="text-sm text-on-surface-muted mb-2">
-            Showing {items.length} results
+          <div className="mb-2 text-sm text-on-surface-muted">
+            Showing {items.length} result{items.length === 1 ? "" : "s"}
+            {items.length === 500 ? " (capped at 500 — narrow the search)" : ""}
+            {q || deity || lang ? " for the current filters" : ""}
           </div>
 
           <div className="grid gap-2">

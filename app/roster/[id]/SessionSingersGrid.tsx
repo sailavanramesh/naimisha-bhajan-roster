@@ -49,6 +49,8 @@ type BhSearchState = { q: string; items: { id: string; title: string }[]; open: 
 
 export function SessionSingersGrid(props: {
   canEdit: boolean;
+  /** May move singers between slots. Members may not. */
+  canAssign: boolean;
   sessionId: string;
   singers: SingerLite[];
   initialRows: Array<{
@@ -354,7 +356,7 @@ export function SessionSingersGrid(props: {
 
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-semibold">Roster entries</div>
-        {props.canEdit ? (
+        {props.canAssign ? (
           <div className="flex items-center gap-2">
             <Button onClick={addRow}>Add row</Button>
             <Button onClick={saveAll} variant="primary">
@@ -390,7 +392,7 @@ export function SessionSingersGrid(props: {
                 <tr key={r._localId} className="border-b align-top">
                   {/* Singer */}
                   <td data-label="Singer" data-key="1" className="sticky left-0 z-30 whitespace-nowrap bg-surface px-2 py-1.5 border-r border-rule-surface shadow-sm">
-                    {props.canEdit ? (
+                    {props.canAssign ? (
                       <select
                         value={r.singerId || ""}
                         onChange={(e) => onSingerChange(r._localId, e.target.value)}
@@ -512,7 +514,7 @@ export function SessionSingersGrid(props: {
                   </td>
 
                   {/* Delete */}
-                  {props.canEdit ? (
+                  {props.canAssign ? (
                     <td data-label="" className="px-2 py-1.5 text-right">
                       <Button onClick={() => removeRow(r._localId)} className="border-red-300 text-red-700 hover:bg-red-50">
                         Delete

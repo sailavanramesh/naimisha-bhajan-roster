@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { requireEdit } from "@/lib/requireEdit";
+import { requireCapability, can } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 
@@ -37,7 +37,7 @@ export type SingerRowInput = {
  */
 
 export async function updateSessionNotes(sessionId: string, notes: string) {
-  await requireEdit();
+  await requireCapability("editSessionNotes");
   await prisma.session.update({
     where: { id: sessionId },
     data: { notes },
@@ -46,7 +46,7 @@ export async function updateSessionNotes(sessionId: string, notes: string) {
 }
 
 export async function addInstrumentRow(sessionId: string, instrument: string, person: string) {
-  await requireEdit();
+  await requireCapability("assignSingers");
   const inst = instrument.trim();
   const p = person.trim();
 
@@ -64,7 +64,7 @@ export async function addInstrumentRow(sessionId: string, instrument: string, pe
 }
 
 export async function deleteInstrumentRow(id: string) {
-  await requireEdit();
+  await requireCapability("assignSingers");
   const row = await prisma.sessionInstrument.findUnique({ where: { id } });
   if (!row) return;
 
@@ -73,7 +73,7 @@ export async function deleteInstrumentRow(id: string) {
 }
 
 export async function deleteSingerRow(id: string) {
-  await requireEdit();
+  await requireCapability("assignSingers");
   const row = await prisma.sessionSlot.findUnique({ where: { id } });
   if (!row) return;
 
@@ -81,8 +81,47 @@ export async function deleteSingerRow(id: string) {
   revalidatePath(`/roster/${row.sessionId}`);
 }
 
+/**
+ * A member may correct WHICH BHAJAN is in a slot, and nothing else.
+ *
+ * Enforced here rather than by hiding the singer dropdown: a hidden control is
+ * not a permission. A member's payload is reduced to the bhajan fields and the
+ * existing singer is preserved, so a crafted POST cannot reassign anybody.
+ */
 export async function upsertSessionSingerRows(sessionId: string, rows: SingerRowInput[]) {
-  await requireEdit();
+  const role = await requireCapability("editSlotBhajan");
+
+  if (!can(role, "assignSingers")) {
+    const existing = await prisma.sessionSlot.findMany({
+      where: { sessionId },
+      select: { id: true, singerId: true, confirmedPitch: true, alternativeTablaPitch: true, position: true },
+    });
+    const byId = new Map(existing.map((e) => [e.id, e]));
+
+    // Anything a member is not allowed to change is taken from the database,
+    // not from what they sent.
+    rows = rows
+      .filter((r) => r.id && byId.has(r.id))
+      .map((r) => {
+        const current = byId.get(r.id as string)!;
+        return {
+          ...r,
+          singerId: current.singerId ?? "",
+          confirmedPitch: current.confirmedPitch,
+          alternativeTablaPitch: current.alternativeTablaPitch,
+        };
+      });
+
+    if (rows.length !== existing.length) {
+      throw new Error(
+        "Members can change which bhajan is in a slot, but not add, remove or " +
+          "reorder slots. Ask an editor for those.",
+      );
+    }
+    // Preserve the existing order: a member reordering would move singers.
+    rows.sort((a, b) => (byId.get(a.id as string)!.position) - (byId.get(b.id as string)!.position));
+  }
+
   await prisma.$transaction(async (tx) => {
     const existingIds = rows
       .filter((r) => r.id && !String(r.id).startsWith("new_"))

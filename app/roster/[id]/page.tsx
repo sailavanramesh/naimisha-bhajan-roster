@@ -7,6 +7,7 @@ import { getPitchSuggestions } from "@/lib/pitchSuggestions";
 import { computeRecommendedPitch } from "@/lib/computeRecommendedPitch";
 import { deleteInstrumentRow, updateSessionNotes } from "./actions";
 import { EnableEditForm } from "@/components/EnableEditForm";
+import { getRole, can } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export default async function RosterSessionPage({
@@ -17,7 +18,10 @@ export default async function RosterSessionPage({
   const { id: sessionId } = await params;
 
   const cookieStore = await cookies();
-  const canEdit = cookieStore.get("edit")?.value === "1";
+  void cookieStore;
+  const role = await getRole();
+  const canEdit = can(role, "editSlotBhajan");
+  const canAssign = can(role, "assignSingers");
 
   const session = await prisma.session.findUnique({
     where: { id: sessionId },
@@ -37,7 +41,7 @@ export default async function RosterSessionPage({
 
   const sid = session.id;
 
-  const allSingers = canEdit
+  const allSingers = canAssign
     ? await prisma.singer.findMany({ orderBy: { name: "asc" } })
     : [];
 
@@ -135,6 +139,7 @@ export default async function RosterSessionPage({
             canEdit={canEdit}
             sessionId={sessionId}
             singers={allSingers}
+            canAssign={canAssign}
             initialRows={initialRows}
             suggestions={suggestions}
           />

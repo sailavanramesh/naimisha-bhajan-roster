@@ -2,6 +2,7 @@ import "./globals.css";
 import { Faustina, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { Nav } from "@/components/Nav";
 import { YantraFull } from "@/components/Yantra";
+import { getRole, ROLE_LABELS } from "@/lib/auth";
 
 /**
  * Three roles, deliberately paired (docs/SPEC.md §6).
@@ -41,7 +42,8 @@ export const viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const role = await getRole();
   return (
     <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
       <body className="min-h-screen font-sans antialiased">
@@ -54,7 +56,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </a>
 
         <div className="flex min-h-screen">
-          <Nav />
+          <Nav role={role} />
 
           <div className="flex-1">
             <div className="mx-auto max-w-6xl px-3 pb-16 pt-14 sm:px-6 sm:pt-8">
@@ -67,6 +69,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     </h1>
                     <p className="mt-1 text-sm text-on-ground-muted">
                       Suggest a set, roster it fairly, remember the pitch.
+                      <span className="ml-2 rounded-full border border-rule px-2 py-0.5 text-[11px]">
+                        {ROLE_LABELS[role]}
+                      </span>
                     </p>
                   </div>
                 </div>

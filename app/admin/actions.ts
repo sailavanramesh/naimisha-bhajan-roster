@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { requireEdit } from "@/lib/requireEdit";
+import { requireCapability } from "@/lib/auth";
 import { RepertoireKind } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -28,7 +28,7 @@ const EligibilityUpdate = z.object({
  * unrelated rendering bug silently wipe every list at once.
  */
 export async function setEligibilityForInstrument(formData: FormData): Promise<void> {
-  await requireEdit();
+  await requireCapability("manageAllocations");
   const parsed = EligibilityUpdate.safeParse({
     instrument: String(formData.get("instrument") ?? ""),
     pairs: formData.getAll("person").map(String),
@@ -68,7 +68,7 @@ const RepertoireAdd = z.object({
 });
 
 export async function addRepertoireEntry(formData: FormData): Promise<void> {
-  await requireEdit();
+  await requireCapability("manageAllocations");
   const parsed = RepertoireAdd.safeParse({
     singerId: String(formData.get("singerId") ?? ""),
     title: String(formData.get("title") ?? "").trim(),
@@ -94,7 +94,7 @@ export async function addRepertoireEntry(formData: FormData): Promise<void> {
 }
 
 export async function removeRepertoireEntry(formData: FormData): Promise<void> {
-  await requireEdit();
+  await requireCapability("manageAllocations");
   const id = String(formData.get("id") ?? "");
   if (!id) throw new Error("Could not remove: no entry given.");
   await prisma.singerRepertoire.delete({ where: { id } });

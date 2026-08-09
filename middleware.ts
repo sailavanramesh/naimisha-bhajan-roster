@@ -1,56 +1,80 @@
 import { NextRequest, NextResponse } from "next/server";
 
+/**
+ * Access links.
+ *
+ * `?k=<key>` identifies which access level the visitor has, sets a `role`
+ * cookie, and redirects to the same URL without the key so it does not sit in
+ * the address bar or get shared by accident.
+ *
+ * This is the interim mechanism until Google sign-in lands (SPEC §9.5), at
+ * which point the role comes from `Singer.role` instead and only `lib/auth.ts`
+ * `getRole` changes. The capability checks are already independent of it.
+ *
+ * The middleware only SETS the cookie. It is not authorisation — every
+ * mutating Server Action calls `requireCapability` itself.
+ */
+
 function stripParam(url: URL, param: string) {
   url.searchParams.delete(param);
-  // Clean trailing "?" automatically handled by URL
   return url;
 }
+
+/** key env var -> role. Order matters only for readability. */
+const KEY_ROLES: Array<[string, string]> = [
+  ["EDIT_KEY", "editor"], // the original link, kept working
+  ["EDITOR_KEY", "editor"],
+  ["MEMBER_KEY", "member"],
+];
 
 export function middleware(req: NextRequest) {
   const url = req.nextUrl;
 
-  // Optional: allow logout via ?logout=1
   if (url.searchParams.get("logout") === "1") {
     const nextUrl = stripParam(new URL(url.toString()), "logout");
     const res = NextResponse.redirect(nextUrl);
     res.cookies.set("edit", "", { path: "/", maxAge: 0 });
+    res.cookies.set("role", "", { path: "/", maxAge: 0 });
     return res;
   }
 
   const k = url.searchParams.get("k");
-  const editKey = process.env.EDIT_KEY;
+  if (!k) return NextResponse.next();
 
-  // If correct key provided, set cookie then redirect to same URL WITHOUT the key
-  if (k && editKey && k === editKey) {
-    const nextUrl = stripParam(new URL(url.toString()), "k");
-    const res = NextResponse.redirect(nextUrl);
+  const match = KEY_ROLES.find(([envVar]) => {
+    const expected = process.env[envVar];
+    return expected && expected.length > 0 && k === expected;
+  });
+  if (!match) return NextResponse.next();
 
-    /*
-     * `secure` only when the request actually is HTTPS.
-     *
-     * Hard-coding it broke testing on a phone: over plain http:// on a LAN
-     * address the browser silently discards a Secure cookie, so edit mode
-     * never switched on and there was nothing to say why. Production is HTTPS,
-     * so the flag is still set there.
-     */
-    const isHttps =
-      url.protocol === "https:" || req.headers.get("x-forwarded-proto") === "https";
+  const [, role] = match;
+  const nextUrl = stripParam(new URL(url.toString()), "k");
+  const res = NextResponse.redirect(nextUrl);
 
-    res.cookies.set("edit", "1", {
-      path: "/",
-      httpOnly: false, // app reads it client-side sometimes; safe enough for this use
-      sameSite: "lax",
-      secure: isHttps,
-      maxAge: 60 * 60 * 24 * 365, // 1 year
-    });
+  /*
+   * `secure` only when the request actually is HTTPS. Hard-coding it meant a
+   * phone on http:// over the LAN silently discarded the cookie, so access
+   * never switched on and nothing said why.
+   */
+  const isHttps =
+    url.protocol === "https:" || req.headers.get("x-forwarded-proto") === "https";
 
-    return res;
-  }
+  const options = {
+    path: "/",
+    httpOnly: false,
+    sameSite: "lax" as const,
+    secure: isHttps,
+    maxAge: 60 * 60 * 24 * 365,
+  };
 
-  return NextResponse.next();
+  res.cookies.set("role", role, options);
+  // Kept so anything still reading `edit` keeps working during the transition.
+  if (role === "editor") res.cookies.set("edit", "1", options);
+  else res.cookies.set("edit", "", { ...options, maxAge: 0 });
+
+  return res;
 }
 
-// Run on all routes (excluding Next internals)
 export const config = {
   matcher: ["/((?!_next|.*\\..*).*)"],
 };
