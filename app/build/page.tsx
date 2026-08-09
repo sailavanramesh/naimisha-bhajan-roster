@@ -320,7 +320,7 @@ export default async function BuildPage({
                 <div className="flex flex-wrap items-center gap-3 md:col-span-2">
                   {/* Unchecking chips one at a time and pressing Apply was the
                       only way back to an unfiltered pool. This resets them. */}
-                  <Link href={clearAllHref}>
+                  <Link href={clearAllHref} scroll={false}>
                     <Button type="button" className="h-9 text-xs">
                       Clear all filters
                     </Button>
@@ -344,11 +344,11 @@ export default async function BuildPage({
               <Button type="submit" variant="primary">
                 Apply
               </Button>
-              <Link href={href(sp, { seed: nextSeed })}>
+              <Link href={href(sp, { seed: nextSeed })} scroll={false}>
                 <Button type="button">Re-roll unlocked</Button>
               </Link>
               {locked.length > 0 ? (
-                <Link href={href(sp, { lock: undefined })}>
+                <Link href={href(sp, { lock: undefined })} scroll={false}>
                   <Button type="button">Unlock all</Button>
                 </Link>
               ) : null}
@@ -421,6 +421,7 @@ export default async function BuildPage({
 
                     <div className="flex shrink-0 flex-col gap-1">
                       <Link
+                        scroll={false}
                         href={href(sp, {
                           lock: slot.locked
                             ? locked.filter((id) => id !== slot.candidate.id).join(",")
@@ -431,7 +432,7 @@ export default async function BuildPage({
                           {slot.locked ? "Unlock" : "Lock"}
                         </Button>
                       </Link>
-                      <Link href={href(sp, { lock: otherLocks.join(","), seed: nextSeed })}>
+                      <Link href={href(sp, { lock: otherLocks.join(","), seed: nextSeed })} scroll={false}>
                         <Button type="button" className="w-full text-xs">
                           Swap
                         </Button>
@@ -541,6 +542,7 @@ function MultiField({
           {clearHref ? (
             <Link
               href={clearHref}
+              scroll={false}
               className="ml-2 normal-case tracking-normal text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
             >
               clear
@@ -621,7 +623,14 @@ function SingerPicks({
                   : "border-rule-surface hover:bg-panel-hover")
               }
               title={
-                c.basis === "sung"
+                c.lastSung
+                  ? `Last sang this on ${c.lastSung.toLocaleDateString("en-AU", {
+                      day: "numeric",
+                      month: "long",
+                      year: "numeric",
+                      timeZone: "UTC",
+                    })}`
+                  : c.basis === "sung"
                   ? "Has sung this before"
                   : c.basis === "festival"
                     ? "On their festival list"
@@ -631,10 +640,16 @@ function SingerPicks({
               {picked === c.id ? "✓ " : ""}
               {c.name}
               <span className="text-[10px] text-on-surface-muted">
+                {/*
+                  Full year, not "25". A two-digit year read as a day of the
+                  month — "June 25" looked like the 25th of June, and on one
+                  row it even coincided with the real day. Exact date is in the
+                  tooltip.
+                */}
                 {c.lastSung
                   ? c.lastSung.toLocaleDateString("en-AU", {
                       month: "short",
-                      year: "2-digit",
+                      year: "numeric",
                       timeZone: "UTC",
                     })
                   : c.basis === "festival"
