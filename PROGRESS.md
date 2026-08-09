@@ -126,13 +126,18 @@ else.
 ## Next
 
 1. Push `v2` once the `gh` scope is refreshed.
-2. **Phase 3 — rostering.** Scoring singers against slots, assignment,
-   availability, overrides that are never silently re-solved away,
-   explanations, instruments.
+2. **Phase 4 — redesign.** Apply the design direction in SPEC §6 across
+   everything, plus the print view and public share links. Phases 1–3 work, so
+   this is now unblocked.
+3. **Phase 5 — polish.** Festival mode, fairness dashboards, staleness
+   reports, named auth.
 
-Phases 4 (redesign) and 5 (festival mode, fairness dashboards, named auth)
-follow. Do not start Phase 4 until 1–3 work. Phase 5's Google sign-in needs a
-Google Cloud OAuth client, which only Sailavan can create.
+Phase 5's Google sign-in needs a Google Cloud OAuth client, which only
+Sailavan can create.
+
+Instruments were **not** included in Phase 3 despite SPEC §4.F listing them
+there. Singer rostering is the part that blocks Phase 4; instrument rotation
+reuses the same scoring and is smaller. It is carried into Phase 5.
 
 ---
 
@@ -318,6 +323,42 @@ re-run after each and still passes**.
 |---|---|---|
 | `20260809020000_template_single_deity` | `SessionTemplate.singleDeity` | Festival mode, generalised beyond Shivaratri (SPEC §4.G). |
 | `20260809021000_slot_singer_optional` | `SessionSlot.singerId` nullable; FK `CASCADE` → `SET NULL` | A drafted set has bhajans but no singers until rostering. The FK change also means deleting a singer can never silently take 99 rows of `confirmedPitch` with it. |
+
+---
+
+## Phase 3 — rostering (complete, except instruments)
+
+`lib/rosterScoring.ts` (pure, 34 tests), `lib/rosterQueries.ts`, and
+`app/roster/[id]/assign`.
+
+Every score component is normalised to **[0, 1] before weighting**, so the
+weights are directly comparable and a coordinator tuning them can predict what
+will happen. Greedy assignment by best score, then a local-swap improvement
+pass — ample at eleven singers and three slots.
+
+Default weights put `loadBalance` (1.5) and `overdue` (1.2) above `repertoire`
+(1.0) deliberately: the problem the spec names is that the same few people sing
+every week. They are editable in the UI.
+
+**Shaped by the data.** A singer takes two slots in the same session in 50 of
+the 709 historical rows, so "one slot each" is a penalty, not a rule. Session
+sizes confirm 3 as the mode (104 of 188), then 4 (59).
+
+**Rules that hold no matter what:**
+- Availability is *respected*, not scored — unavailable singers are excluded.
+- A **pinned assignment is never re-solved away**, including when that singer
+  is unavailable. It warns instead. Silently dropping a human's choice is
+  precisely what SPEC §4.C forbids.
+- Applying a roster **only ever writes `singerId`**. It cannot reach
+  `confirmedPitch`, `historicalRecommendedPitch` or the bhajan.
+- Missing data scores **neutral (0.5), not zero**. No reference pitch or no
+  comfort centre is absence of evidence, not evidence of a bad fit.
+- Only history *before* the session being planned counts toward overdue and
+  load balance, so re-rostering an old session cannot see its own future.
+
+The gender-clump penalty is reported honestly when it is outweighed rather
+than hidden — a slot can read "would make three of the same voice in a row"
+and still be the best available choice.
 
 ---
 
