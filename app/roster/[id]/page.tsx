@@ -103,6 +103,13 @@ export default async function RosterSessionPage({
               <Link href={backToRosterHref} className="underline underline-offset-2">
                 Back to roster
               </Link>
+
+              <Link
+                href={`/roster/${sessionId}/assign`}
+                className="underline underline-offset-2"
+              >
+                Assign singers
+              </Link>
             </div>
 
             {!canEdit ? <EnableEditForm returnTo={`/roster/${sessionId}`} compact /> : null}
