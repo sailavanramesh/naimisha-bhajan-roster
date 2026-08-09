@@ -1,0 +1,252 @@
+import Link from "next/link";
+import { cookies } from "next/headers";
+import { prisma } from "@/lib/db";
+import { RepertoireKind } from "@prisma/client";
+import {
+  Card, CardContent, CardHeader, CardTitle, Button, Badge, SectionTitle, Input,
+} from "@/components/ui";
+import { EnableEditForm } from "@/components/EnableEditForm";
+import { INSTRUMENTS } from "@/lib/instrumentScoring";
+import {
+  setEligibilityForInstrument,
+  addRepertoireEntry,
+  removeRepertoireEntry,
+} from "./actions";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * Admin — the allocation data behind the roster.
+ *
+ * Everything the scoring reads that a human should be able to correct lives
+ * here: who may play which instrument, and who knows which bhajans. Both are
+ * data, not code, so the group can tinker without a deploy.
+ */
+export default async function AdminPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ singer?: string }>;
+}) {
+  const sp = await searchParams;
+  const cookieStore = await cookies();
+  const canEdit = cookieStore.get("edit")?.value === "1";
+
+  const [singers, eligibility, instrumentPeople] = await Promise.all([
+    prisma.singer.findMany({ orderBy: { name: "asc" } }),
+    prisma.instrumentPerson.findMany({ orderBy: [{ instrument: "asc" }, { person: "asc" }] }),
+    prisma.sessionInstrument.findMany({ select: { person: true }, distinct: ["person"] }),
+  ]);
+
+  // Everyone who could plausibly appear: singers, anyone already listed, and
+  // anyone with real history. History values are comma-separated for the
+  // shared roles, so they are split here too.
+  const people = new Set<string>(singers.map((s) => s.name));
+  for (const e of eligibility) people.add(e.person);
+  for (const p of instrumentPeople) {
+    for (const name of (p.person ?? "").split(",")) {
+      const n = name.trim();
+      if (n) people.add(n);
+    }
+  }
+  const roster = [...people].sort((a, b) => a.localeCompare(b));
+
+  const listedBy = new Map<string, Set<string>>();
+  for (const e of eligibility) {
+    if (!listedBy.has(e.instrument)) listedBy.set(e.instrument, new Set());
+    listedBy.get(e.instrument)!.add(e.person);
+  }
+
+  const selectedSingerId = sp.singer ?? singers[0]?.id;
+  const repertoire = selectedSingerId
+    ? await prisma.singerRepertoire.findMany({
+        where: { singerId: selectedSingerId },
+        orderBy: [{ kind: "asc" }, { order: "asc" }, { title: "asc" }],
+      })
+    : [];
+  const selectedSinger = singers.find((s) => s.id === selectedSingerId) ?? null;
+
+  return (
+    <div className="grid gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Admin</CardTitle>
+          <div className="mt-1 text-sm text-on-surface-muted">
+            The allocation data the roster scores against. Editing here changes suggestions
+            immediately — it never touches a session&rsquo;s history or anybody&rsquo;s
+            confirmed pitch.
+          </div>
+          {!canEdit ? (
+            <div className="mt-3">
+              <p className="mb-2 text-sm">You are in read-only mode.</p>
+              <EnableEditForm returnTo="/admin" compact />
+            </div>
+          ) : null}
+        </CardHeader>
+      </Card>
+
+      {/* ---- Instrument eligibility ---- */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Instrument eligibility</CardTitle>
+          <div className="mt-1 text-sm text-on-surface-muted">
+            Who may play what. Being listed makes somebody <em>preferred</em>, never
+            required — anyone can still be assigned, because the imported list named 16
+            people while 33 have actually played. Each instrument saves on its own.
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          {INSTRUMENTS.map((instrument) => {
+            const listed = listedBy.get(instrument) ?? new Set<string>();
+            return (
+              <form
+                key={instrument}
+                action={setEligibilityForInstrument}
+                className="rounded-key border border-rule-surface bg-white/60 p-3"
+              >
+                <input type="hidden" name="instrument" value={instrument} />
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <SectionTitle>{instrument}</SectionTitle>
+                  <div className="flex items-center gap-2">
+                    <Badge tone={listed.size ? "brass" : "warn"}>
+                      {listed.size ? `${listed.size} listed` : "nobody listed"}
+                    </Badge>
+                    {canEdit ? (
+                      <Button type="submit" className="h-9 text-xs">
+                        Save {instrument}
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1">
+                  {roster.map((person) => (
+                    <label key={person} className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        name="person"
+                        value={person}
+                        defaultChecked={listed.has(person)}
+                        disabled={!canEdit}
+                        className="h-4 w-4"
+                      />
+                      {person}
+                    </label>
+                  ))}
+                </div>
+              </form>
+            );
+          })}
+        </CardContent>
+      </Card>
+
+      {/* ---- Singer repertoire ---- */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Singer repertoire</CardTitle>
+          <div className="mt-1 text-sm text-on-surface-muted">
+            What each singer knows, and their festival list. Like eligibility this scores
+            rather than filters: a singer may still be given a bhajan they have never sung
+            (§9.3), which is exactly where predicted pitch earns its keep.
+          </div>
+          <div className="mt-3 flex flex-wrap gap-1">
+            {singers.map((s) => (
+              <Link key={s.id} href={`/admin?singer=${s.id}`}>
+                <span
+                  className={
+                    s.id === selectedSingerId
+                      ? "rounded-full border border-brass/60 bg-brass/15 px-3 py-1 text-sm"
+                      : "rounded-full border border-rule-surface px-3 py-1 text-sm hover:bg-black/[0.04]"
+                  }
+                >
+                  {s.name}
+                </span>
+              </Link>
+            ))}
+          </div>
+        </CardHeader>
+
+        <CardContent className="grid gap-3">
+          {!selectedSinger ? (
+            <p className="text-sm text-on-surface-muted">No singers yet.</p>
+          ) : (
+            <>
+              {canEdit ? (
+                <form
+                  action={addRepertoireEntry}
+                  className="grid gap-2 rounded-key border border-rule-surface bg-white/60 p-3 sm:grid-cols-[1fr_auto_auto]"
+                >
+                  <input type="hidden" name="singerId" value={selectedSinger.id} />
+                  <Input
+                    name="title"
+                    placeholder="Bhajan title, exactly as in the masterlist"
+                    aria-label="Bhajan title"
+                  />
+                  <select
+                    name="kind"
+                    defaultValue={RepertoireKind.known}
+                    className="h-11 rounded-key border border-rule-surface bg-white/70 px-3 text-sm"
+                    aria-label="List"
+                  >
+                    <option value={RepertoireKind.known}>Knows</option>
+                    <option value={RepertoireKind.festival}>Festival list</option>
+                  </select>
+                  <Button type="submit">Add</Button>
+                  <p className="text-xs text-on-surface-muted sm:col-span-3">
+                    A title that does not match the masterlist is still saved, as free text —
+                    ten roster titles do not resolve, and dropping them would lose real data.
+                    It simply will not link through to a bhajan page.
+                  </p>
+                </form>
+              ) : null}
+
+              {repertoire.length === 0 ? (
+                <p className="text-sm text-on-surface-muted">
+                  Nothing recorded for {selectedSinger.name} yet.
+                </p>
+              ) : (
+                <ul className="grid gap-1">
+                  {repertoire.map((r) => (
+                    <li
+                      key={r.id}
+                      className="flex items-center justify-between gap-3 border-b border-rule-surface py-1 last:border-b-0"
+                    >
+                      <span className="min-w-0 text-sm">
+                        {r.bhajanId ? (
+                          <Link
+                            href={`/bhajans/${r.bhajanId}`}
+                            className="underline-offset-2 hover:underline"
+                          >
+                            {r.title}
+                          </Link>
+                        ) : (
+                          <span title="Not matched to the masterlist">{r.title}</span>
+                        )}
+                        {!r.bhajanId ? (
+                          <Badge tone="warn" className="ml-2">
+                            unmatched
+                          </Badge>
+                        ) : null}
+                      </span>
+
+                      <span className="flex shrink-0 items-center gap-2">
+                        <Badge>{r.kind === RepertoireKind.festival ? "festival" : "knows"}</Badge>
+                        {canEdit ? (
+                          <form action={removeRepertoireEntry}>
+                            <input type="hidden" name="id" value={r.id} />
+                            <Button type="submit" variant="danger" className="h-9 text-xs">
+                              Remove
+                            </Button>
+                          </form>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

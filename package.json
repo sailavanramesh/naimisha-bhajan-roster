@@ -14,7 +14,8 @@
     "db:seed": "tsx scripts/seedFromXlsx.ts",
     "test": "vitest",
     "test:run": "vitest run",
-    "db:templates": "tsx scripts/seedTemplates.ts"
+    "db:templates": "tsx scripts/seedTemplates.ts",
+    "db:eligibility": "tsx scripts/seedEligibility.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",

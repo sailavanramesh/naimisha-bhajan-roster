@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
+import { requireEdit } from "@/lib/requireEdit";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 
@@ -24,6 +25,7 @@ export type SingerRowInput = {
 };
 
 export async function updateSessionNotes(sessionId: string, notes: string) {
+  await requireEdit();
   await prisma.session.update({
     where: { id: sessionId },
     data: { notes },
@@ -32,6 +34,7 @@ export async function updateSessionNotes(sessionId: string, notes: string) {
 }
 
 export async function addInstrumentRow(sessionId: string, instrument: string, person: string) {
+  await requireEdit();
   const inst = instrument.trim();
   const p = person.trim();
 
@@ -49,6 +52,7 @@ export async function addInstrumentRow(sessionId: string, instrument: string, pe
 }
 
 export async function deleteInstrumentRow(id: string) {
+  await requireEdit();
   const row = await prisma.sessionInstrument.findUnique({ where: { id } });
   if (!row) return;
 
@@ -57,6 +61,7 @@ export async function deleteInstrumentRow(id: string) {
 }
 
 export async function deleteSingerRow(id: string) {
+  await requireEdit();
   const row = await prisma.sessionSlot.findUnique({ where: { id } });
   if (!row) return;
 
@@ -65,6 +70,7 @@ export async function deleteSingerRow(id: string) {
 }
 
 export async function upsertSessionSingerRows(sessionId: string, rows: SingerRowInput[]) {
+  await requireEdit();
   await prisma.$transaction(async (tx) => {
     const existingIds = rows
       .filter((r) => r.id && !String(r.id).startsWith("new_"))

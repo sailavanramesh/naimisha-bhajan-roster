@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
+import { requireEdit } from "@/lib/requireEdit";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -19,6 +20,7 @@ const Apply = z.object({
  * be able to destroy what somebody actually sang.
  */
 export async function applyAssignments(formData: FormData): Promise<void> {
+  await requireEdit();
   let raw: unknown = [];
   try {
     raw = JSON.parse(String(formData.get("assignments") ?? "[]"));
@@ -56,6 +58,7 @@ const SetAvailability = z.object({
 });
 
 export async function setAvailability(formData: FormData): Promise<void> {
+  await requireEdit();
   const parsed = SetAvailability.safeParse({
     singerId: String(formData.get("singerId") ?? ""),
     date: String(formData.get("date") ?? ""),

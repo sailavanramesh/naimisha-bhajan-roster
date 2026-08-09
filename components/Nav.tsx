@@ -22,6 +22,7 @@ const ITEMS: NavItem[] = [
   { href: "/instruments", label: "Instruments", short: "I" },
   { href: "/festival", label: "Festival", short: "F" },
   { href: "/fairness", label: "Fairness", short: "≡" },
+  { href: "/admin", label: "Admin", short: "⚙" },
 ];
 
 function Hamburger({ open }: { open: boolean }) {
