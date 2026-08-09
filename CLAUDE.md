@@ -167,13 +167,15 @@ karaoke_tracks_for_practice, golden_voice, instrumental`.
 
 ## Session conventions observed in the history
 
-Derived from 188 real sessions. These inform defaults; **confirm with Sailavan
-before hard-coding any of them as rules.**
+Derived from 188 real sessions. **Confirmed with Sailavan 2026-08-09** — see
+§9 of `docs/SPEC.md`, which is authoritative where these disagree.
 
 - Typical weekday session is **3 or 4 bhajans** (163 of 188 sessions). Sessions
-  of 10+ are Sundays and festivals (5 sessions). Session length must be a
-  parameter, defaulting to 10 for the suggestion feature but 3 for a weekday.
-- **Slot 1 is a Ganesha bhajan in 140 of 188 sessions.** Strong convention.
+  of 10+ are Sundays and festivals (5 sessions). Session length is a parameter
+  and **defaults to 3** (§9.2).
+- **Slot 1 is a Ganesha bhajan in 140 of 188 sessions.** Confirmed a *strong
+  habit, not a rule* (§9.1) — weight it, never enforce it. Same for the Sai
+  closer.
 - Tempo arcs: slot 1 Medium → slot 2 Medium Slow / Slow → slot 3 Medium Fast.
   The set builds; it does not start fast.
 - Gents/Ladies alternate loosely across slots, never strictly.

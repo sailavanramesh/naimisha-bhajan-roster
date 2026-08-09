@@ -62,44 +62,51 @@ Browse and search 3,613 bhajans.
 
 ### B. Session Builder — the suggestion engine
 
-The headline feature. Produce a set of *n* bhajans (default 10) that works as a
-session, not just *n* rows that pass a filter.
+The headline feature. Produce a set of *n* bhajans (**default 3**, confirmed in
+§9.2) that works as a session, not just *n* rows that pass a filter.
 
 **Inputs**
 
 - Session date, session length, session type (Weekday / Sunday / Festival).
 - Filter set: any facet from the library, multi-select, include or exclude.
-- **Freshness**: exclude anything sung in the last *N* days (default 90), or
-  invert it to "revisit things we've let go stale."
-- **Repertoire mode**: restrict to bhajans at least one available singer already
-  knows, or deliberately open it up to teach something new.
+- **Freshness**: down-weight and flag anything sung in the last *N* days
+  (default 90) — **advisory, never exclusionary** (§9.4). Invertible to
+  "revisit things we've let go stale."
+- **Repertoire mode**: an opt-in toggle, **default off** (§9.3). When off,
+  repertoire only scores; unknown bhajans stay eligible.
 - **Shape template** (see below).
 - Seed. Store it. A generated set must be reproducible and shareable by URL.
 
 **Shape templates** — this is what separates a session from a shuffle.
 
-A template is an ordered list of slot rules. Default `Standard`:
+A template is an ordered list of slot rules. Every rule carries a strength:
+`hard` (a candidate violating it is rejected) or `soft` (violation is
+down-weighted and surfaced, never fatal). `Standard`:
 
-| Slot | Rule |
-|---|---|
-| 1 | Deity = Ganesha. Tempo ≤ Medium. |
-| 2 | Tempo Slow or Medium Slow. Deity ≠ slot 1. |
-| 3–(n−2) | Free, subject to diversity constraints. Tempo trends upward. |
-| n−1 | Tempo Medium Fast or Fast. |
-| n | Deity includes Sai. |
+| Slot | Rule | Strength |
+|---|---|---|
+| 1 | Deity = Ganesha. Tempo ≤ Medium. | **soft** (§9.1) |
+| 2 | Tempo Slow or Medium Slow. Deity ≠ slot 1. | soft |
+| 3–(n−2) | Free, subject to diversity constraints. Tempo trends upward. | soft |
+| n−1 | Tempo Medium Fast or Fast. | soft |
+| n | Deity includes Sai. | **soft** (§9.1) |
 
-Ship `Standard`, `Weekday (3)`, and `Festival` (all slots constrained to one
-deity). Templates are data, editable in the UI — do not hard-code them. The
-default above is inferred from history (Ganesha opens 140 of 188 sessions) and
-**must be confirmed with Sailavan before shipping.**
+Ship `Weekday (3)` — **the default**, per §9.2 — plus `Standard` and `Festival`
+(all slots constrained to one deity; the single-deity rule here *is* `hard`).
+Templates are data, editable in the UI — do not hard-code them. The Ganesha
+opener and Sai closer are confirmed as strong habits rather than rules (§9.1):
+weight them, never enforce them.
 
 **Diversity constraints**, applied across the whole set:
 
-- No repeated raga.
-- No more than 2 bhajans per deity, and at least 4 distinct deities.
-- At least 2 languages if the filters allow it.
-- No bhajan sung in the last *N* days.
-- Tempo sequence is weakly non-decreasing across the middle slots.
+- No repeated raga. *(hard)*
+- No more than 2 bhajans per deity, and at least 4 distinct deities. *(hard;
+  relaxed automatically when n < 4, which is the common case now that the
+  default length is 3 — with 3 slots this reduces to "no repeated deity".)*
+- At least 2 languages if the filters allow it. *(soft)*
+- Bhajans sung in the last *N* days are down-weighted and flagged, **not
+  removed** (§9.4). *(soft)*
+- Tempo sequence is weakly non-decreasing across the middle slots. *(soft)*
 
 **Algorithm.** Do not over-engineer this. Weighted random sampling with
 rejection, seeded PRNG, is enough:
@@ -211,8 +218,12 @@ festival, not just Shivaratri.
 nothing. Two changes: add a lightweight "who are you?" singer picker stored in a
 cookie so edits can be attributed, and remove the tracked `.env.save` from git.
 
-**Phase 2** — named sign-in (Auth.js, email magic links) with three roles:
-coordinator (full edit), singer (edit own pitch and availability), viewer.
+**Phase 2** — named sign-in via **Auth.js with the Google provider**, gated by a
+coordinator-maintained **email allowlist** mapping each address to a `Singer`
+and a role (§9.5). Three roles: coordinator (full edit), singer (edit **only
+their own slots** — confirmed pitch and availability), viewer (anonymous, read
+only). Sign-in never auto-creates a singer; an unlisted address gets viewer
+access. Lands in roadmap Phase 5.
 
 ---
 
@@ -325,18 +336,84 @@ Ship each phase to production before starting the next.
 
 ---
 
-## 9. Open questions for Sailavan
+## 9. Answered questions
 
-Ask these before building the affected feature; do not guess.
+Answered by Sailavan, 2026-08-09. These are now binding; where they contradict
+an earlier section of this spec, **this section wins** and the earlier section
+has been amended to match.
 
-1. Is the Ganesha-opener a rule or just a strong habit? Same for the Sai closer.
-2. Is 10 the right default? History says weekday sessions run 3–4.
-3. Should a singer ever be assigned a bhajan they have never sung, or is the
-   roster always drawn from known repertoire?
-4. What is the real "don't repeat within" window — 90 days? A term? A year?
-5. Who should be able to edit? Coordinator only, or every singer for their own
-   pitch?
-6. Is the `Recent Bhajans` count sheet still maintained by hand, or can it be
-   fully derived?
-7. Are the Gents/Ladies reference pitches ever wrong in the masterlist, and if
-   so should the app let the group correct them locally?
+**1. Is the Ganesha-opener a rule or just a strong habit? Same for the Sai
+closer.**
+
+> Strong habit. The Sai closer is not a rule.
+
+Both are **soft preferences, not hard constraints**. The generator should
+weight a Ganesha bhajan heavily in slot 1 and a Sai bhajan in the final slot,
+but must never fail to produce a session because neither is available, and must
+never reject a coordinator's manual choice. Slot rules therefore need a
+`hard | soft` flag; the `Standard` template's opener and closer are `soft`.
+
+**2. Is 10 the right default?**
+
+> No, 3 is the right default session length.
+
+**Default session length is 3.** The `Weekday (3)` template becomes the default
+template rather than a variant. Longer sets (Sunday, festival) are explicitly
+chosen, not the norm. Anywhere this spec previously said "default 10", read 3.
+
+**3. Should a singer ever be assigned a bhajan they have never sung?**
+
+> Yes, that should be allowed.
+
+Repertoire is a **scoring input, not a filter**. `w1·repertoire` rewards a
+known bhajan; it never excludes an unknown one. "Restrict to known repertoire"
+stays available as an opt-in toggle, defaulting to off. This is also what makes
+predicted pitch matter — an unsung bhajan is exactly the case where the
+singer's offset profile is the only guide.
+
+**4. What is the real "don't repeat within" window?**
+
+> Don't repeat within is not a hard stop, just a recommendation or flag.
+
+Freshness is **advisory**. Keep the 90-day default as the threshold for
+*flagging*, but a recently-sung bhajan is never removed from the candidate pool
+— it is down-weighted and shown with a visible "sung 3 weeks ago" marker. The
+coordinator decides. The window is user-adjustable.
+
+**5. Who should be able to edit?**
+
+> Coordinators only, singers for their song alone. Can it use their Google
+> account as their authentication? We can provide a list of emails and assign
+> it to the user.
+
+Two roles, plus anonymous read:
+
+| Role | Can do |
+|---|---|
+| Coordinator | Everything: build sessions, assign, override, edit any slot. |
+| Singer | Edit **only their own slots** — confirmed pitch, availability. Read everything else. |
+| Viewer (anonymous) | Read-only. No login. |
+
+**Yes, Google sign-in is the right mechanism.** Auth.js (NextAuth) with the
+Google provider, gated by an **email allowlist**: a coordinator maintains a list
+of email addresses, each mapped to an existing `Singer` row and a role. An
+address not on the list gets viewer access only — sign-in never auto-creates a
+singer. This replaces the `EDIT_KEY` link, which stays in place until it ships
+(see 4.I). Google is a third-party identity provider, not an Azure marketplace
+service, so it does not touch the sponsorship grant. Scheduled for **Phase 5**.
+
+**6. Is the `Recent Bhajans` count sheet still maintained by hand?**
+
+> That's just a static count thing we did to see how many bhajans had been sung
+> at a point in time, can be fully derived from session history.
+
+Confirmed dead. **Do not import it.** All counts derive from `SessionSlot`.
+
+**7. Are the Gents/Ladies reference pitches ever wrong in the masterlist?**
+
+> For the sake of the app, no.
+
+Treat the masterlist reference pitches as **authoritative**. No local-override
+feature, no correction UI. The one historical row that disagrees with the
+masterlist is logged at seed time and otherwise ignored. This keeps
+`recommendedPitch` purely derived, per `CLAUDE.md` rule 5.
