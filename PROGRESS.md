@@ -16,7 +16,7 @@ open uncertainties.
 see [Next](#next).
 
 The database is seeded and live. `npm run build`, `npm run lint` and
-`npm run test:run` are all clean: **167 tests, 1 skipped** (the skip is the
+`npm run test:run` are all clean: **187 tests, 1 skipped** (the skip is the
 database-backed gate, which skips only when `DATABASE_URL` is absent).
 
 **The Phase 0 gate has been re-run after every schema change since and still
@@ -131,10 +131,10 @@ else.
 
 ## Next
 
-**Phases 0–5 are built, tested and committed.** What remains is not code I can
-write:
+**Phases 0–5 are built, tested and committed**, plus instrument rotation, an
+admin section and a server-side edit gate. What remains:
 
-1. **Push `v2`.** Still blocked on `gh auth refresh -s workflow`. Sixteen
+1. **Push `v2`.** Still blocked on `gh auth refresh -s workflow`. Twenty
    commits are local and nothing has been deployed.
 2. **Named auth (SPEC §4.I Phase 2 / roadmap Phase 5).** Google sign-in via
    Auth.js behind a coordinator-maintained email allowlist. It needs a Google
