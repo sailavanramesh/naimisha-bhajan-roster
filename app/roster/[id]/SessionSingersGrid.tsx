@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, useTransition, useEffect } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
 import { Button } from "@/components/ui";
 import { deleteSingerRow, upsertSessionSingerRows, type SingerRowInput } from "./actions";
 
@@ -359,7 +360,7 @@ export function SessionSingersGrid(props: {
       </div>
 
       <div className="overflow-x-auto rounded-[12px] border border-rule-surface bg-panel">
-        <table className="w-full min-w-[720px] text-[13px]">
+        <table className="stacked-table w-full min-w-[720px] text-[13px]">
           <thead className="bg-panel">
             <tr className="border-b border-rule-surface">
               <th className="sticky left-0 z-50 bg-panel px-3 py-2 text-left font-semibold w-[132px] border-r shadow-sm">
@@ -383,7 +384,7 @@ export function SessionSingersGrid(props: {
               return (
                 <tr key={r._localId} className="border-b align-top">
                   {/* Singer */}
-                  <td className="sticky left-0 z-30 bg-panel px-3 py-2 w-[132px] border-r shadow-sm">
+                  <td data-label="Singer" data-key="1" className="sticky left-0 z-30 whitespace-nowrap bg-surface px-2 py-1.5 border-r border-rule-surface shadow-sm">
                     {props.canEdit ? (
                       <select
                         value={r.singerId || ""}
@@ -398,13 +399,13 @@ export function SessionSingersGrid(props: {
                         ))}
                       </select>
                     ) : (
-                      <div className="text-sm font-medium">{r.singerName ?? "—"}</div>
+                      <div className="text-[14px] font-semibold">{r.singerName ?? "—"}</div>
                     )}
                     <div className="mt-1 text-xs text-on-surface-muted">{r.singerGender ?? "—"}</div>
                   </td>
 
                   {/* Bhajan */}
-                  <td className="sticky left-[132px] z-20 bg-panel px-3 py-2 w-[280px] border-r shadow-sm">
+                  <td data-label="Bhajan" data-key="1" className="px-2 py-1.5">
                     {props.canEdit ? (
                       <input
                         ref={(el) => {
@@ -435,16 +436,30 @@ export function SessionSingersGrid(props: {
                         className="w-full rounded-[10px] border border-rule-surface bg-field px-2 py-1.5 text-[13px]"
                       />
                     ) : (
-                      <div className="whitespace-normal break-words leading-5">
+                      <div className="whitespace-normal break-words text-[14px] font-medium leading-5">
                         {r.bhajanTitle ?? r.festivalBhajanTitle ?? "—"}
                       </div>
                     )}
 
-                    {r.bhajanId ? <div className="mt-1 text-[11px] text-on-surface-muted">Linked to masterlist</div> : null}
+                    {/* Open the song itself — lyrics, meaning, pitches, who
+                        has sung it. Previously this said "Linked to
+                        masterlist" and went nowhere. */}
+                    {r.bhajanId ? (
+                      <Link
+                        href={`/bhajans/${r.bhajanId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 inline-flex items-center gap-1 text-[11px] text-brass-ink underline-offset-2 hover:underline"
+                      >
+                        Lyrics &amp; details
+                        <span aria-hidden>↗</span>
+                        <span className="sr-only">(opens in a new tab)</span>
+                      </Link>
+                    ) : null}
                   </td>
 
                   {/* Confirmed Pitch */}
-                  <td className="px-2 py-1.5">
+                  <td data-label="Confirmed" data-key="1" className="px-2 py-1.5">
                     {props.canEdit ? (
                       <div className="relative">
                         <input
@@ -455,7 +470,7 @@ export function SessionSingersGrid(props: {
                           onChange={(e) => setPitchQuery(r._localId, e.target.value)}
                           onFocus={() => setPitchUI((prev) => ({ ...prev, [r._localId]: { q: pu.q, open: true } }))}
                           onBlur={() => setTimeout(() => closePitch(r._localId), 120)}
-                          className="w-[15ch] rounded-[10px] border border-rule-surface bg-field px-2 py-1.5 text-[13px] leading-5"
+                          className="w-[15ch] rounded-[10px] border-2 border-brass/45 bg-field px-2 py-1.5 text-[14px] font-semibold leading-5"
                         />
                         {pu.open && pitchOptions.length > 0 ? (
                           <div className="absolute z-[60] mt-1 w-full max-h-64 overflow-auto rounded-[12px] border border-rule-surface bg-panel shadow">
@@ -474,23 +489,23 @@ export function SessionSingersGrid(props: {
                         ) : null}
                       </div>
                     ) : (
-                      <div className="whitespace-nowrap">{r.confirmedPitch ?? "—"}</div>
+                      <div className="whitespace-nowrap text-[14px] font-semibold">{r.confirmedPitch ?? "—"}</div>
                     )}
                   </td>
 
                   {/* Recommended — derived, never editable. Plain text. */}
-                  <td className="whitespace-nowrap px-2 py-1.5 text-on-surface-muted">
+                  <td data-label="Recommended" className="whitespace-nowrap px-2 py-1.5 text-[12px] text-on-surface-muted">
                     {r.recommendedPitch ?? "—"}
                   </td>
 
                   {/* Tabla — derived from the confirmed pitch. Plain text. */}
-                  <td className="whitespace-nowrap px-2 py-1.5 text-on-surface-muted">
+                  <td data-label="Tabla" className="whitespace-nowrap px-2 py-1.5 text-[12px] text-on-surface-muted">
                     {r.confirmedPitch ? (r.alternativeTablaPitch ?? "—") : "—"}
                   </td>
 
                   {/* Delete */}
                   {props.canEdit ? (
-                    <td className="px-2 py-1.5 text-right">
+                    <td data-label="" className="px-2 py-1.5 text-right">
                       <Button onClick={() => removeRow(r._localId)} className="border-red-300 text-red-700 hover:bg-red-50">
                         Delete
                       </Button>

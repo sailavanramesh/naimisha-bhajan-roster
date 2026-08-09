@@ -165,10 +165,18 @@ export default async function BuildPage({
       ? SessionType.Sunday
       : SessionType.Weekday;
 
-  // Re-roll bumps the numeric suffix, so a set stays reproducible from its URL.
+  /*
+   * Re-roll used to bump a counter: #1 -> #2 -> #3. Every set stayed
+   * reproducible, but the SEQUENCE was reproducible too — re-roll a few times,
+   * press back, re-roll again, and the identical sets came round in the
+   * identical order. It read as "the suggestions cycle".
+   *
+   * A random suffix fixes that without losing anything: the URL still contains
+   * the seed, so any set you land on is still exactly reproducible and
+   * shareable. Only the ORDER you meet them in stops being predetermined.
+   */
   const seedBase = seed.includes("#") ? seed.slice(0, seed.lastIndexOf("#")) : seed;
-  const seedCounter = Number(seed.slice(seed.lastIndexOf("#") + 1)) || 1;
-  const nextSeed = `${seedBase}#${seedCounter + 1}`;
+  const nextSeed = `${seedBase}#${Math.random().toString(36).slice(2, 8)}`;
 
   const FILTER_KEYS = ["deity", "notdeity", "lang", "tempo", "level", "lyrics", "audio", "ref", "sung"];
   const activeFilters = FILTER_KEYS.filter((k) => (one(sp, k) ?? "") !== "" && one(sp, k) !== "any").length;

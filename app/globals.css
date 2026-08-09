@@ -173,3 +173,95 @@ button {
     page-break-inside: avoid;
   }
 }
+
+/*
+ * Stacked table — the roster grid on a phone.
+ *
+ * A horizontally scrolling table hid Confirmed, Recommended and Tabla off the
+ * right edge, so on a 375px screen a slot showed only the singer and the
+ * bhajan. SPEC §6: "375px is the design target, not the fallback."
+ *
+ * Below the breakpoint each row becomes a card and each cell a labelled line,
+ * driven by `data-label`. One set of markup, so the editing controls cannot
+ * drift between a mobile and a desktop copy.
+ */
+@media (max-width: 767px) {
+  .stacked-table,
+  .stacked-table tbody,
+  .stacked-table tr,
+  .stacked-table td {
+    display: block;
+    width: auto;
+  }
+
+  .stacked-table thead {
+    display: none;
+  }
+
+  .stacked-table {
+    min-width: 0 !important;
+  }
+
+  .stacked-table tr {
+    margin-bottom: 0.75rem;
+    border: 1px solid rgb(var(--rule-on-surface));
+    border-radius: 12px;
+    background: rgb(var(--surface));
+    padding: 0.5rem 0.25rem;
+  }
+
+  .stacked-table td {
+    display: grid;
+    grid-template-columns: 8.5rem 1fr;
+    align-items: center;
+    gap: 0.5rem;
+    border: 0 !important;
+    box-shadow: none !important;
+    position: static !important;
+    padding: 0.3rem 0.6rem;
+  }
+
+  .stacked-table td::before {
+    content: attr(data-label);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgb(var(--on-surface-muted));
+  }
+
+  /* A cell with no label spans the full width — the delete action. */
+  .stacked-table td[data-label=""]::before {
+    content: none;
+  }
+  .stacked-table td[data-label=""] {
+    grid-template-columns: 1fr;
+    justify-items: end;
+  }
+}
+
+/*
+ * Roster emphasis. Singer, Bhajan and Confirmed pitch are what the singer, the
+ * harmonium player and the tabla player read at a glance mid-session;
+ * Recommended and Tabla are reference material. The hierarchy says so.
+ */
+.stacked-table td[data-key="1"]::before {
+  color: rgb(var(--on-surface));
+}
+
+.stacked-table td[data-key="1"] {
+  font-weight: 500;
+}
+
+@media (max-width: 767px) {
+  .stacked-table td:not([data-key="1"]) {
+    padding-top: 0.15rem;
+    padding-bottom: 0.15rem;
+    font-size: 12px;
+  }
+}
+
+/* Table head: the three that matter, stated plainly. */
+.stacked-table thead th:nth-child(-n + 3) {
+  color: rgb(var(--on-surface));
+}
