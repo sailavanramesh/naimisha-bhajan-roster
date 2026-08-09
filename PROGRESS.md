@@ -141,10 +141,11 @@ write:
    Cloud OAuth client ID and secret, which only Sailavan can create. The schema
    is ready for it: `Singer.email` (unique) and `Singer.role` already exist.
    `EDIT_KEY` + `middleware.ts` stays until then — do not rip it out.
-3. **Instrument rotation (SPEC §4.F).** The eligibility data is seeded
-   (`InstrumentPerson`, 16 rows) and `SessionInstrument` holds 424 real
-   assignments, but nothing scores them yet. It reuses `lib/rosterScoring.ts`
-   almost unchanged.
+3. **Wire instrument picks into the assign page.** `lib/instrumentScoring.ts`
+   is written and tested, and eligibility is editable at `/admin`, but the
+   suggestions are not yet rendered on `/roster/[id]/assign`. The remaining
+   work is a query returning `PlayerContext[]` plus a UI section — no new
+   decisions.
 
 
 ---
@@ -426,6 +427,47 @@ list; see OPEN-QUESTIONS.
 
 ---
 
+## Instruments, admin, and the edit gate
+
+**Instrument rotation** — `lib/instrumentScoring.ts` (20 tests). Eligibility,
+experience, overdue, load balance. No pitch fit and no gender clumping: SPEC
+§4.F asks for the singer scoring "simplified".
+
+**Eligibility is data, not code**, keyed by the instrument names the roster
+actually uses, and editable at `/admin`. Confirmed with Sailavan 2026-08-09:
+
+- **Chorus Mic** eligibility is the **singer list**.
+- **Cymbals (Male)** and **Cymbals (Female)** may be **anyone on the singer
+  list** for now — deliberately not gender-split, despite the names, because
+  that is what was asked for. Admins can narrow it.
+
+`scripts/seedEligibility.ts` fills these defaults in. It never deletes and
+never overwrites, so coordinator edits survive a re-run.
+
+Eligibility is a **preference, not a gate**, for the same reason repertoire is:
+the imported lookup named 16 people while **33 have actually played**, so
+filtering on it would exclude half the people who really do this.
+
+### A bug the seeder's own output exposed
+
+`SessionInstrument.person` holds **comma-separated** values for the shared
+roles — one Chorus Mic cell names the whole chorus in a single string. Deriving
+eligibility from history therefore created a "person" literally named
+`"Ashwin, Jothsna, Prithvi"`. Now split on commas; the 24 bogus rows were
+removed. **The underlying `SessionInstrument` rows are still compound** — that
+is faithful to the source and was left alone, but anything reading `person` as
+one name must split it. See OPEN-QUESTIONS.
+
+### SECURITY — the edit gate
+
+`middleware.ts` only ever **set** the `edit` cookie when the right `?k=` was
+used. It never blocked a direct POST to a Server Action, so hiding a button in
+the UI was the only thing between an anonymous visitor and writing to the
+database. `lib/requireEdit.ts` now gates **all eleven** mutating actions
+server-side. Any new mutating action must call it too.
+
+---
+
 ## OPEN-QUESTIONS
 
 The seven questions from §9 of the spec are **answered** — see `docs/SPEC.md`
@@ -479,7 +521,15 @@ Still genuinely open, none blocking:
 10. **Is the ±35% fairness tolerance right?** `LOAD_TOLERANCE` in
     `lib/fairness.ts`. Over all history it flags 3 singers under and 3 over out
     of 11, which reads as useful rather than noisy — but it is a guess.
-11. **Should the roster page show the Shruti Ladder inline?** SPEC §4.D asks
+11. **`SessionInstrument.person` is compound.** Rows hold values like
+    "Ashwin, Jothsna" for the shared roles. Faithful to the spreadsheet, but it
+    means per-person instrument counts are wrong unless split. Normalising into
+    one row per person would be a data migration over 424 rows — correct, but
+    it rewrites imported history, so it is logged rather than done.
+12. **Cymbals (Male)/(Female) are not gender-split.** The names say Male and
+    Female; the instruction was "anyone in the singing list, for now". Followed
+    literally, and admins can narrow each list. Worth revisiting.
+13. **Should the roster page show the Shruti Ladder inline?** SPEC §4.D asks
     for it "on the singer page, the bhajan page, and inline in the roster". It
     is on the first two. The roster grid is dense and a 24-row ladder per slot
     would overwhelm it; a compact variant is probably wanted, which is a design
