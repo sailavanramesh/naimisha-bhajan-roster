@@ -72,7 +72,19 @@ export default async function BuildPage({
   const date = one(sp, "date") ?? melbourneToday();
   const seed = one(sp, "seed") ?? `${date}#1`;
   const freshnessDays = Number(one(sp, "fresh") ?? DEFAULT_FRESHNESS_DAYS) || DEFAULT_FRESHNESS_DAYS;
-  const locked = list(sp, "lock");
+  /**
+   * `lock` is `position:bhajanId` pairs. Keyed by position, because locks that
+   * were merely an ordered list got re-placed at 1..n and made a single swap
+   * look like it changed the whole set.
+   */
+  const locked = new Map<number, string>();
+  for (const part of list(sp, "lock")) {
+    const [pos, id] = part.split(":");
+    const n = Number(pos);
+    if (Number.isInteger(n) && id) locked.set(n, id);
+  }
+  const serialiseLocks = (m: Map<number, string>) =>
+    [...m.entries()].sort((a, b) => a[0] - b[0]).map(([p, id]) => `${p}:${id}`).join(",");
 
   /** `pick` is `bhajanId:singerId` pairs — kept in the URL like the locks. */
   const picks = new Map<string, string>();
@@ -176,7 +188,7 @@ export default async function BuildPage({
 
         <CardContent className="grid gap-4">
           <form method="get" action="/build" className="grid gap-3">
-            <input type="hidden" name="lock" value={locked.join(",")} />
+            <input type="hidden" name="lock" value={serialiseLocks(locked)} />
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               <Field label="Session date">
                 <input
@@ -347,7 +359,7 @@ export default async function BuildPage({
               <Link href={href(sp, { seed: nextSeed })} scroll={false}>
                 <Button type="button">Re-roll unlocked</Button>
               </Link>
-              {locked.length > 0 ? (
+              {locked.size > 0 ? (
                 <Link href={href(sp, { lock: undefined })} scroll={false}>
                   <Button type="button">Unlock all</Button>
                 </Link>
@@ -370,7 +382,12 @@ export default async function BuildPage({
           {/* The set */}
           <ol className="grid gap-2">
             {result.slots.map((slot) => {
-              const otherLocks = chosenIds.filter((id) => id !== slot.candidate.id);
+              // Swap: pin every OTHER slot where it already is, then re-roll.
+              const otherLocks = new Map(
+                result.slots
+                  .filter((x) => x.position !== slot.position)
+                  .map((x) => [x.position, x.candidate.id] as const),
+              );
               return (
                 <li
                   key={slot.candidate.id}
@@ -423,16 +440,19 @@ export default async function BuildPage({
                       <Link
                         scroll={false}
                         href={href(sp, {
-                          lock: slot.locked
-                            ? locked.filter((id) => id !== slot.candidate.id).join(",")
-                            : [...locked, slot.candidate.id].join(","),
+                          lock: (() => {
+                            const next = new Map(locked);
+                            if (slot.locked) next.delete(slot.position);
+                            else next.set(slot.position, slot.candidate.id);
+                            return serialiseLocks(next) || undefined;
+                          })(),
                         })}
                       >
                         <Button type="button" className="w-full text-xs">
                           {slot.locked ? "Unlock" : "Lock"}
                         </Button>
                       </Link>
-                      <Link href={href(sp, { lock: otherLocks.join(","), seed: nextSeed })} scroll={false}>
+                      <Link href={href(sp, { lock: serialiseLocks(new Map(otherLocks)), seed: nextSeed })} scroll={false}>
                         <Button type="button" className="w-full text-xs">
                           Swap
                         </Button>

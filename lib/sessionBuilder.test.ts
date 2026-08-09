@@ -289,9 +289,34 @@ describe('generateSession', () => {
     expect(r.warnings.join(' ')).toContain('No bhajans match');
   });
 
+  it('keeps a locked bhajan at ITS OWN position, not at index order', () => {
+    // REGRESSION. Locks used to be placed at 1..n in array order, so locking
+    // slots 1 and 3 put slot 3's bhajan at position 2 and generated a fresh one
+    // for position 3 — "swap this one" appeared to swap everything.
+    const p = pool(60);
+    const first = generateSession(p, STANDARD, { seed: 'base', length: 3 });
+    const ids = first.slots.map((s) => s.candidate.id);
+
+    // Swap slot 2: lock 1 and 3 where they are, new seed.
+    const swapped = generateSession(p, STANDARD, {
+      seed: 'base-2',
+      length: 3,
+      locked: new Map([
+        [1, ids[0]],
+        [3, ids[2]],
+      ]),
+    });
+    const after = swapped.slots.map((s) => s.candidate.id);
+
+    expect(after[0]).toBe(ids[0]);
+    expect(after[2]).toBe(ids[2]);
+    expect(after[1]).not.toBe(ids[1]);
+    expect(new Set(after).size).toBe(3);
+  });
+
   it('honours locks and marks them', () => {
     const p = pool(60);
-    const r = generateSession(p, STANDARD, { seed: 'x', length: 3, locked: ['b7'] });
+    const r = generateSession(p, STANDARD, { seed: 'x', length: 3, locked: new Map([[1, 'b7']]) });
     expect(r.slots[0].candidate.id).toBe('b7');
     expect(r.slots[0].locked).toBe(true);
     expect(r.slots[0].reasons).toContain('Locked by you');
@@ -299,15 +324,15 @@ describe('generateSession', () => {
 
   it('re-rolling with a new seed keeps the locked slot', () => {
     const p = pool(60);
-    const a = generateSession(p, STANDARD, { seed: 'one', length: 3, locked: ['b7'] });
-    const b = generateSession(p, STANDARD, { seed: 'two', length: 3, locked: ['b7'] });
+    const a = generateSession(p, STANDARD, { seed: 'one', length: 3, locked: new Map([[1, 'b7']]) });
+    const b = generateSession(p, STANDARD, { seed: 'two', length: 3, locked: new Map([[1, 'b7']]) });
     expect(a.slots[0].candidate.id).toBe('b7');
     expect(b.slots[0].candidate.id).toBe('b7');
     expect(a.slots[1].candidate.id).not.toBe(b.slots[1].candidate.id);
   });
 
   it('ignores a locked id that is not in the pool', () => {
-    const r = generateSession(pool(60), STANDARD, { seed: 'x', length: 3, locked: ['nope'] });
+    const r = generateSession(pool(60), STANDARD, { seed: 'x', length: 3, locked: new Map([[1, 'nope']]) });
     expect(r.slots).toHaveLength(3);
     expect(r.slots.every((s) => !s.locked)).toBe(true);
   });

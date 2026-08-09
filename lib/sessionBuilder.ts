@@ -61,8 +61,15 @@ export type GenerateOptions = {
   length: number;
   /** Bhajans sung within this many days are down-weighted and flagged. */
   freshnessDays?: number;
-  /** Ids to keep in place; they are placed before anything else is chosen. */
-  locked?: string[];
+  /**
+   * Locked slots, as position -> bhajan id.
+   *
+   * Keyed by POSITION, not order. An array of ids placed at 1..n in array
+   * order looks right until you lock a subset: locking slots 1 and 3 would put
+   * slot 3's bhajan at position 2 and generate a fresh one for position 3, so
+   * "swap this one" appeared to swap everything.
+   */
+  locked?: ReadonlyMap<number, string>;
 };
 
 export type GeneratedSlot = {
@@ -273,9 +280,13 @@ export function generateSession(
   const slots: GeneratedSlot[] = [];
 
   // Locked slots keep their place and are never re-rolled.
-  const locked = (options.locked ?? []).filter((id) => byId.has(id)).slice(0, length);
   const lockedByPosition = new Map<number, string>();
-  locked.forEach((id, i) => lockedByPosition.set(i + 1, id));
+  for (const [pos, id] of options.locked ?? []) {
+    if (pos >= 1 && pos <= length && byId.has(id)) lockedByPosition.set(pos, id);
+  }
+  // Reserve every locked bhajan up front, so a generated slot cannot pick the
+  // same one and end up with a duplicate earlier in the set.
+  for (const id of lockedByPosition.values()) used.add(id);
 
   for (let position = 1; position <= length; position++) {
     const rule = template.rules.length ? ruleForSlot(template, position, length) : undefined;
@@ -283,7 +294,6 @@ export function generateSession(
     const lockedId = lockedByPosition.get(position);
     if (lockedId) {
       const candidate = byId.get(lockedId)!;
-      used.add(lockedId);
       chosen.push({ candidate, position });
       slots.push({
         position,

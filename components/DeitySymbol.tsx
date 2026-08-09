@@ -36,6 +36,7 @@ import * as React from "react";
 const SAFFRON = "#E08A2E";
 const AMBER = "#C98A2E";
 const GOLD = "#C39A3C";
+const DEEP_GOLD = "#9A7526";
 const TEAL = "#2F7C7A";
 const PEACOCK = "#1F6F8B";
 const INDIGO = "#4A5A8C";
@@ -147,17 +148,22 @@ export const DEITY_SYMBOLS: Record<string, Emblem> = {
     ),
   },
 
-  // Sudarshana chakra.
+  // Shankha — Vishnu's conch, named by Sailavan. The chakra was here before;
+  // the conch is the more immediately readable of the two attributes.
   Narayana: {
     label: "Narayana",
     node: (
-      <g stroke={PEACOCK} strokeWidth="1.4">
-        <circle cx="12" cy="12" r="8.2" fill={PEACOCK} fillOpacity="0.45" />
-        <circle cx="12" cy="12" r="3" fill="none" />
+      <g>
         <path
-          d="M12 3.8v3M12 17.2v3M3.8 12h3M17.2 12h3M6.2 6.2l2.1 2.1M15.7 15.7l2.1 2.1M17.8 6.2l-2.1 2.1M8.3 15.7l-2.1 2.1"
-          strokeLinecap="round"
+          d="M15.8 3.2c2.1 2.8 2.7 6.8 1.4 10.2-1.4 3.7-4.6 6.4-8.4 7l-3.4.6 1.7-3.2c1.5-3 2-5.6 2-8.4 0-2.4 1-4.5 2.8-5.8 1.3-.9 3-.7 3.9-.4Z"
+          fill={SAFFRON}
+          fillOpacity="0.62"
+          stroke={DEEP_GOLD}
+          strokeWidth="1.4"
+          strokeLinejoin="round"
         />
+        <path d="M12.6 7.2c1 2.3.8 5-.4 7.4" stroke={DEEP_GOLD} strokeWidth="1.2" fill="none" strokeLinecap="round" />
+        <path d="M15.4 4.2c.9 1.4 1.2 3 .9 4.6" stroke={DEEP_GOLD} strokeWidth="1.1" fill="none" strokeLinecap="round" />
       </g>
     ),
   },
