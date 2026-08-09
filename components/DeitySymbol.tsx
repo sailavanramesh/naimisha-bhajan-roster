@@ -89,17 +89,46 @@ export const DEITY_SYMBOLS: Record<string, Emblem> = {
     ),
   },
 
-  // Trishula with the crescent moon.
+  // Trishula — three tapered blades on a shaft, with a bound grip.
+  //
+  // Redrawn: the first attempt was five loose strokes that read as a fork. The
+  // prongs are filled tapered blades now, so the silhouette is a trident at
+  // 16px rather than a bundle of lines. Cool steel keeps Shiva distinct from
+  // Subrahmanya's gold vel, which is otherwise a similar shape.
   Shiva: {
     label: "Shiva",
     node: (
-      <g stroke={INDIGO} strokeWidth="1.6" strokeLinecap="round" fill="none">
-        <path d="M12 21V7" />
-        <path d="M12 7.4c0-2.1.6-3.6 1.6-4.6" />
-        <path d="M6.6 11V6.2c0-.5.6-.7.9-.3L10 9" />
-        <path d="M17.4 11V6.2c0-.5-.6-.7-.9-.3L14 9" />
-        <path d="M6.6 11h10.8" strokeWidth="1.4" />
-        <path d="M9 16.6h6" strokeWidth="1.3" stroke={GOLD} />
+      <g strokeLinejoin="round" strokeLinecap="round">
+        {/* shaft */}
+        <path d="M12 22V10.6" stroke={BROWN} strokeWidth="1.9" />
+        {/* bound grip */}
+        <path d="M10.4 13.2h3.2M10.4 15h3.2" stroke={BROWN} strokeWidth="1.1" />
+        {/* centre blade */}
+        <path
+          d="M12 1.6c1 2.9 1.4 5.9 1.1 8.9h-2.2C10.6 7.5 11 4.5 12 1.6Z"
+          fill={INDIGO}
+          fillOpacity="0.55"
+          stroke={INDIGO}
+          strokeWidth="1.2"
+        />
+        {/* left blade */}
+        <path
+          d="M9.4 9.9C8 7.5 6.6 5.4 5.1 3.2c.3 3 .5 5 1.2 7.1Z"
+          fill={INDIGO}
+          fillOpacity="0.45"
+          stroke={INDIGO}
+          strokeWidth="1.2"
+        />
+        {/* right blade */}
+        <path
+          d="M14.6 9.9c1.4-2.4 2.8-4.5 4.3-6.7-.3 3-.5 5-1.2 7.1Z"
+          fill={INDIGO}
+          fillOpacity="0.45"
+          stroke={INDIGO}
+          strokeWidth="1.2"
+        />
+        {/* crossbar the blades rise from */}
+        <path d="M5.9 10.6h12.2" stroke={INDIGO} strokeWidth="1.7" />
       </g>
     ),
   },
