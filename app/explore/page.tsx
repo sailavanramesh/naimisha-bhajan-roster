@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from "@/compo
 import { DeitySymbols } from "@/components/DeitySymbol";
 import { getCandidatePool, getFacetOptions, UNSPECIFIED } from "@/lib/candidateQueries";
 import { sampleBhajans, DEFAULT_FRESHNESS_DAYS } from "@/lib/sessionBuilder";
-import { getRole, can } from "@/lib/auth";
+import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
 import { AddToList } from "./AddToList";
 
@@ -47,10 +47,14 @@ export default async function ExplorePage({ searchParams }: { searchParams: Prom
   const freshnessDays = Number(one(sp, "fresh") ?? DEFAULT_FRESHNESS_DAYS) || DEFAULT_FRESHNESS_DAYS;
   const sungBefore = (one(sp, "sung") as "any" | "known" | "new") ?? "any";
 
-  const [facets, singers] = await Promise.all([
+  const [facets, singers, signedIn] = await Promise.all([
     getFacetOptions(),
     prisma.singer.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
+    getSignedInSinger(),
   ]);
+  // Signed in as a member: the server already knows whose list it is, so the
+  // picker would be noise — and it could not change the outcome anyway.
+  const pickSinger = !signedIn || can(role, "assignSingers");
 
   const pool = await getCandidatePool(
     {
@@ -204,7 +208,7 @@ export default async function ExplorePage({ searchParams }: { searchParams: Prom
                       </div>
                     </div>
 
-                    <AddToList bhajanTitle={c.title} singers={singers} />
+                    <AddToList bhajanTitle={c.title} singers={pickSinger ? singers : []} />
                   </div>
                 </li>
               ))}

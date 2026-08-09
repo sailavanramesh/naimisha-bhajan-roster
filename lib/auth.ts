@@ -78,6 +78,15 @@ export function can(role: Role, capability: Capability): boolean {
 /** Pages a member may reach. Everything else is owner/editor only. */
 export const MEMBER_PAGES = ["/roster", "/bhajans", "/singers", "/explore", "/my-list"];
 
+/**
+ * Closed-testing mode.
+ *
+ * With REQUIRE_SIGN_IN=true nothing is readable without signing in — for a
+ * soft launch with a handful of people before a wider release. Off by default,
+ * because SPEC §4.H wants a public read-only session URL eventually.
+ */
+export const requireSignIn = process.env.REQUIRE_SIGN_IN === "true";
+
 export function canSeePage(role: Role, path: string): boolean {
   if (role === "editor") return true;
   // Viewers and members share the same public reading surface.

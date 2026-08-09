@@ -43,18 +43,22 @@ export function AddToList({
       className="grid shrink-0 gap-1.5"
     >
       <input type="hidden" name="title" value={bhajanTitle} />
-      <select
-        name="singerId"
-        required
-        defaultValue=""
-        className="h-9 rounded-[10px] border border-rule-surface bg-field px-2 text-xs"
-        aria-label="Whose list"
-      >
-        <option value="" disabled>Whose list…</option>
-        {singers.map((s) => (
-          <option key={s.id} value={s.id}>{s.name}</option>
-        ))}
-      </select>
+      {/* Empty when signed in: the server decides whose list this is, so a
+          picker could not change the outcome. */}
+      {singers.length > 0 ? (
+        <select
+          name="singerId"
+          required
+          defaultValue=""
+          className="h-9 rounded-[10px] border border-rule-surface bg-field px-2 text-xs"
+          aria-label="Whose list"
+        >
+          <option value="" disabled>Whose list…</option>
+          {singers.map((s) => (
+            <option key={s.id} value={s.id}>{s.name}</option>
+          ))}
+        </select>
+      ) : null}
       <select
         name="kind"
         defaultValue={RepertoireKind.wantToLearn}

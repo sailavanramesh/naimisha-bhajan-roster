@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { requireCapability } from "@/lib/auth";
+import { requireCapability, getSignedInSinger, can, getRole } from "@/lib/auth";
 import { RepertoireKind } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -9,12 +9,29 @@ import { z } from "zod";
 /**
  * The personal learning list.
  *
- * INTERIM: the singer is chosen from a picker, because roles currently come
- * from a shared access link and the app cannot yet tell two members apart.
- * Once Google sign-in lands (SPEC §9.5) the singer comes from the session and
- * these actions stop taking a singerId at all — that is the only change
- * needed, which is why the list is keyed on Singer rather than on a device.
+ * Whose list a write lands on is decided HERE, not by the form:
+ *
+ *   - Signed in as a member  -> always your own, whatever the form said.
+ *   - Signed in as an editor -> may act on anyone's, since a coordinator
+ *                               maintaining the group's lists is the point.
+ *   - Not signed in          -> the interim shared-link case: the singer comes
+ *                               from the picker, and the page says plainly
+ *                               that lists are not private in that mode.
+ *
+ * Deciding it server-side is what makes "my list" true rather than a label —
+ * a member cannot write to somebody else's list by editing the payload.
  */
+async function resolveSingerId(requested: string): Promise<string> {
+  const signedIn = await getSignedInSinger();
+  if (signedIn) {
+    if (can(signedIn.role, "assignSingers")) return requested || signedIn.id;
+    return signedIn.id;
+  }
+  const role = await getRole();
+  if (can(role, "assignSingers")) return requested;
+  // Shared-link member: no identity to enforce, so the picker stands.
+  return requested;
+}
 
 const LEARNABLE = [
   RepertoireKind.wantToLearn,
@@ -23,7 +40,8 @@ const LEARNABLE = [
 ] as const;
 
 const Upsert = z.object({
-  singerId: z.string().min(1, "Choose who this is for"),
+  // May be empty when signed in: the server fills in who you are.
+  singerId: z.string().default(""),
   title: z.string().trim().min(1, "A bhajan is required"),
   kind: z.enum([RepertoireKind.wantToLearn, RepertoireKind.learning, RepertoireKind.known]),
   note: z.string().trim().max(2000).optional(),
@@ -41,7 +59,8 @@ export async function upsertLearning(formData: FormData): Promise<void> {
     preferredPitch: String(formData.get("preferredPitch") ?? ""),
   });
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Could not save.");
-  const { singerId, title, kind, note, preferredPitch } = parsed.data;
+  const { title, kind, note, preferredPitch } = parsed.data;
+  const singerId = await resolveSingerId(parsed.data.singerId);
 
   const bhajan = await prisma.bhajan.findFirst({
     where: { title: { equals: title, mode: "insensitive" } },
@@ -85,6 +104,19 @@ export async function removeLearning(formData: FormData): Promise<void> {
   await requireCapability("manageOwnLearning");
   const id = String(formData.get("id") ?? "");
   if (!id) throw new Error("Nothing to remove.");
+
+  // A signed-in member may only remove from their own list.
+  const signedIn = await getSignedInSinger();
+  if (signedIn && !can(signedIn.role, "assignSingers")) {
+    const row = await prisma.singerRepertoire.findUnique({
+      where: { id },
+      select: { singerId: true },
+    });
+    if (!row || row.singerId !== signedIn.id) {
+      throw new Error("That entry is not on your list.");
+    }
+  }
+
   await prisma.singerRepertoire.delete({ where: { id } });
   revalidatePath("/my-list");
 }

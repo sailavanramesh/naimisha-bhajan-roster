@@ -3,7 +3,7 @@ import { Faustina, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { Nav } from "@/components/Nav";
 import { YantraFull } from "@/components/Yantra";
 import Link from "next/link";
-import { getRole, getSignedInSinger, ROLE_LABELS } from "@/lib/auth";
+import { getRole, getSignedInSinger, ROLE_LABELS, requireSignIn } from "@/lib/auth";
 
 /**
  * Three roles, deliberately paired (docs/SPEC.md §6).
@@ -42,6 +42,26 @@ export const viewport = {
   width: "device-width",
   initialScale: 1,
 };
+
+function SignInWall() {
+  return (
+    <div className="rounded-[14px] border border-card-edge bg-surface p-6 text-on-surface">
+      <h2 className="font-display text-2xl font-semibold">Naimiṣa Bhajan Roster</h2>
+      <p className="mt-2 max-w-lg text-sm text-on-surface-muted">
+        This is in testing with a small group. Sign in with the Google account the
+        coordinator added for you.
+      </p>
+      <p className="mt-4">
+        <Link
+          href="/signin"
+          className="inline-flex h-11 items-center rounded-[10px] border border-brass-ink/80 bg-brass-ink px-4 text-sm font-semibold text-ivory"
+        >
+          Continue with Google
+        </Link>
+      </p>
+    </div>
+  );
+}
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const role = await getRole();
@@ -82,7 +102,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 </div>
               </header>
 
-              <main id="main">{children}</main>
+              <main id="main">
+                {/*
+                  Closed testing: everything is behind sign-in. Enforced in the
+                  layout so it covers every page at once — a per-page check
+                  would eventually miss one.
+                */}
+                {requireSignIn && role === "viewer" ? <SignInWall /> : children}
+              </main>
             </div>
           </div>
         </div>

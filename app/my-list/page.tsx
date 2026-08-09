@@ -5,7 +5,7 @@ import {
   Card, CardContent, CardHeader, CardTitle, Button, Input, Textarea, Badge, SectionTitle,
 } from "@/components/ui";
 import { DeitySymbols } from "@/components/DeitySymbol";
-import { getRole, can } from "@/lib/auth";
+import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
 import { upsertLearning, removeLearning } from "./actions";
 
@@ -55,8 +55,19 @@ export default async function MyListPage({
   }
 
   const sp = await searchParams;
+  const signedIn = await getSignedInSinger();
   const singers = await prisma.singer.findMany({ orderBy: { name: "asc" } });
-  const singerId = sp.singer ?? singers[0]?.id;
+
+  /*
+   * Whose list is shown:
+   *   signed-in member -> always their own, and no picker at all.
+   *   editor           -> may look at anyone's, so the picker stays.
+   *   shared link      -> the interim case; picker, and the page says the
+   *                       lists are not private in that mode.
+   */
+  const isEditor = can(role, "assignSingers");
+  const lockedToSelf = Boolean(signedIn) && !isEditor;
+  const singerId = lockedToSelf ? signedIn!.id : (sp.singer ?? signedIn?.id ?? singers[0]?.id);
   const singer = singers.find((s) => s.id === singerId) ?? null;
 
   const [entries, labels] = await Promise.all([
@@ -88,25 +99,44 @@ export default async function MyListPage({
             <strong>Know it</strong> and it starts counting in the session builder, so you
             will be suggested for it.
           </p>
-          <p className="mt-2 rounded-[10px] border border-warn/40 bg-warn/[0.08] px-3 py-2 text-xs">
-            Until Google sign-in is set up, the app cannot tell members apart — pick who you
-            are below, and note that other members can see these lists too.
-          </p>
-          <div className="mt-3 flex flex-wrap gap-1">
-            {singers.map((s) => (
-              <Link key={s.id} href={`/my-list?singer=${s.id}`}>
-                <span
-                  className={
-                    s.id === singerId
-                      ? "rounded-full border border-brass/60 bg-brass/15 px-3 py-1 text-sm"
-                      : "rounded-full border border-rule-surface px-3 py-1 text-sm hover:bg-panel-hover"
-                  }
-                >
-                  {s.name}
-                </span>
-              </Link>
-            ))}
-          </div>
+          {lockedToSelf ? (
+            <p className="mt-2 text-sm">
+              Signed in as <strong>{signedIn!.name}</strong>. This list is yours — other
+              members cannot see or change it.
+            </p>
+          ) : signedIn ? (
+            <p className="mt-2 text-sm text-on-surface-muted">
+              You are an editor, so you can look at anyone&rsquo;s list.
+            </p>
+          ) : (
+            <p className="mt-2 rounded-[10px] border border-warn/40 bg-warn/[0.08] px-3 py-2 text-xs">
+              You are using a shared access link, so the app cannot tell members apart —
+              pick who you are below, and note that anyone with that link can see these
+              lists.{" "}
+              <Link href="/signin" className="underline underline-offset-2">
+                Sign in with Google
+              </Link>{" "}
+              to make your list private.
+            </p>
+          )}
+
+          {!lockedToSelf ? (
+            <div className="mt-3 flex flex-wrap gap-1">
+              {singers.map((s) => (
+                <Link key={s.id} href={`/my-list?singer=${s.id}`}>
+                  <span
+                    className={
+                      s.id === singerId
+                        ? "rounded-full border border-brass/60 bg-brass/15 px-3 py-1 text-sm"
+                        : "rounded-full border border-rule-surface px-3 py-1 text-sm hover:bg-panel-hover"
+                    }
+                  >
+                    {s.name}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          ) : null}
         </CardHeader>
 
         {singer ? (
