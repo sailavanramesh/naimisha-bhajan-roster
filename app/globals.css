@@ -24,6 +24,30 @@
   --accent2: 124 58 237; /* violet-600 */
 
   --danger: 220 38 38; /* red-600 */
+
+  /*
+   * Pitch palette (docs/SPEC.md §6). Introduced in Phase 1 for the Shruti
+   * Ladder; the full redesign that uses them everywhere is Phase 4.
+   *
+   * --kumkum is RESERVED FOR PITCH DEVIATION. Not buttons, not errors, not
+   * decoration. Reserving it to one meaning is what makes the ladder readable
+   * at a glance.
+   */
+  --ink: 18 20 28;
+  --ivory: 239 234 225;
+  --brass: 176 141 63;
+  --kumkum: 179 58 58;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 html,
