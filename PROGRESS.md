@@ -126,8 +126,8 @@ else.
 ## Next
 
 1. Push `v2` once the `gh` scope is refreshed.
-2. **Phase 1 — pitch intelligence.** Offset profiles, predicted pitch, comfort
-   ranges, the Shruti Ladder component, wired into the singer and bhajan pages.
+2. **Phase 2 — session builder.** Filters, shape templates, seeded generation,
+   lock/re-roll, save as draft.
 
 ---
 
@@ -221,6 +221,53 @@ history, so they were kept.
 
 ---
 
+## Phase 1 — pitch intelligence (complete)
+
+`lib/singerProfile.ts` (pure, 25 tests), `lib/pitchQueries.ts` (Prisma side),
+`components/ShrutiLadder.tsx`, wired into `/singers/[id]` and `/bhajans/[id]`.
+Both pages were rendered against the live database and their output inspected,
+not merely typechecked.
+
+- **Offset profiles**, overall and per raga (≥5 observations, per SPEC §4.D).
+- **Predicted pitch**: prefers a confident raga profile, falls back to the
+  overall profile, falls back again to the bare reference below 5 samples —
+  and says which, with the sample size, rather than implying false precision.
+- **Comfort band** on absolute Sa, handling the circularity of pitch classes
+  by rotating to the singer's modal Sa before taking percentiles. A naive
+  percentile over 0..11 reports an 11-semitone spread for two adjacent notes
+  either side of B/C.
+- **Shruti Ladder**: all 24 labels, reference in ivory, actual/predicted in
+  kumkum, deviation stated numerically, comfort band shaded, with a
+  screen-reader summary. `--kumkum` is reserved to pitch deviation, per §6.
+
+Note the ladder marks **two** rungs as the reference when Sa is shared between
+series — `1 Madhyam / F` and `4 Pancham / F` are the same Sa. That is correct
+and intended (CLAUDE.md rule 2), not a bug.
+
+**Profile counts differ slightly from the Phase 0 gate, by design.** The gate
+measures strictly against `historicalRecommendedPitch` (611 rows). The profiles
+fall back to the masterlist reference when no sheet recommendation exists, so
+they see a little more data — Prithvi is 92 rows here against 89 in the gate.
+Both are correct for their purpose; the gate is deliberately the stricter one.
+
+### The comfort-range flag was built, tested, and deliberately not shown
+
+SPEC §4.D asks for a proposed pitch outside the comfort band to be flagged.
+It is implemented and tested, but it is **not** rendered on the prediction
+table, for two reasons found in the data:
+
+1. A prediction is the singer's own median offset applied to the reference, so
+   it is inside their band **by construction**. The badge fired on most rows.
+2. The bands are wide — 5 to 10 semitones per singer, with every singer having
+   sung at 9–12 of the 12 possible Sa values. Absolute Sa is a property of the
+   *bhajan*, not the voice. The tight, singer-specific quantity is the offset.
+
+`isOutsideComfort` is kept and tested for use where it is meaningful: pitches a
+**human** proposes — coordinator overrides and confirmed-pitch entry — which
+arrive in Phase 3. See OPEN-QUESTIONS.
+
+---
+
 ## OPEN-QUESTIONS
 
 The seven questions from §9 of the spec are **answered** — see `docs/SPEC.md`
@@ -248,6 +295,13 @@ Still genuinely open, none blocking:
    blank. The shape templates need an ordering over tempo. Assumed
    `Slow < Medium Slow < Medium < Medium Fast < Fast` and "unspecified" never
    excluded — to confirm when Phase 2 starts.
+5. **Is the comfort range worth keeping as absolute Sa?** As specified it spans
+   5–10 semitones per singer and cannot discriminate, because absolute Sa is
+   set by the bhajan, not the voice. A band over each singer's *offsets* would
+   be tight and would actually catch an unusual proposal. This changes a
+   statistic named in SPEC §4.D, so it is logged rather than swapped in.
+   Conservative choice taken meanwhile: compute and display the Sa band as
+   information, but do not use it to flag anything yet.
 
 ### Also worth knowing
 
