@@ -223,7 +223,7 @@ export default async function BuildPage({
               work this week.
             </p>
 
-            <details className="rounded-[12px] border border-rule-surface bg-white/[0.03]">
+            <details className="rounded-[12px] border border-rule-surface bg-panel">
               <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold">
                 Filters
               </summary>
@@ -310,7 +310,7 @@ export default async function BuildPage({
                   // SPEC §6: one orchestrated moment. Unlocked slots settle into
                   // place in sequence after a re-roll; locked ones stay put and
                   // carry no animation. `prefers-reduced-motion` disables it.
-                  className={`rounded-[12px] border border-rule-surface bg-white/[0.03] p-3${slot.locked ? "" : " settle"}`}
+                  className={`rounded-[12px] border border-rule-surface bg-panel p-3${slot.locked ? "" : " settle"}`}
                   style={slot.locked ? undefined : { animationDelay: `${(slot.position - 1) * 70}ms` }}
                 >
                   <div className="flex items-start justify-between gap-3">

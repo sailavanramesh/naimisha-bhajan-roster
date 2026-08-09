@@ -134,7 +134,7 @@ export default async function RosterSessionPage({
           />
 
           {/* Collapsible: Instruments */}
-          <details className="rounded-[12px] border border-rule-surface bg-white/[0.03]">
+          <details className="rounded-[12px] border border-rule-surface bg-panel">
             <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold flex items-center justify-between">
               <span>Instruments</span>
               <span className="text-xs font-normal text-on-surface-muted">
@@ -146,7 +146,7 @@ export default async function RosterSessionPage({
 
             <div className="px-4 pb-4 pt-0 grid gap-3">
               {canEdit ? (
-                <form action={onAddInstrument} className="rounded-[12px] border bg-white/[0.05] p-3 grid gap-2">
+                <form action={onAddInstrument} className="rounded-[12px] border bg-panel p-3 grid gap-2">
                   <div className="text-sm font-medium">Add instrument</div>
                   <Input name="instrument" placeholder="Instrument (e.g., Tabla)" />
                   <Input name="person" placeholder="Person (optional)" />
@@ -161,7 +161,7 @@ export default async function RosterSessionPage({
                   <div className="text-sm text-on-surface-muted">No instrument assignments.</div>
                 ) : (
                   session.instruments.map((i) => (
-                    <div key={i.id} className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-3 text-sm">
+                    <div key={i.id} className="rounded-[12px] border border-rule-surface bg-panel p-3 text-sm">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="font-medium">{i.instrument}</div>
@@ -189,7 +189,7 @@ export default async function RosterSessionPage({
           </details>
 
           {/* Collapsible: Notes */}
-          <details className="rounded-[12px] border border-rule-surface bg-white/[0.03]">
+          <details className="rounded-[12px] border border-rule-surface bg-panel">
             <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold flex items-center justify-between">
               <span>Notes</span>
               <span className="text-xs font-normal text-on-surface-muted">
@@ -211,7 +211,7 @@ export default async function RosterSessionPage({
                   </div>
                 </form>
               ) : (
-                <div className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-3 text-sm whitespace-pre-wrap">
+                <div className="rounded-[12px] border border-rule-surface bg-panel p-3 text-sm whitespace-pre-wrap">
                   {session.notes ?? "—"}
                 </div>
               )}

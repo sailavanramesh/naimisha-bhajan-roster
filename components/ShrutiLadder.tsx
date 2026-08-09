@@ -81,7 +81,7 @@ export function ShrutiLadder({
                 // shading "inside" covered nearly every row and left the few
                 // outside rows looking highlighted — emphasis on exactly the
                 // wrong thing. The two rows that matter carry marks instead.
-                isActual || isReference ? 'bg-white/[0.06]' : 'bg-transparent',
+                isActual || isReference ? 'bg-panel' : 'bg-transparent',
               )}
             >
               {/* Marker gutter. Fixed width so labels stay aligned. */}

@@ -83,7 +83,7 @@ export default async function FairnessPage({
                 className={
                   d === windowDays
                     ? "rounded-full border border-brass/60 bg-brass/15 px-3 py-1"
-                    : "rounded-full border border-rule-surface px-3 py-1 hover:bg-white/[0.06]"
+                    : "rounded-full border border-rule-surface px-3 py-1 hover:bg-panel-hover"
                 }
               >
                 {d === 3650 ? "All time" : `${d} days`}
@@ -105,7 +105,7 @@ export default async function FairnessPage({
                 </Link>
 
                 {/* A plain proportional bar. No chart library for eleven rows. */}
-                <div className="h-5 overflow-hidden rounded-full bg-white/[0.06]">
+                <div className="h-5 overflow-hidden rounded-full bg-panel">
                   <div
                     className={
                       s.verdict === "under"
@@ -198,7 +198,7 @@ function CountList({ rows }: { rows: Array<{ name: string; count: number }> }) {
         <li key={r.name} className="grid grid-cols-[1fr_auto] items-center gap-2">
           <div className="min-w-0">
             <div className="truncate text-sm">{r.name}</div>
-            <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+            <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-panel">
               <div className="h-full bg-brass/50" style={{ width: `${(r.count / max) * 100}%` }} />
             </div>
           </div>

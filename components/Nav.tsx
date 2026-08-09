@@ -78,14 +78,14 @@ export function Nav() {
               "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm",
               active
                 ? "bg-brass/15 text-on-ground ring-1 ring-brass/40"
-                : "text-on-ground-muted hover:bg-white/[0.06] hover:text-on-ground"
+                : "text-on-ground-muted hover:bg-panel-hover hover:text-on-ground"
             )}
             onClick={() => setMobileOpen(false)}
           >
             <div
               className={clsx(
                 "flex h-8 w-8 items-center justify-center rounded-lg border text-sm font-semibold",
-                active ? "border-brass/50 bg-brass/20 text-on-ground" : "border-rule bg-white/[0.04]"
+                active ? "border-brass/50 bg-brass/20 text-on-ground" : "border-rule bg-panel"
               )}
             >
               {item.short}

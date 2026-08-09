@@ -168,7 +168,7 @@ export default async function RosterPage({
 
             <div className="flex items-center gap-2">
               <Link
-                className="rounded-[12px] border px-3 py-2 text-sm hover:bg-white/[0.05]"
+                className="rounded-[12px] border px-3 py-2 text-sm hover:bg-panel-hover"
                 href={`/roster?view=${view === "calendar" ? "list" : "calendar"}`}
               >
                 {view === "calendar" ? "List view" : "Calendar view"}
@@ -215,7 +215,7 @@ export default async function RosterPage({
                   <Link
                     key={s.id}
                     href={`/roster/${s.id}`}
-                    className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-3 hover:bg-white/[0.05]"
+                    className="rounded-[12px] border border-rule-surface bg-panel p-3 hover:bg-panel-hover"
                   >
                     <div className="text-sm font-medium">
                       {new Date(s.date).toLocaleDateString(undefined, {

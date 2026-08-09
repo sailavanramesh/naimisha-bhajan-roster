@@ -103,7 +103,7 @@ export function CalendarView(props: { initialMonth: string; sessions: CalSession
   const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
   return (
-    <div className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-4 sm:p-5">
+    <div className="rounded-[12px] border border-rule-surface bg-panel p-4 sm:p-5">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -117,21 +117,21 @@ export function CalendarView(props: { initialMonth: string; sessions: CalSession
           <button
             type="button"
             onClick={() => goToMonth(addMonths(monthStart, -1))}
-            className="rounded-[12px] border border-rule-surface bg-white/[0.03] px-3 py-2 text-sm hover:bg-white/[0.05]"
+            className="rounded-[12px] border border-rule-surface bg-panel px-3 py-2 text-sm hover:bg-panel-hover"
           >
             Prev
           </button>
           <button
             type="button"
             onClick={goToday}
-            className="rounded-[12px] border border-rule-surface bg-white/[0.03] px-3 py-2 text-sm hover:bg-white/[0.05]"
+            className="rounded-[12px] border border-rule-surface bg-panel px-3 py-2 text-sm hover:bg-panel-hover"
           >
             Today
           </button>
           <button
             type="button"
             onClick={() => goToMonth(addMonths(monthStart, 1))}
-            className="rounded-[12px] border border-rule-surface bg-white/[0.03] px-3 py-2 text-sm hover:bg-white/[0.05]"
+            className="rounded-[12px] border border-rule-surface bg-panel px-3 py-2 text-sm hover:bg-panel-hover"
           >
             Next
           </button>
@@ -169,8 +169,8 @@ export function CalendarView(props: { initialMonth: string; sessions: CalSession
               onClick={() => setSelectedKey(key)}
               className={[
                 "relative rounded-[12px] border p-2 text-left transition",
-                inMonth ? "bg-white/[0.03]" : "bg-white/[0.05] text-gray-400",
-                isSelected ? "border-black/30 ring-2 ring-black/10" : "hover:bg-white/[0.05]",
+                inMonth ? "bg-panel" : "bg-panel text-gray-400",
+                isSelected ? "border-black/30 ring-2 ring-black/10" : "hover:bg-panel-hover",
               ].join(" ")}
               title={
                 showBadge
@@ -210,7 +210,7 @@ export function CalendarView(props: { initialMonth: string; sessions: CalSession
       </div>
 
       {/* Selected day panel */}
-      <div className="mt-5 rounded-[12px] border bg-white/[0.05] p-4">
+      <div className="mt-5 rounded-[12px] border bg-panel p-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="text-sm font-semibold text-gray-900">
@@ -232,7 +232,7 @@ export function CalendarView(props: { initialMonth: string; sessions: CalSession
 
           <Link
             href="/roster?view=list"
-            className="self-start rounded-[12px] border border-rule-surface bg-white/[0.03] px-3 py-2 text-sm hover:bg-white/[0.05]"
+            className="self-start rounded-[12px] border border-rule-surface bg-panel px-3 py-2 text-sm hover:bg-panel-hover"
           >
             Switch to list
           </Link>
@@ -240,13 +240,13 @@ export function CalendarView(props: { initialMonth: string; sessions: CalSession
 
         <div className="mt-3 grid gap-2">
           {selectedSessions.length === 0 ? (
-            <div className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-3 text-sm text-on-surface-muted">Nothing recorded yet.</div>
+            <div className="rounded-[12px] border border-rule-surface bg-panel p-3 text-sm text-on-surface-muted">Nothing recorded yet.</div>
           ) : (
             selectedSessions.map((s) => (
               <Link
                 key={s.id}
                 href={`/roster/${s.id}`}
-                className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-3 hover:bg-white/[0.05]"
+                className="rounded-[12px] border border-rule-surface bg-panel p-3 hover:bg-panel-hover"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="text-sm font-semibold">Open session</div>

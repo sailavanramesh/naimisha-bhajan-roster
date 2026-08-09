@@ -103,12 +103,12 @@ export default async function BhajanPage({
 
         <CardContent className="grid gap-4">
           <div className="grid gap-2 sm:grid-cols-2">
-            <div className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-3">
+            <div className="rounded-[12px] border border-rule-surface bg-panel p-3">
               <div className="text-xs font-semibold text-on-surface-muted">Gents pitch</div>
               <div className="mt-1 text-sm">{bhajan.referenceGentsPitch ?? "—"}</div>
             </div>
 
-            <div className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-3">
+            <div className="rounded-[12px] border border-rule-surface bg-panel p-3">
               <div className="text-xs font-semibold text-on-surface-muted">Ladies pitch</div>
               <div className="mt-1 text-sm">{bhajan.referenceLadiesPitch ?? "—"}</div>
             </div>
@@ -124,7 +124,7 @@ export default async function BhajanPage({
             ) : (
               <div className="overflow-x-auto rounded-[12px] border border-rule-surface">
                 <table className="w-full text-sm">
-                  <thead className="bg-white/[0.05] text-left">
+                  <thead className="bg-panel text-left">
                     <tr className="border-b border-rule-surface">
                       <th className="px-3 py-2 font-semibold">Singer</th>
                       <th className="px-3 py-2 font-semibold">Date</th>
@@ -184,7 +184,7 @@ export default async function BhajanPage({
               </p>
               <div className="overflow-x-auto rounded-[12px] border border-rule-surface">
                 <table className="w-full text-sm">
-                  <thead className="bg-white/[0.05] text-left">
+                  <thead className="bg-panel text-left">
                     <tr className="border-b border-rule-surface">
                       <th className="px-3 py-2 font-semibold">Singer</th>
                       <th className="px-3 py-2 font-semibold">Pitch</th>
@@ -234,12 +234,12 @@ export default async function BhajanPage({
           ) : null}
 
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-3">
+            <div className="rounded-[12px] border border-rule-surface bg-panel p-3">
               <div className="text-xs font-semibold text-on-surface-muted mb-2">Lyrics</div>
               <div className="text-sm whitespace-pre-wrap">{bhajan.lyrics ?? "—"}</div>
             </div>
 
-            <div className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-3">
+            <div className="rounded-[12px] border border-rule-surface bg-panel p-3">
               <div className="text-xs font-semibold text-on-surface-muted mb-2">Meaning</div>
               <div className="text-sm whitespace-pre-wrap">{bhajan.meaning ?? "—"}</div>
             </div>

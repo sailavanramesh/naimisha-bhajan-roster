@@ -20,6 +20,13 @@ const config: Config = {
         kumkum: rgb("kumkum"),
         muted: rgb("muted"),
         warn: rgb("warn"),
+        "brass-ink": rgb("brass-ink"),
+        panel: {
+          DEFAULT: rgb("panel"),
+          hover: rgb("panel-hover"),
+        },
+        field: rgb("field"),
+        "card-edge": rgb("card-edge"),
         ground: {
           DEFAULT: rgb("ground"),
           raised: rgb("ground-raised"),

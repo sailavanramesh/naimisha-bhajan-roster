@@ -371,14 +371,27 @@ and still be the best available choice.
 
 ---
 
-## Phase 4 — redesign (complete)
+## Phase 4 — redesign (complete; LIGHT theme)
 
 The palette, typography and motion from SPEC §6, applied across every page.
 `app/globals.css` holds five tokens and nothing else; `tailwind.config.ts`
 exposes them so components never hand-mix colour.
 
-The ground is the lacquered harmonium case, surfaces are ivory keys, brass
-carries structure. **`--kumkum` appears in exactly one component** — the
+**The app is light**, on Sailavan's call after seeing both. Warm paper ground,
+white cards, brass rules and labels. It was built dark first and flipped; the
+flip was a change to the `:root` block in `app/globals.css` and nothing else,
+because every component reads a SEMANTIC token (`--panel`, `--field`,
+`--card-edge`, `--brass-ink`) rather than a raw colour. Flipping back is the
+same one-block change.
+
+Two things the flip forced, worth keeping in mind:
+
+- **Brass is not a text colour on white.** `#B08D3F` is ~2.9:1, which fails for
+  body copy. `--brass-ink` is the same brass darkened until it passes; brass
+  itself stays for fills, rules and marks.
+- **`bg-white/[0.03]` is not a panel.** It reads as a raised panel on a dark
+  ground and as literally nothing on a light one. That is why the inner-panel,
+  field, hover and card-edge colours are all named tokens now. **`--kumkum` appears in exactly one component** — the
 Shruti Ladder and the pitch figures. A separate `--warn` exists precisely so
 warnings are never tempted to borrow it, and the destructive button variant is
 carried by its label and outline rather than colour.

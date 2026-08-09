@@ -19,7 +19,7 @@ export default async function InstrumentsPage() {
         <CardContent>
           <div className="grid gap-2">
             {sessions.map((s) => (
-              <div key={s.id} className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-3">
+              <div key={s.id} className="rounded-[12px] border border-rule-surface bg-panel p-3">
                 <div className="text-sm font-medium">
                   {new Date(s.date).toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric" })}
                 </div>

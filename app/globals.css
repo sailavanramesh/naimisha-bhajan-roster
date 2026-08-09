@@ -17,46 +17,50 @@
  */
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 
-  /* The five */
-  /*
-   * Warmed from the spec's #12141C toward the rosewood the same paragraph
-   * names. A neutral indigo-black reads as a generic dark dashboard; a deep
-   * lacquered plum-black reads as the instrument's case, which is the point.
-   */
-  --ink: 26 18 23; /* deep lacquered rosewood-black. The ground. */
-  --ivory: 239 234 225; /* #EFEAE1 — warm off-white. Surface, key white. */
-  --brass: 176 141 63; /* #B08D3F — aged brass. Structure and accent. */
-  --kumkum: 179 58 58; /* #B33A3A — deep vermilion. PITCH DEVIATION ONLY. */
-  --muted: 122 129 143; /* desaturated slate. Secondary text, rules. */
+  /* The five (docs/SPEC.md §6) */
+  --ink: 26 18 23; /* deep lacquered rosewood-black */
+  --ivory: 250 247 242; /* warm paper */
+  --brass: 176 141 63; /* #B08D3F — aged brass. Fills, rules, marks. */
+  --kumkum: 168 46 46; /* deep vermilion. PITCH DEVIATION ONLY. */
+  --muted: 122 110 112; /* warm desaturated grey */
 
   /*
-   * Derived roles.
+   * Derived roles. Light theme: warm paper ground, white cards, brass rules.
    *
-   * Surfaces are DARK and translucent, not ivory slabs. The harmonium's case
-   * is lacquered wood with brass fittings; the ivory is the keys and the
-   * ladder's reference marker, not every panel. Big cream blocks on black read
-   * as heavy and generic — the refinement is in hairline brass rules, warm
-   * near-black panels, and letterspaced small-caps labels.
-   *
-   * `--ivory` therefore lives mostly in TEXT and in the ladder, which is
-   * exactly where the spec wants the eye to go.
+   * Everything below is semantic, so a theme flip is a change to THIS BLOCK
+   * and nothing else. Components must never reach for a raw colour —
+   * `bg-white/[0.03]` reads as a panel on a dark ground and as nothing at all
+   * on a light one, which is exactly the trap this avoids.
    */
-  --ground: 24 16 21;
-  --ground-raised: 32 22 28;
-  /* Panels: a warm lift off the lacquer, not a different material. */
-  --surface: 38 27 33;
-  --surface-sunk: 30 21 26;
-  --on-ground: 235 228 219;
-  --on-ground-muted: 165 149 152;
-  --on-surface: 236 229 220;
-  --on-surface-muted: 168 152 155;
-  --rule: 58 42 50;
-  --rule-on-surface: 64 47 56;
+  --ground: 247 243 237;
+  --ground-raised: 252 250 246;
+  --surface: 255 255 255;
+  --surface-sunk: 249 246 241;
+
+  --on-ground: 26 18 23;
+  --on-ground-muted: 122 110 112;
+  --on-surface: 26 18 23;
+  --on-surface-muted: 118 106 108;
+
+  --rule: 228 220 209;
+  --rule-on-surface: 231 224 214;
+
+  /* Inner panels, hovers and fields — named, so they flip with the theme. */
+  --panel: 250 247 242;
+  --panel-hover: 244 239 231;
+  --field: 255 255 255;
+  --card-edge: 224 213 196;
+
+  /*
+   * Brass at #B08D3F is ~2.9:1 on white — fine as a fill or a rule, NOT as
+   * small text. This is the same brass darkened until it passes for body copy.
+   */
+  --brass-ink: 124 95 32;
 
   /* Deliberately NOT kumkum. Warnings are not pitch deviation. */
-  --warn: 198 156 66;
+  --warn: 146 106 20;
 }
 
 html,
@@ -74,8 +78,8 @@ body {
    */
   /* One warm bloom, as if light caught the reed plate. */
   background-image:
-    radial-gradient(110% 65% at 50% -8%, rgba(var(--brass), 0.14), transparent 60%),
-    radial-gradient(90% 55% at 85% 105%, rgba(var(--kumkum), 0.07), transparent 58%);
+    radial-gradient(110% 60% at 50% -10%, rgba(var(--brass), 0.10), transparent 62%),
+    radial-gradient(80% 50% at 88% 108%, rgba(var(--kumkum), 0.04), transparent 60%);
   background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

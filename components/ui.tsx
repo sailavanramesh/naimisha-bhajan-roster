@@ -24,8 +24,8 @@ export function Card(props: { children: React.ReactNode; className?: string }) {
       className={cn(
         // A warm panel lifted off the lacquer, edged with a brass hairline —
         // not a cream slab. The top highlight is the light catching the edge.
-        "rounded-[14px] border border-brass/[0.16] bg-surface/70 text-on-surface backdrop-blur-sm",
-        "shadow-[inset_0_1px_0_rgb(var(--ivory)/0.05),0_24px_48px_-32px_rgb(0_0_0/0.85)]",
+        "rounded-[14px] border border-card-edge bg-surface text-on-surface",
+        "shadow-[0_1px_2px_rgb(var(--ink)/0.04),0_12px_28px_-20px_rgb(var(--ink)/0.18)]",
         props.className
       )}
     >
@@ -57,7 +57,7 @@ export function SectionTitle(props: { children: React.ReactNode; className?: str
       className={cn(
         // Letterspaced small caps in brass: the quiet structural label that
         // makes a page read as composed rather than assembled.
-        "text-[11px] font-semibold uppercase tracking-[0.18em] text-brass/80",
+        "text-[11px] font-semibold uppercase tracking-[0.18em] text-brass-ink",
         props.className
       )}
     >
@@ -68,8 +68,8 @@ export function SectionTitle(props: { children: React.ReactNode; className?: str
 
 // ---------- Inputs ----------
 const fieldBase =
-  "h-11 w-full rounded-[10px] border border-rule-surface bg-black/25 px-3 text-sm text-on-surface " +
-  "placeholder:text-on-surface-muted/70 transition-colors hover:border-brass/40 " +
+  "h-11 w-full rounded-[10px] border border-rule-surface bg-field px-3 text-sm text-on-surface " +
+  "placeholder:text-on-surface-muted/70 transition-colors hover:border-brass/50 " +
   "disabled:cursor-not-allowed disabled:opacity-50";
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
@@ -118,9 +118,9 @@ export function Badge(props: {
 }) {
   const tone = props.tone ?? "neutral";
   const tones: Record<string, string> = {
-    brass: "border-brass/40 bg-brass/[0.14] text-brass",
-    warn: "border-warn/40 bg-warn/[0.12] text-warn",
-    neutral: "border-rule-surface bg-white/[0.04] text-on-surface-muted",
+    brass: "border-brass/40 bg-brass/[0.14] text-brass-ink",
+    warn: "border-warn/45 bg-warn/[0.10] text-warn",
+    neutral: "border-rule-surface bg-panel text-on-surface-muted",
   };
 
   return (
@@ -165,9 +165,9 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export function Button({ className, variant = "secondary", ...props }: ButtonProps) {
   const variants: Record<string, string> = {
-    primary: "border border-brass/70 bg-brass/90 text-ink hover:bg-brass font-semibold",
-    secondary: "border border-rule-surface bg-white/[0.04] text-on-surface hover:border-brass/40 hover:bg-white/[0.07]",
-    quiet: "border border-transparent text-on-surface-muted hover:bg-white/[0.05] hover:text-on-surface",
+    primary: "border border-brass-ink/80 bg-brass-ink text-ivory hover:bg-brass-ink/90 font-semibold",
+    secondary: "border border-rule-surface bg-surface text-on-surface hover:border-brass/50 hover:bg-panel",
+    quiet: "border border-transparent text-on-surface-muted hover:bg-panel-hover hover:text-on-surface",
     // NOT kumkum. SPEC §6 reserves it for pitch deviation, explicitly
     // excluding buttons and errors. A destructive action is carried by its
     // label and a firm outline instead.

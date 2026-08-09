@@ -100,7 +100,7 @@ export default async function Page() {
             {upcoming.length === 0 ? (
               <p className="text-sm text-on-surface-muted">
                 Nothing scheduled in the next 60 days.{" "}
-                <Link href="/build" className="text-brass underline-offset-2 hover:underline">
+                <Link href="/build" className="text-brass-ink underline-offset-2 hover:underline">
                   Build one
                 </Link>
                 .
@@ -110,7 +110,7 @@ export default async function Page() {
                 <Link
                   key={s.id}
                   href={`/roster/${s.id}`}
-                  className="group rounded-[12px] border border-rule-surface bg-white/[0.03] p-3 transition-colors hover:border-brass/40 hover:bg-white/[0.06]"
+                  className="group rounded-[12px] border border-rule-surface bg-panel p-3 transition-colors hover:border-brass/40 hover:bg-panel-hover"
                 >
                   <div className="flex items-baseline justify-between gap-3">
                     <span className="font-display text-lg">
@@ -170,7 +170,7 @@ export default async function Page() {
                   <Link
                     key={s.singerId}
                     href={`/singers/${s.singerId}`}
-                    className="flex items-baseline justify-between gap-3 border-b border-rule-surface py-1 last:border-b-0 hover:text-brass"
+                    className="flex items-baseline justify-between gap-3 border-b border-rule-surface py-1 last:border-b-0 hover:text-brass-ink"
                   >
                     <span className="text-sm">{s.name}</span>
                     <span className="text-xs text-on-surface-muted">
@@ -181,7 +181,7 @@ export default async function Page() {
               )}
               <Link
                 href="/fairness"
-                className="mt-1 text-xs text-brass underline-offset-2 hover:underline"
+                className="mt-1 text-xs text-brass-ink underline-offset-2 hover:underline"
               >
                 See the whole picture →
               </Link>
@@ -207,14 +207,14 @@ function Action({
   return (
     <Link
       href={href}
-      className="group rounded-[14px] border border-brass/[0.16] bg-surface/70 p-5 transition-colors hover:border-brass/45 hover:bg-surface"
+      className="group rounded-[14px] border border-card-edge bg-surface p-5 transition-colors hover:border-brass/45 hover:bg-surface"
     >
-      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brass/80">
+      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-brass-ink">
         {label}
       </div>
       <div className="mt-2 font-display text-xl text-on-surface">{title}</div>
       <p className="mt-1 text-sm leading-relaxed text-on-surface-muted">{body}</p>
-      <span className="mt-3 inline-block text-sm text-brass opacity-0 transition-opacity group-hover:opacity-100">
+      <span className="mt-3 inline-block text-sm text-brass-ink opacity-0 transition-opacity group-hover:opacity-100">
         Open →
       </span>
     </Link>
