@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle, Input, Button } from "@/components/ui";
 import { SessionSingersGrid } from "./SessionSingersGrid";
 import { getPitchSuggestions } from "@/lib/pitchSuggestions";
+import { computeRecommendedPitch } from "@/lib/computeRecommendedPitch";
 import { deleteInstrumentRow, updateSessionNotes } from "./actions";
 import { EnableEditForm } from "@/components/EnableEditForm";
 
@@ -21,9 +22,9 @@ export default async function RosterSessionPage({
   const session = await prisma.session.findUnique({
     where: { id: sessionId },
     include: {
-      singers: {
+      slots: {
         include: { singer: true, bhajan: true },
-        orderBy: [{ slot: "asc" }, { createdAt: "asc" }],
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
       },
       instruments: { orderBy: { createdAt: "asc" } },
     },
@@ -37,7 +38,7 @@ export default async function RosterSessionPage({
     ? await prisma.singer.findMany({ orderBy: { name: "asc" } })
     : [];
 
-  const initialRows = session.singers.map((x) => ({
+  const initialRows = session.slots.map((x) => ({
     id: x.id,
     singerId: x.singerId,
     singerName: x.singer.name,
@@ -47,8 +48,12 @@ export default async function RosterSessionPage({
     festivalBhajanTitle: x.festivalBhajanTitle,
     confirmedPitch: x.confirmedPitch,
     alternativeTablaPitch: x.alternativeTablaPitch,
-    recommendedPitch: x.recommendedPitch,
-    raga: x.raga,
+    // Derived on read (CLAUDE.md rule 5), not stored. Where the slot's title
+    // never resolved to a masterlist bhajan — 11 rows do not — fall back to the
+    // recommendation the sheet recorded, so the column is not blank.
+    recommendedPitch:
+      computeRecommendedPitch(x.singer.gender, x.bhajan) || x.historicalRecommendedPitch || null,
+    raga: x.bhajan?.raga ?? null,
   }));
 
   const suggestions = await getPitchSuggestions();

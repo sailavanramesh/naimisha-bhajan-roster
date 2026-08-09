@@ -1,105 +1,239 @@
+// Naimisha Bhajan Roster — v2 schema.
+//
+// Changes from v1 follow docs/SPEC.md §5. Read that before editing.
+//
+// Two columns in this file are historical record and must never be recomputed,
+// overwritten, or "cleaned up": SessionSlot.confirmedPitch (what the singer
+// actually sang) and SessionSlot.historicalRecommendedPitch (what the sheet
+// recommended at the time). The 709 rows carrying them exist nowhere else.
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
+  provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
+}
+
+/// Which reference-pitch track in the masterlist applies to a singer.
+/// These are the group's own words; do not translate them.
+enum Gender {
+  Gents
+  Ladies
+}
+
+/// Which drone the shruti box plays against Sa. Display metadata only —
+/// it does NOT change the pitch. See CLAUDE.md rule 2.
+enum Series {
+  Madhyam
+  Pancham
+}
+
+enum SessionType {
+  Weekday
+  Sunday
+  Festival
+}
+
+enum SessionStatus {
+  Draft
+  Published
+}
+
+enum RepertoireKind {
+  known
+  festival
+}
+
+/// Slot rules are mostly advisory. Confirmed with Sailavan (SPEC §9.1): the
+/// Ganesha opener and the Sai closer are strong habits, not rules. A `soft`
+/// violation is down-weighted and surfaced; it never fails generation.
+enum RuleStrength {
+  hard
+  soft
+}
+
+enum Role {
+  coordinator
+  singer
+  viewer
 }
 
 model Singer {
   id        String   @id @default(cuid())
   name      String   @unique
-  gender    String?
+  gender    Gender?
+  /// Google account address, set by a coordinator. Sign-in never creates a
+  /// singer; an unlisted address gets viewer access only (SPEC §9.5).
+  email     String?  @unique
+  role      Role     @default(singer)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sessionSingers SessionSinger[]
-  festivalBhajans FestivalBhajan[]
+  slots        SessionSlot[]
+  repertoire   SingerRepertoire[]
+  availability SingerAvailability[]
 }
 
 model Bhajan {
-  id        String   @id @default(cuid())
-  title     String   @unique
-  url       String?
-  singers   String?
-  meaning   String?
-  lyrics    String?
-  audio     String?
-  deity     String?
-  language  String?
-  raga      String?
-  beat      String?
-  level     String?
-  tempo     String?
-  referenceGentsPitch  String?
-  referenceLadiesPitch String?
-  musicNotesForFirstLine String?
-  notesRange String?
-  tutorial  String?
-  sheetMusic String?
-  songTags  String?
-  glossaryTerms String?
-  debugFile String?
-  video     String?
-  generalComments String?
-  karaokeTracksForPractice String?
-  goldenVoice String?
-  instrumental String?
-  extra      String?
+  id       String  @id @default(cuid())
+  title    String  @unique
+  url      String?
+  singers  String?
+  meaning  String? @db.Text
+  lyrics   String? @db.Text
+  audio    String?
+  /// Raw comma/space-delimited source values, kept for provenance.
+  /// Query through the join tables below, never with LIKE.
+  deity    String?
+  language String?
+  raga     String?
+  beat     String?
+  level    String?
+  tempo    String?
+
+  referenceGentsPitch      String?
+  referenceLadiesPitch     String?
+  musicNotesForFirstLine   String? @db.Text
+  notesRange               String?
+  tutorial                 String?
+  sheetMusic               String?
+  songTags                 String?
+  glossaryTerms            String? @db.Text
+  debugFile                String?
+  video                    String?
+  generalComments          String? @db.Text
+  karaokeTracksForPractice String? @db.Text
+  goldenVoice              String?
+  instrumental             String?
+  extra                    String?
+
+  /// Generated column maintained by Postgres — see the migration. Not
+  /// selectable through the client; search via $queryRaw against the GIN index.
+  searchVector Unsupported("tsvector")?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  sessionSingers SessionSinger[]
-  festivalBhajans FestivalBhajan[]
+  slots      SessionSlot[]
+  repertoire SingerRepertoire[]
+  deities    BhajanDeity[]
+  tags       BhajanTag[]
+
+  @@index([searchVector], type: Gin)
+  @@index([raga])
+  @@index([tempo])
+}
+
+/// 21 values, `Sarva Dharma` meaning multi-faith. A bhajan may list several.
+model Deity {
+  id   String @id @default(cuid())
+  name String @unique
+
+  bhajans BhajanDeity[]
+}
+
+model BhajanDeity {
+  bhajanId String
+  deityId  String
+
+  bhajan Bhajan @relation(fields: [bhajanId], references: [id], onDelete: Cascade)
+  deity  Deity  @relation(fields: [deityId], references: [id], onDelete: Cascade)
+
+  @@id([bhajanId, deityId])
+  @@index([deityId])
+}
+
+model Tag {
+  id   String @id @default(cuid())
+  name String @unique
+
+  bhajans BhajanTag[]
+}
+
+model BhajanTag {
+  bhajanId String
+  tagId    String
+
+  bhajan Bhajan @relation(fields: [bhajanId], references: [id], onDelete: Cascade)
+  tag    Tag    @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([bhajanId, tagId])
+  @@index([tagId])
 }
 
 model Session {
-  id        String   @id @default(cuid())
-  date      DateTime @unique
-  notes     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String        @id @default(cuid())
+  /// A session date, not a timestamp. Handled in Australia/Melbourne.
+  date       DateTime      @unique @db.Date
+  type       SessionType   @default(Weekday)
+  status     SessionStatus @default(Published)
+  /// Seed for the generator, so a generated set is reproducible and shareable.
+  seed       String?
+  templateId String?
+  notes      String?       @db.Text
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
 
-  singers     SessionSinger[]
+  template    SessionTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  slots       SessionSlot[]
   instruments SessionInstrument[]
+
+  @@index([templateId])
+  @@index([date])
 }
 
-model SessionSinger {
-  id        String   @id @default(cuid())
+/// One ordered slot in a session: a singer, a bhajan, and the pitch they sang.
+/// Renamed from v1's `SessionSinger`; `slot Int?` became `position Int`.
+model SessionSlot {
+  id        String @id @default(cuid())
   sessionId String
   singerId  String
   bhajanId  String?
-  slot      Int?
+  /// Ordered from 1. Order carries meaning — the set builds.
+  position  Int
 
-  bhajanTitle String?
-  festivalBhajanTitle String?
+  /// Free-text fallbacks preserved from the sheet for rows whose title does not
+  /// resolve to a masterlist bhajan.
+  bhajanTitle           String?
+  festivalBhajanTitle   String?
   inputOnlyCustomBhajan String?
 
+  /// HISTORICAL RECORD. What the singer actually sang at. Differs from the
+  /// recommendation in 381 of 611 rows; that difference is the product.
+  /// Never overwrite this with a computed value.
   confirmedPitch String?
+
+  /// HISTORICAL RECORD. The recommendation as it stood in the source sheet
+  /// (`Recommended Pitch as Sai Rythms`). CLAUDE.md rule 5 says the app's live
+  /// recommendation is derived from the masterlist and never stored — that
+  /// still holds, and nothing reads this column to produce one. It is kept
+  /// because the singer-offset regression table is defined against it and must
+  /// reproduce from the database. Of the 618 rows where both this and a
+  /// masterlist reference exist, 617 agree; the one that does not is a known
+  /// typo, logged at seed time.
+  historicalRecommendedPitch String?
+
   alternativeTablaPitch String?
-  recommendedPitch String?
-  raga    String?
-  lyrics  String?
-  meaning String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   singer  Singer  @relation(fields: [singerId], references: [id], onDelete: Cascade)
-  bhajan   Bhajan? @relation(fields: [bhajanId], references: [id], onDelete: SetNull)
+  bhajan  Bhajan? @relation(fields: [bhajanId], references: [id], onDelete: SetNull)
 
+  @@unique([sessionId, position])
   @@index([sessionId])
   @@index([singerId])
   @@index([bhajanId])
 }
 
 model SessionInstrument {
-  id        String   @id @default(cuid())
-  sessionId String
+  id         String  @id @default(cuid())
+  sessionId  String
   instrument String
   person     String?
 
@@ -111,18 +245,97 @@ model SessionInstrument {
   @@index([sessionId])
 }
 
-model PitchLookup {
-  id        String @id @default(cuid())
-  label     String @unique
-  tablaPitch String?
-  value     Float?
+/// What a singer knows or has curated for a festival. Replaces v1's
+/// `FestivalBhajan` and the two wide sheets it came from.
+model SingerRepertoire {
+  id       String         @id @default(cuid())
+  singerId String
+  bhajanId String?
+  /// Title as written in the source sheet, kept even when it resolves.
+  title    String
+  kind     RepertoireKind
+  order    Int?
+
+  createdAt DateTime @default(now())
+
+  singer Singer  @relation(fields: [singerId], references: [id], onDelete: Cascade)
+  bhajan Bhajan? @relation(fields: [bhajanId], references: [id], onDelete: SetNull)
+
+  @@unique([singerId, kind, title])
+  @@index([singerId])
+  @@index([bhajanId])
+}
+
+model SingerAvailability {
+  id        String   @id @default(cuid())
+  singerId  String
+  date      DateTime @db.Date
+  available Boolean  @default(true)
+  note      String?
+
+  singer Singer @relation(fields: [singerId], references: [id], onDelete: Cascade)
+
+  @@unique([singerId, date])
+  @@index([date])
+}
+
+/// Templates are data, editable in the UI. Do not hard-code them.
+model SessionTemplate {
+  id            String  @id @default(cuid())
+  name          String  @unique
+  description   String?
+  /// Default session length. 3, per SPEC §9.2.
+  defaultLength Int     @default(3)
+  isDefault     Boolean @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  rules    SlotRule[]
+  sessions Session[]
+}
+
+model SlotRule {
+  id         String       @id @default(cuid())
+  templateId String
+  /// 1-based. Negative counts from the end: -1 is the final slot.
+  position   Int
+  strength   RuleStrength @default(soft)
+  /// Constraint fields. Null means "no constraint on this dimension".
+  deity      String?
+  tempoIn    String[]     @default([])
+  note       String?
+
+  template SessionTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, position])
+  @@index([templateId])
+}
+
+/// The 24 shruti labels. Renamed from v1's `PitchLookup`; the pitch maths is
+/// now first-class columns rather than something parsed at read time.
+model PitchLabel {
+  id    String @id @default(cuid())
+  label String @unique
+  /// The numeric step in the label, e.g. 2.5 in `2.5 Madhyam / G#`.
+  step  Float
+  series Series
+  /// Absolute Sa as a note name, from the letter after the slash.
+  note  String
+  /// Absolute Sa as a pitch class, 0..11.
+  semitone Int
+  /// Recorded tabla pitch. Always Sa + 7; stored only to verify the source.
+  tablaPitch String?
+  value      Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([semitone])
 }
 
 model InstrumentPerson {
-  id        String @id @default(cuid())
+  id         String @id @default(cuid())
   instrument String
   person     String
 
@@ -130,17 +343,4 @@ model InstrumentPerson {
   updatedAt DateTime @updatedAt
 
   @@unique([instrument, person], name: "instrument_person")
-}
-
-model FestivalBhajan {
-  id       String @id @default(cuid())
-  singerId String
-  bhajanId String?
-  title    String
-  order    Int?
-
-  singer Singer @relation(fields: [singerId], references: [id], onDelete: Cascade)
-  bhajan  Bhajan? @relation(fields: [bhajanId], references: [id], onDelete: SetNull)
-
-  @@index([singerId])
 }

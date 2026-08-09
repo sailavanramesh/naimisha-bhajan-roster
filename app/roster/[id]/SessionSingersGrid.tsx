@@ -21,6 +21,9 @@ type RowState = SingerRowInput & {
   singerName?: string;
   singerGender?: string | null;
   _bhajanQuery?: string;
+  /** Display only. Derived from the bhajan; never sent back to the server. */
+  recommendedPitch: string | null;
+  raga: string | null;
 };
 
 function normalizeGender(g?: string | null): "gents" | "ladies" | null {
@@ -199,15 +202,16 @@ export function SessionSingersGrid(props: {
     setRows((prev) =>
       prev.map((r) => {
         if (r._localId !== localId) return r;
-        const auto = pickRecommendedPitch(r.singerGender ?? null, b);
-        const keepExisting = (r.recommendedPitch || "").trim().length > 0;
+        // The recommendation follows the bhajan, so it is recomputed outright
+        // rather than preserved — a stale value from the previous bhajan would
+        // be worse than none.
         return {
           ...r,
           bhajanId,
           bhajanTitle: b?.title ?? r.bhajanTitle ?? null,
           festivalBhajanTitle: null,
           _bhajanQuery: b?.title ?? "",
-          recommendedPitch: keepExisting ? r.recommendedPitch : (auto || null),
+          recommendedPitch: pickRecommendedPitch(r.singerGender ?? null, b) || null,
         };
       })
     );
@@ -256,6 +260,8 @@ export function SessionSingersGrid(props: {
     }
 
     startTransition(async () => {
+      // recommendedPitch and raga are deliberately not sent: both are derived
+      // from the bhajan and are no longer columns on the slot.
       const payload: SingerRowInput[] = rows.map((r) => ({
         id: r.id,
         singerId: r.singerId,
@@ -264,8 +270,6 @@ export function SessionSingersGrid(props: {
         festivalBhajanTitle: r.festivalBhajanTitle,
         confirmedPitch: r.confirmedPitch,
         alternativeTablaPitch: r.alternativeTablaPitch,
-        recommendedPitch: r.recommendedPitch,
-        raga: r.raga,
       }));
       await upsertSessionSingerRows(props.sessionId, payload);
     });

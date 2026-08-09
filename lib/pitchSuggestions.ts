@@ -1,5 +1,6 @@
 // lib/pitchSuggestions.ts
 import { prisma } from "@/lib/db";
+import { tablaPitchOf } from "@/lib/pitch";
 
 export type PitchSuggestions = {
   pitches: string[];
@@ -9,8 +10,8 @@ export type PitchSuggestions = {
 };
 
 export async function getPitchSuggestions(): Promise<PitchSuggestions> {
-  const rows = await prisma.pitchLookup.findMany({
-    orderBy: [{ value: "asc" }, { label: "asc" }],
+  const rows = await prisma.pitchLabel.findMany({
+    orderBy: [{ step: "asc" }, { series: "asc" }],
   });
 
   const pitches: string[] = [];
@@ -21,7 +22,9 @@ export async function getPitchSuggestions(): Promise<PitchSuggestions> {
     if (!label) continue;
 
     pitches.push(label);
-    pitchToTabla[label] = (r.tablaPitch ?? "").trim();
+    // Tabla is always Sa + 7, so derive it rather than trusting the stored
+    // column; the stored value is kept only to verify the source.
+    pitchToTabla[label] = tablaPitchOf(label) ?? (r.tablaPitch ?? "").trim();
   }
 
   return { pitches, pitchToTabla };

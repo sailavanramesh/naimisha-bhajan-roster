@@ -13,7 +13,7 @@ export default async function SingerPage({
   const singer = await prisma.singer.findUnique({ where: { id } });
   if (!singer) return <div>Not found</div>;
 
-  const history = await prisma.sessionSinger.findMany({
+  const history = await prisma.sessionSlot.findMany({
     where: { singerId: singer.id },
     orderBy: { session: { date: "desc" } },
     take: 50,

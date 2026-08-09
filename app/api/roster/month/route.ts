@@ -52,10 +52,10 @@ export async function GET(req: Request) {
     select: {
       id: true,
       date: true,
-      _count: { select: { singers: true } },
-      singers: {
+      _count: { select: { slots: true } },
+      slots: {
         select: { bhajanTitle: true, singer: { select: { name: true } } },
-        orderBy: [{ slot: "asc" }, { createdAt: "asc" }],
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
         take: 3,
       },
     },
@@ -66,8 +66,8 @@ export async function GET(req: Request) {
   const days: Record<string, { sessionId: string; entries: number; hasSession: boolean; summary?: string | null }> = {};
 
   for (const s of sessions) {
-    const entries = s._count.singers ?? 0;
-    const value = { sessionId: s.id, entries, hasSession: true, summary: buildDaySummary(s.singers) };
+    const entries = s._count.slots ?? 0;
+    const value = { sessionId: s.id, entries, hasSession: true, summary: buildDaySummary(s.slots) };
 
     const utcKey = isoDayUTC(s.date);
     const localKey = isoDayLocal(s.date);

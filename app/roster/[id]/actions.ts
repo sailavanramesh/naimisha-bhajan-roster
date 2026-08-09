@@ -5,6 +5,14 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 
 
+/**
+ * Note what is absent: `recommendedPitch` and `raga`.
+ *
+ * Both are derived from the bhajan (CLAUDE.md rule 5) and are no longer stored
+ * on the slot. The grid still displays a recommendation; it just computes it
+ * rather than round-tripping it. `historicalRecommendedPitch` is historical
+ * record and is never written from the UI.
+ */
 export type SingerRowInput = {
   id?: string | null;
   singerId: string;
@@ -13,8 +21,6 @@ export type SingerRowInput = {
   festivalBhajanTitle: string | null;
   confirmedPitch: string | null;
   alternativeTablaPitch: string | null;
-  recommendedPitch: string | null;
-  raga: string | null;
 };
 
 export async function updateSessionNotes(sessionId: string, notes: string) {
@@ -51,15 +57,32 @@ export async function deleteInstrumentRow(id: string) {
 }
 
 export async function deleteSingerRow(id: string) {
-  const row = await prisma.sessionSinger.findUnique({ where: { id } });
+  const row = await prisma.sessionSlot.findUnique({ where: { id } });
   if (!row) return;
 
-  await prisma.sessionSinger.delete({ where: { id } });
+  await prisma.sessionSlot.delete({ where: { id } });
   revalidatePath(`/roster/${row.sessionId}`);
 }
 
 export async function upsertSessionSingerRows(sessionId: string, rows: SingerRowInput[]) {
   await prisma.$transaction(async (tx) => {
+    const existingIds = rows
+      .filter((r) => r.id && !String(r.id).startsWith("new_"))
+      .map((r) => r.id as string);
+
+    // `position` is unique per session, and Postgres checks that per statement
+    // rather than at commit. Reordering rows in place would therefore collide
+    // the moment two rows briefly share a position. Park the surviving rows on
+    // negative positions first, then assign the real ones.
+    if (existingIds.length > 0) {
+      await tx.$executeRaw`
+        UPDATE "SessionSlot"
+        SET "position" = -"position"
+        WHERE "sessionId" = ${sessionId}
+          AND "position" > 0
+      `;
+    }
+
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       const isNew = !r.id || String(r.id).startsWith("new_");
@@ -72,16 +95,14 @@ export async function upsertSessionSingerRows(sessionId: string, rows: SingerRow
         festivalBhajanTitle: r.festivalBhajanTitle,
         confirmedPitch: r.confirmedPitch,
         alternativeTablaPitch: r.alternativeTablaPitch,
-        recommendedPitch: r.recommendedPitch,
-        raga: r.raga,
-        slot: i + 1,
+        position: i + 1,
       };
 
       if (isNew) {
-        await tx.sessionSinger.create({ data });
+        await tx.sessionSlot.create({ data });
       } else {
         try {
-          await tx.sessionSinger.update({
+          await tx.sessionSlot.update({
             where: { id: r.id as string },
             data,
           });
@@ -93,6 +114,19 @@ export async function upsertSessionSingerRows(sessionId: string, rows: SingerRow
           throw e;
         }
       }
+    }
+
+    // Anything still parked was dropped from the grid without going through
+    // deleteSingerRow. Give it a real position rather than leaving it negative.
+    const stranded = await tx.sessionSlot.findMany({
+      where: { sessionId, position: { lt: 0 } },
+      orderBy: { position: "desc" },
+      select: { id: true },
+    });
+    let next = rows.length;
+    for (const s of stranded) {
+      next += 1;
+      await tx.sessionSlot.update({ where: { id: s.id }, data: { position: next } });
     }
   });
 

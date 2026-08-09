@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
+import { Prisma } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle, Input } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export default async function BhajansPage({
   const lang = (sp?.lang ?? "").trim();
 
   // Build filter
-  const where: any = {};
+  const where: Prisma.BhajanWhereInput = {};
   if (q) {
     where.OR = [
       { title: { contains: q, mode: "insensitive" } },

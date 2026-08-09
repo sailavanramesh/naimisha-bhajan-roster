@@ -16,7 +16,7 @@ export default async function Page() {
           where: { date: { gte: today, lte: in30 } },
           orderBy: { date: "asc" },
           take: 12,
-          include: { singers: { include: { singer: true } } },
+          include: { slots: { include: { singer: true } } },
         }),
         prisma.bhajan.count(),
         prisma.session.count(),
@@ -85,11 +85,11 @@ export default async function Page() {
                     {new Date(s.date).toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric" })}
                   </div>
                   <div className="mt-1 text-sm text-gray-700">
-                    {s.singers
+                    {s.slots
                       .slice(0, 6)
                       .map((x) => x.singer.name)
                       .join(" · ")}
-                    {s.singers.length > 6 ? " …" : ""}
+                    {s.slots.length > 6 ? " …" : ""}
                   </div>
                 </Link>
               ))}

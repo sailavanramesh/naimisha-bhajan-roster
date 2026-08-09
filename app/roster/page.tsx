@@ -87,10 +87,10 @@ export default async function RosterPage({
     select: {
       id: true,
       date: true,
-      _count: { select: { singers: true } },
-      singers: {
+      _count: { select: { slots: true } },
+      slots: {
         select: { bhajanTitle: true, singer: { select: { name: true } } },
-        orderBy: [{ slot: "asc" }, { createdAt: "asc" }],
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
         take: 3,
       },
     },
@@ -101,9 +101,9 @@ export default async function RosterPage({
   for (const s of monthSessions) {
     const value = {
       sessionId: s.id,
-      entries: s._count.singers ?? 0,
+      entries: s._count.slots ?? 0,
       hasSession: true,
-      summary: buildDaySummary(s.singers),
+      summary: buildDaySummary(s.slots),
     };
 
     const utcKey = toISODateUTC(s.date);
@@ -118,7 +118,7 @@ export default async function RosterPage({
         id: string;
         date: Date;
         notes: string | null;
-        singers: { singer: { name: string }; bhajanTitle: string | null }[];
+        slots: { singer: { name: string }; bhajanTitle: string | null }[];
       }>
     | null = null;
 
@@ -132,8 +132,8 @@ export default async function RosterPage({
           ? {
               OR: [
                 { notes: { contains: q } },
-                { singers: { some: { singer: { name: { contains: q } } } } },
-                { singers: { some: { bhajanTitle: { contains: q } } } },
+                { slots: { some: { singer: { name: { contains: q } } } } },
+                { slots: { some: { bhajanTitle: { contains: q } } } },
               ],
             }
           : {}),
@@ -148,7 +148,7 @@ export default async function RosterPage({
       },
       orderBy: { date: "desc" },
       take: 200,
-      include: { singers: { include: { singer: true } } },
+      include: { slots: { include: { singer: true } } },
     });
   }
 
@@ -226,11 +226,11 @@ export default async function RosterPage({
                       })}
                     </div>
                     <div className="mt-1 text-sm text-gray-700">
-                      {s.singers
+                      {s.slots
                         .slice(0, 8)
                         .map((x) => `${x.singer.name}${x.bhajanTitle ? ` — ${x.bhajanTitle}` : ""}`)
                         .join(" · ")}
-                      {s.singers.length > 8 ? " …" : ""}
+                      {s.slots.length > 8 ? " …" : ""}
                     </div>
                   </Link>
                 ))}
