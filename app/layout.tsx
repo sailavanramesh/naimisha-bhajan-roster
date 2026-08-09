@@ -2,7 +2,8 @@ import "./globals.css";
 import { Faustina, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { Nav } from "@/components/Nav";
 import { YantraFull } from "@/components/Yantra";
-import { getRole, ROLE_LABELS } from "@/lib/auth";
+import Link from "next/link";
+import { getRole, getSignedInSinger, ROLE_LABELS } from "@/lib/auth";
 
 /**
  * Three roles, deliberately paired (docs/SPEC.md §6).
@@ -44,6 +45,7 @@ export const viewport = {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const role = await getRole();
+  const signedIn = await getSignedInSinger();
   return (
     <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
       <body className="min-h-screen font-sans antialiased">
@@ -69,9 +71,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     </h1>
                     <p className="mt-1 text-sm text-on-ground-muted">
                       Suggest a set, roster it fairly, remember the pitch.
-                      <span className="ml-2 rounded-full border border-rule px-2 py-0.5 text-[11px]">
-                        {ROLE_LABELS[role]}
-                      </span>
+                      <Link
+                        href="/signin"
+                        className="ml-2 rounded-full border border-rule px-2 py-0.5 text-[11px] hover:border-brass/50"
+                      >
+                        {signedIn ? `${signedIn.name} · ${ROLE_LABELS[role]}` : ROLE_LABELS[role]}
+                      </Link>
                     </p>
                   </div>
                 </div>

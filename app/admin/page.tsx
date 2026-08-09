@@ -11,7 +11,9 @@ import {
   setEligibilityForInstrument,
   addRepertoireEntry,
   removeRepertoireEntry,
+  setSingerAccess,
 } from "./actions";
+import { googleSignInConfigured } from "@/lib/authConfig";
 
 import { getRole, can } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
@@ -88,6 +90,58 @@ export default async function AdminPage({
             </div>
           ) : null}
         </CardHeader>
+      </Card>
+
+      {/* ---- Who can sign in ---- */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Access</CardTitle>
+          <div className="mt-1 max-w-2xl text-sm text-on-surface-muted">
+            The Google address each singer signs in with. <strong>This is the
+            allowlist</strong> — signing in never creates a singer, so an address that is
+            not here gets read-only access whoever it belongs to. Clearing a field revokes
+            access immediately.
+            {!googleSignInConfigured ? (
+              <span className="mt-2 block rounded-[10px] border border-warn/40 bg-warn/[0.08] px-3 py-2 text-xs">
+                Google sign-in is not configured yet, so these have no effect. They are
+                safe to fill in now — they take effect the moment it is switched on.
+              </span>
+            ) : null}
+          </div>
+        </CardHeader>
+        <CardContent className="grid gap-2">
+          {singers.map((s) => (
+            <form
+              key={s.id}
+              action={setSingerAccess}
+              className="grid items-center gap-2 rounded-[12px] border border-rule-surface bg-panel p-2 sm:grid-cols-[8rem_1fr_9rem_auto]"
+            >
+              <input type="hidden" name="singerId" value={s.id} />
+              <span className="text-sm font-medium">{s.name}</span>
+              <Input
+                name="email"
+                type="email"
+                defaultValue={s.email ?? ""}
+                placeholder="name@gmail.com"
+                aria-label={`Google address for ${s.name}`}
+                disabled={!canEdit}
+              />
+              <select
+                name="role"
+                defaultValue={s.role}
+                disabled={!canEdit}
+                className="h-11 rounded-[10px] border border-rule-surface bg-field px-3 text-sm"
+                aria-label={`Access level for ${s.name}`}
+              >
+                <option value="singer">Member</option>
+                <option value="coordinator">Editor</option>
+              </select>
+              {canEdit ? (
+                <Button type="submit" className="h-10 text-xs">Save</Button>
+              ) : null}
+            </form>
+          ))}
+        </CardContent>
       </Card>
 
       {/* ---- Instrument eligibility ---- */}

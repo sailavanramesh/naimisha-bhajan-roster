@@ -553,6 +553,24 @@ Still genuinely open, none blocking:
     would overwhelm it; a compact variant is probably wanted, which is a design
     decision rather than a bug.
 
+### Wanted later — push notifications
+
+Sailavan, 2026-08-10: installed as a PWA on phones, the app should notify
+people when a **new session is created**, and especially when **they have been
+rostered for it**.
+
+Not started. Notes for whoever picks it up:
+
+- Needs the Web Push API + a service worker, VAPID keys, and a
+  `PushSubscription` per person per device. Azure App Service can serve it; no
+  extra managed service is required.
+- It depends on **named sign-in**. A notification has to reach a person, and
+  until Google auth lands the app cannot tell two members apart.
+- iOS only permits Web Push for a site the user has added to the Home Screen,
+  so the PWA manifest and install prompt come first.
+- "Rostered for that session" is knowable the moment `applyAssignments` writes
+  `singerId`, which is the natural trigger point.
+
 ### Also worth knowing
 
 - `data/roster.xlsx` was replaced with the newer export from `~/Downloads`

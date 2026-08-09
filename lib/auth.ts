@@ -1,4 +1,6 @@
 import { cookies } from "next/headers";
+import { prisma } from "@/lib/db";
+import { auth, googleSignInConfigured } from "@/lib/authConfig";
 
 /**
  * lib/auth.ts — who may see and do what.
@@ -82,7 +84,36 @@ export function canSeePage(role: Role, path: string): boolean {
   return MEMBER_PAGES.some((p) => path === p || path.startsWith(`${p}/`)) || path === "/";
 }
 
+/** The signed-in person, if any, resolved to a singer via the email allowlist. */
+export async function getSignedInSinger(): Promise<{
+  id: string;
+  name: string;
+  email: string;
+  role: Role;
+} | null> {
+  if (!googleSignInConfigured) return null;
+  const session = await auth().catch(() => null);
+  const email = session?.user?.email;
+  if (!email) return null;
+
+  const singer = await prisma.singer.findUnique({
+    where: { email },
+    select: { id: true, name: true, email: true, role: true },
+  });
+  // Signed in but not on the allowlist: a viewer, deliberately. Sign-in never
+  // creates a singer.
+  if (!singer?.email) return null;
+
+  const role: Role = singer.role === "coordinator" ? "editor" : "member";
+  return { id: singer.id, name: singer.name, email: singer.email, role };
+}
+
 export async function getRole(): Promise<Role> {
+  // Google sign-in wins when it is configured and the person is on the
+  // allowlist — an access link cannot escalate a named identity.
+  const signedIn = await getSignedInSinger();
+  if (signedIn) return signedIn.role;
+
   const store = await cookies();
   const value = store.get("role")?.value;
   if (value && (ROLES as readonly string[]).includes(value)) return value as Role;

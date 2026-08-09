@@ -100,3 +100,50 @@ export async function removeRepertoireEntry(formData: FormData): Promise<void> {
   await prisma.singerRepertoire.delete({ where: { id } });
   revalidatePath("/admin");
 }
+
+
+const SingerAccess = z.object({
+  singerId: z.string().min(1),
+  email: z
+    .string()
+    .trim()
+    .transform((v) => v.toLowerCase())
+    .refine((v) => v === "" || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), "That is not an email address"),
+  role: z.enum(["coordinator", "singer"]),
+});
+
+/**
+ * Put a Google address against a singer, and set what they may do.
+ *
+ * THIS IS THE ALLOWLIST. Signing in never creates a singer, so an address that
+ * is not set here gets viewer access no matter who it belongs to. Clearing the
+ * field revokes access immediately.
+ */
+export async function setSingerAccess(formData: FormData): Promise<void> {
+  await requireCapability("manageAllocations");
+
+  const parsed = SingerAccess.safeParse({
+    singerId: String(formData.get("singerId") ?? ""),
+    email: String(formData.get("email") ?? ""),
+    role: String(formData.get("role") ?? "singer"),
+  });
+  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Could not save access.");
+  const { singerId, email, role } = parsed.data;
+
+  if (email) {
+    const taken = await prisma.singer.findFirst({
+      where: { email, id: { not: singerId } },
+      select: { name: true },
+    });
+    if (taken) {
+      throw new Error(`${email} is already set against ${taken.name}. One address, one singer.`);
+    }
+  }
+
+  await prisma.singer.update({
+    where: { id: singerId },
+    data: { email: email || null, role: role as "coordinator" | "singer" },
+  });
+
+  revalidatePath("/admin");
+}
