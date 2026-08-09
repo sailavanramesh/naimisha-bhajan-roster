@@ -10,9 +10,23 @@ open uncertainties.
 
 ## Current state
 
-**Branch:** `v2` (branched from `main` @ `0788398`)
-**Phase:** Setup complete. Phase 0 not started — blocked on the seven answers
-in [OPEN-QUESTIONS](#open-questions).
+**Branch:** `v2` (branched from `main` @ `0788398`), **not yet pushed** — see
+[Blocked](#blocked).
+**Phase:** Phase 0 complete and green. Phase 1 (pitch intelligence) is next.
+
+The database is seeded and live. `npm run build`, `npm run lint` and
+`npm run test:run` are all clean.
+
+### Blocked
+
+- **`gh` token is missing the `workflow` scope**, so pushing `v2` is rejected:
+  `refusing to allow an OAuth App to create or update workflow ...`. Fix with
+  `gh auth refresh -s workflow`, then `git push -u origin v2`. Everything else
+  is committed locally; nothing is lost by the delay.
+- SPEC §7 says "ship each phase to production before starting the next." That
+  needs `v2` merged to `main`, which triggers the deploy workflow. Until the
+  push above happens, no phase has been shipped. Phases are being built in
+  order regardless.
 
 ---
 
@@ -106,13 +120,91 @@ else.
       the live Azure database — 9 tables present, connection confirmed
 - [x] vitest added (`npm run test:run`)
 - [x] GitHub Actions deploy workflow written, OIDC identity + secrets in place
+- [x] Seven questions answered and written into `docs/SPEC.md` §9
+- [x] **Phase 0 complete** — see below
 
 ## Next
 
-1. Answers to the seven questions below.
-2. Push `v2` (needs the `workflow` scope on the `gh` token — see below).
-3. **Phase 0** — schema migration, seed rewrite, `lib/pitch.ts`, and the
-   singer-offset regression test.
+1. Push `v2` once the `gh` scope is refreshed.
+2. **Phase 1 — pitch intelligence.** Offset profiles, predicted pitch, comfort
+   ranges, the Shruti Ladder component, wired into the singer and bhajan pages.
+
+---
+
+## Phase 0 — foundation (complete)
+
+**Migration.** Two forward migrations, `20260809012000_v2_schema` and
+`20260809013000_search_vector_trigger`, both applied to the live database with
+`prisma migrate deploy`. `prisma migrate diff` reports no drift.
+
+The first migration drops and recreates `SessionSinger` / `FestivalBhajan` /
+`PitchLookup`. That was safe **only** because it ran against the freshly
+provisioned database before the first seed, when those tables held zero rows.
+It says so in a header comment. **Every migration from here must be
+non-destructive.**
+
+**Seed.** `scripts/seedFromXlsx.ts` rewritten. Supports `--dry-run` and
+`--force`, and refuses to run against a database that already holds session
+slots. It only ever inserts or updates — never deletes, truncates or resets.
+
+Seeded totals, all matching CLAUDE.md: 11 singers, 24 pitch labels, 3,607
+bhajans, 21 deities, 49 tags, 709 slots, 200 sessions, 424 instrument
+assignments, 485 repertoire entries.
+
+**`lib/pitch.ts`.** The pitch model as pure functions, no Prisma import. 35
+unit tests, including tabla = Sa + 7 checked against all 24 real labels and a
+transposition round-trip over every label.
+
+**The gate.** `tests/singerOffsets.test.ts` reads the seeded Azure database and
+reproduces the CLAUDE.md offset table exactly — eleven singers, 611 rows, every
+n, median and mean. Expected values are literals copied from CLAUDE.md and were
+**not** adjusted. It skips loudly when `DATABASE_URL` is absent, so CI passes
+without database access; it must be run locally from an allowlisted IP.
+
+### What Phase 0 turned up in the data
+
+Four things worth knowing before touching the seed again.
+
+1. **The offset table is defined against the sheet's own recommendation
+   column**, `Recommended Pitch as Sai Rythms` — not against a masterlist
+   reference lookup. The two agree on *value* (617 of 618 rows) but disagree on
+   which rows *qualify*, because some roster rows name a title absent from the
+   masterlist and some masterlist-matched rows have no sheet recommendation.
+   Computing the table the other way gives 609 rows and misses 5 of 11 singers.
+   This is why `historicalRecommendedPitch` still exists.
+
+2. **The date column is headed `"  "` (two spaces)**, and the old seed looked
+   it up as `"."`. Against this export it would have imported zero dates. It is
+   now resolved positionally.
+
+3. **Dates are Melbourne-local midnight instants.** `2025-03-17T13:00:00Z` is
+   18 March AEDT. Reading the UTC calendar date shifts every session back a
+   day. The seed converts through `Australia/Melbourne`; the resulting range,
+   2025-03-18 → 2026-08-09, matches CLAUDE.md exactly and is the proof.
+
+4. **Six masterlist titles are duplicated, and four of the six carry different
+   reference pitches.** `title` is the natural key, so only one row survives —
+   the first in sheet order. Which one wins changes the reference pitch for
+   those bhajans. The seed logs every conflict. This also explains CLAUDE.md's
+   "617 matched, 1 was a typo": that count comes out of a last-wins read, and
+   first-wins gives 618/618. Nothing is wrong; the two readings just differ.
+
+Also: **12 sessions have instrumentalists but no singer slots**, so the
+database holds 200 sessions where CLAUDE.md says 188. The 188 figure counts
+sessions with singers. Dropping the other 12 would have discarded real roster
+history, so they were kept.
+
+### Decisions taken in Phase 0
+
+| Decision | Why |
+|---|---|
+| Kept `recommendedPitch` as `historicalRecommendedPitch` | CLAUDE.md rule 5 says drop it; the hard rule says the offset table must reproduce from the database. Both cannot hold. The hard rule wins, so the column survives as immutable historical record. Nothing derives a live recommendation from it — that still comes from the masterlist. |
+| Search vector trigger-maintained, not `GENERATED` | Prisma introspects a generated column as having a default and emits `ALTER COLUMN ... DROP DEFAULT`, which Postgres rejects on generated columns. That left permanent, unappliable drift. |
+| `simple` text-search config, not `english` | Transliterated Sanskrit. English stemming mangles it. |
+| Instrument-only dates create sessions | Losing real roster history is worse than a session count that differs from a line in CLAUDE.md. |
+| Duplicate titles: first in sheet order wins | Arbitrary but deterministic, and every conflict is logged rather than silently resolved. |
+| Reordering slots parks rows on negative positions first | `@@unique([sessionId, position])` is checked per statement, not at commit, so an in-place reorder would collide. |
+| Replaced `next lint` with ESLint 9 flat config | `next lint` was never configured — it dropped into an interactive prompt, so lint had never actually run. It is also removed in Next 16. |
 
 ---
 
@@ -131,29 +223,40 @@ else.
 
 ## OPEN-QUESTIONS
 
-Blocking Phase 1 onward. Section 9 of `docs/SPEC.md`, asked verbatim; answers
-to be written back into `docs/SPEC.md` once given.
+The seven questions from §9 of the spec are **answered** — see `docs/SPEC.md`
+§9, which is authoritative and now binding. Summary: Ganesha opener and Sai
+closer are soft preferences; default session length is 3; singers may be given
+bhajans they have never sung; the repeat window is advisory only; Google
+sign-in behind a coordinator-maintained email allowlist, singers limited to
+their own slots; `Recent Bhajans` is dead and fully derivable; masterlist
+reference pitches are authoritative with no local-correction feature.
 
-1. Is the Ganesha-opener a rule or just a strong habit? Same for the Sai closer.
-2. Is 10 the right default session length? History says weekday sessions run 3–4.
-3. Should a singer ever be assigned a bhajan they have never sung, or is the
-   roster always drawn from known repertoire?
-4. What is the real "don't repeat within" window — 90 days? A term? A year?
-5. Who should be able to edit? Coordinator only, or every singer for their own
-   pitch?
-6. Is the `Recent Bhajans` count sheet still maintained by hand, or can it be
-   fully derived?
-7. Are the Gents/Ladies reference pitches ever wrong in the masterlist, and if
-   so should the app let the group correct them locally?
+Still genuinely open, none blocking:
 
-### Also open
+1. **Which duplicate masterlist row should win** for the four conflicting
+   titles? Currently first-in-sheet-order. Conservative and logged, but a
+   coordinator would know which pitch is actually right. Affects
+   `Govinda Harey Gopala Harey`, `Govinda Jai Jai Gopala Jai`,
+   `Harey Krishna Harey Krishna Krishna`, and one other.
+2. **Should the 10 roster titles absent from the masterlist be reconciled?**
+   They are kept as free text on the slot, so nothing is lost, but they cannot
+   participate in repertoire, search or pitch prediction until they resolve.
+   Several look like near-misses of real masterlist entries.
+3. **Do the 12 instrumentalist-only dates count as sessions** for fairness and
+   staleness reporting? Currently yes, and they have no singer slots.
+4. **Tempo and level are free-text** with roughly a third of the masterlist
+   blank. The shape templates need an ordering over tempo. Assumed
+   `Slow < Medium Slow < Medium < Medium Fast < Fast` and "unspecified" never
+   excluded — to confirm when Phase 2 starts.
 
-- **`gh` token is missing the `workflow` scope**, so pushing `v2` is rejected
-  (`refusing to allow an OAuth App to create or update workflow ...`). Fix with
-  `gh auth refresh -s workflow` (browser flow), then `git push -u origin v2`.
+### Also worth knowing
+
 - `data/roster.xlsx` was replaced with the newer export from `~/Downloads`
-  (1,926,870 bytes, replacing 1,863,345). The previous file remains in git
-  history at `75a48fe^` if a diff is ever needed.
+  (1,926,870 bytes, replacing 1,863,345 — the old one had only 500 roster rows
+  against the current 709). The previous file remains in git history at
+  `75a48fe^`.
 - Local Node is v26 while the Web App runs Node 22. Not currently a problem,
-  but local-only build behaviour should not be trusted as proof the deploy will
-  work.
+  but a clean local build is not proof the deploy will work.
+- `.env.save` was in `main`'s history before being untracked. Whatever it
+  contained should still be treated as compromised and rotated. Its contents
+  were never read.
