@@ -119,6 +119,12 @@ export default async function AdminPage({
               <input type="hidden" name="singerId" value={s.id} />
               <span className="text-sm font-medium">{s.name}</span>
               <Input
+                // `key` forces a remount when the saved value changes.
+                // defaultValue on an uncontrolled input is only applied at
+                // mount, so after a save React reused the existing DOM element
+                // and the field showed a stale value — the page contradicted
+                // the database it had just written.
+                key={`email-${s.email ?? ""}`}
                 name="email"
                 type="email"
                 defaultValue={s.email ?? ""}
@@ -127,8 +133,9 @@ export default async function AdminPage({
                 disabled={!canEdit}
               />
               <select
+                key={`role-${s.role}`}
                 name="role"
-                defaultValue={s.role}
+                defaultValue={s.role === "coordinator" ? "coordinator" : "singer"}
                 disabled={!canEdit}
                 className="h-11 rounded-[10px] border border-rule-surface bg-field px-3 text-sm"
                 aria-label={`Access level for ${s.name}`}
@@ -136,9 +143,18 @@ export default async function AdminPage({
                 <option value="singer">Member</option>
                 <option value="coordinator">Editor</option>
               </select>
-              {canEdit ? (
-                <Button type="submit" className="h-10 text-xs">Save</Button>
-              ) : null}
+              <div className="flex items-center gap-2">
+                {canEdit ? (
+                  <Button type="submit" className="h-10 text-xs">Save</Button>
+                ) : null}
+                {/* States what is actually stored, so a stale form control can
+                    never misrepresent the database again. */}
+                <span className="whitespace-nowrap text-[11px] text-on-surface-muted">
+                  {s.email
+                    ? `saved: ${s.role === "coordinator" ? "Editor" : "Member"}`
+                    : "no access"}
+                </span>
+              </div>
             </form>
           ))}
         </CardContent>
