@@ -111,7 +111,7 @@ export default async function AssignPage({
           ) : (
             <>
               {result.warnings.length > 0 ? (
-                <div className="rounded-key border border-warn/60 bg-warn/10 p-3">
+                <div className="rounded-[12px] border border-warn/60 bg-warn/10 p-3">
                   <div className="text-sm font-semibold">Worth knowing</div>
                   <ul className="mt-1 list-disc pl-5 text-sm">
                     {result.warnings.map((w) => (
@@ -128,7 +128,7 @@ export default async function AssignPage({
                   else if (a.singer) nextPins.set(a.position, a.singer.id);
 
                   return (
-                    <li key={a.position} className="rounded-key border border-rule-surface bg-white/60 p-3">
+                    <li key={a.position} className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
@@ -179,7 +179,7 @@ export default async function AssignPage({
                             m.set(a.position, s.id);
                             return (
                               <Link key={s.id} href={href({ pin: serialisePins(m) })}>
-                                <span className="rounded-full border px-2 py-1 text-xs hover:bg-surface-sunk">
+                                <span className="rounded-full border px-2 py-1 text-xs hover:bg-white/[0.05]">
                                   {s.name}
                                   {!s.available ? " (unavailable)" : ""}
                                 </span>
@@ -197,7 +197,7 @@ export default async function AssignPage({
                 <form action={applyAssignments}>
                   <input type="hidden" name="sessionId" value={sessionId} />
                   <input type="hidden" name="assignments" value={JSON.stringify(payload)} />
-                  <Button type="submit" className="bg-black text-white hover:bg-black/90">
+                  <Button type="submit" variant="primary">
                     Apply these singers
                   </Button>
                 </form>
@@ -206,7 +206,7 @@ export default async function AssignPage({
           )}
 
           {/* Weights */}
-          <details className="rounded-key border border-rule-surface bg-white">
+          <details className="rounded-[12px] border border-rule-surface bg-white/[0.03]">
             <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold">
               Scoring weights
             </summary>
@@ -221,7 +221,7 @@ export default async function AssignPage({
                     min="0"
                     name={`w_${k}`}
                     defaultValue={weights[k]}
-                    className="h-10 w-full rounded-key border px-3 text-sm"
+                    className="h-10 w-full rounded-[12px] border px-3 text-sm"
                   />
                 </label>
               ))}
@@ -240,7 +240,7 @@ export default async function AssignPage({
           </details>
 
           {/* Availability */}
-          <details className="rounded-key border border-rule-surface bg-white">
+          <details className="rounded-[12px] border border-rule-surface bg-white/[0.03]">
             <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold">
               Availability for {dateKey}
             </summary>

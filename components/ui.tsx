@@ -22,7 +22,10 @@ export function Card(props: { children: React.ReactNode; className?: string }) {
   return (
     <section
       className={cn(
-        "rounded-key border border-rule-surface bg-surface text-on-surface shadow-[0_1px_0_rgb(var(--brass)/0.25),0_18px_40px_-28px_rgb(0_0_0/0.9)]",
+        // A warm panel lifted off the lacquer, edged with a brass hairline —
+        // not a cream slab. The top highlight is the light catching the edge.
+        "rounded-[14px] border border-brass/[0.16] bg-surface/70 text-on-surface backdrop-blur-sm",
+        "shadow-[inset_0_1px_0_rgb(var(--ivory)/0.05),0_24px_48px_-32px_rgb(0_0_0/0.85)]",
         props.className
       )}
     >
@@ -32,19 +35,19 @@ export function Card(props: { children: React.ReactNode; className?: string }) {
 }
 
 export function CardHeader(props: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("p-4 sm:p-5", props.className)}>{props.children}</div>;
+  return <div className={cn("p-5 sm:p-6", props.className)}>{props.children}</div>;
 }
 
 export function CardTitle(props: { children: React.ReactNode; className?: string }) {
   return (
-    <h2 className={cn("font-display text-xl font-semibold tracking-tight sm:text-2xl", props.className)}>
+    <h2 className={cn("font-display text-[22px] font-semibold leading-tight tracking-[-0.01em] sm:text-[26px]", props.className)}>
       {props.children}
     </h2>
   );
 }
 
 export function CardContent(props: { children: React.ReactNode; className?: string }) {
-  return <div className={cn("p-4 pt-0 sm:p-5 sm:pt-0", props.className)}>{props.children}</div>;
+  return <div className={cn("p-5 pt-0 sm:p-6 sm:pt-0", props.className)}>{props.children}</div>;
 }
 
 /** A section heading inside a card. */
@@ -52,7 +55,9 @@ export function SectionTitle(props: { children: React.ReactNode; className?: str
   return (
     <h3
       className={cn(
-        "text-xs font-semibold uppercase tracking-[0.14em] text-on-surface-muted",
+        // Letterspaced small caps in brass: the quiet structural label that
+        // makes a page read as composed rather than assembled.
+        "text-[11px] font-semibold uppercase tracking-[0.18em] text-brass/80",
         props.className
       )}
     >
@@ -63,8 +68,9 @@ export function SectionTitle(props: { children: React.ReactNode; className?: str
 
 // ---------- Inputs ----------
 const fieldBase =
-  "h-11 w-full rounded-key border border-rule-surface bg-white/70 px-3 text-sm text-on-surface " +
-  "placeholder:text-on-surface-muted disabled:cursor-not-allowed disabled:opacity-50";
+  "h-11 w-full rounded-[10px] border border-rule-surface bg-black/25 px-3 text-sm text-on-surface " +
+  "placeholder:text-on-surface-muted/70 transition-colors hover:border-brass/40 " +
+  "disabled:cursor-not-allowed disabled:opacity-50";
 
 export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   function Input({ className, ...props }, ref) {
@@ -112,9 +118,9 @@ export function Badge(props: {
 }) {
   const tone = props.tone ?? "neutral";
   const tones: Record<string, string> = {
-    brass: "border-brass/50 bg-brass/12 text-on-surface",
-    warn: "border-warn/60 bg-warn/12 text-on-surface",
-    neutral: "border-rule-surface bg-black/[0.04] text-on-surface-muted",
+    brass: "border-brass/40 bg-brass/[0.14] text-brass",
+    warn: "border-warn/40 bg-warn/[0.12] text-warn",
+    neutral: "border-rule-surface bg-white/[0.04] text-on-surface-muted",
   };
 
   return (
@@ -159,19 +165,19 @@ type ButtonProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
 
 export function Button({ className, variant = "secondary", ...props }: ButtonProps) {
   const variants: Record<string, string> = {
-    primary: "bg-ink text-ivory hover:bg-ink/90 border border-ink",
-    secondary: "border border-rule-surface bg-white/60 text-on-surface hover:bg-white",
-    quiet: "border border-transparent text-on-surface-muted hover:bg-black/[0.05]",
+    primary: "border border-brass/70 bg-brass/90 text-ink hover:bg-brass font-semibold",
+    secondary: "border border-rule-surface bg-white/[0.04] text-on-surface hover:border-brass/40 hover:bg-white/[0.07]",
+    quiet: "border border-transparent text-on-surface-muted hover:bg-white/[0.05] hover:text-on-surface",
     // NOT kumkum. SPEC §6 reserves it for pitch deviation, explicitly
     // excluding buttons and errors. A destructive action is carried by its
     // label and a firm outline instead.
-    danger: "border border-on-surface/40 text-on-surface hover:bg-black/[0.06]",
+    danger: "border border-on-surface/30 text-on-surface-muted hover:border-on-surface/60 hover:text-on-surface",
   };
 
   return (
     <button
       className={cn(
-        "inline-flex h-11 items-center justify-center rounded-key px-4 text-sm font-medium transition-colors",
+        "inline-flex h-11 items-center justify-center rounded-[10px] px-4 text-sm font-medium transition-colors",
         variants[variant],
         className
       )}

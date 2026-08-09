@@ -66,7 +66,7 @@ export default async function BhajansPage({
             <select
               name="deity"
               defaultValue={deity}
-              className="w-full rounded-key border px-3 py-2 text-sm bg-white"
+              className="w-full rounded-[12px] border px-3 py-2 text-sm bg-white/[0.03]"
             >
               <option value="">All deities</option>
               {deityOptions.map((d) => (
@@ -79,7 +79,7 @@ export default async function BhajansPage({
             <select
               name="lang"
               defaultValue={lang}
-              className="w-full rounded-key border px-3 py-2 text-sm bg-white"
+              className="w-full rounded-[12px] border px-3 py-2 text-sm bg-white/[0.03]"
             >
               <option value="">All languages</option>
               {langOptions.map((l) => (
@@ -99,7 +99,7 @@ export default async function BhajansPage({
               <Link
                 key={b.id}
                 href={`/bhajans/${b.id}`}
-                className="rounded-key border border-rule-surface bg-white/60 p-3 hover:bg-surface-sunk"
+                className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-3 hover:bg-white/[0.05]"
               >
                 <div className="text-sm font-semibold">{b.title}</div>
                 <div className="mt-1 text-xs text-on-surface-muted">

@@ -24,7 +24,7 @@ export default async function FestivalPage() {
         <CardContent>
           <div className="grid gap-3 md:grid-cols-2">
             {singers.map((s) => (
-              <div key={s.id} className="rounded-key border border-rule-surface bg-white/60 p-4">
+              <div key={s.id} className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-4">
                 <div className="text-sm font-semibold">{s.name}</div>
                 <ol className="mt-2 list-decimal pl-5 text-sm text-on-surface-muted">
                   {s.repertoire.length === 0 ? (

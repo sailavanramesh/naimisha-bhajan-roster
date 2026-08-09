@@ -101,7 +101,7 @@ export default async function AdminPage({
               <form
                 key={instrument}
                 action={setEligibilityForInstrument}
-                className="rounded-key border border-rule-surface bg-white/60 p-3"
+                className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-3"
               >
                 <input type="hidden" name="instrument" value={instrument} />
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -155,7 +155,7 @@ export default async function AdminPage({
                   className={
                     s.id === selectedSingerId
                       ? "rounded-full border border-brass/60 bg-brass/15 px-3 py-1 text-sm"
-                      : "rounded-full border border-rule-surface px-3 py-1 text-sm hover:bg-black/[0.04]"
+                      : "rounded-full border border-rule-surface px-3 py-1 text-sm hover:bg-white/[0.06]"
                   }
                 >
                   {s.name}
@@ -173,7 +173,7 @@ export default async function AdminPage({
               {canEdit ? (
                 <form
                   action={addRepertoireEntry}
-                  className="grid gap-2 rounded-key border border-rule-surface bg-white/60 p-3 sm:grid-cols-[1fr_auto_auto]"
+                  className="grid gap-2 rounded-[12px] border border-rule-surface bg-white/[0.03] p-3 sm:grid-cols-[1fr_auto_auto]"
                 >
                   <input type="hidden" name="singerId" value={selectedSinger.id} />
                   <Input
@@ -184,7 +184,7 @@ export default async function AdminPage({
                   <select
                     name="kind"
                     defaultValue={RepertoireKind.known}
-                    className="h-11 rounded-key border border-rule-surface bg-white/70 px-3 text-sm"
+                    className="h-11 rounded-[12px] border border-rule-surface bg-black/25 px-3 text-sm"
                     aria-label="List"
                   >
                     <option value={RepertoireKind.known}>Knows</option>

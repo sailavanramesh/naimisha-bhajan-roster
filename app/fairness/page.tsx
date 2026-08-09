@@ -83,7 +83,7 @@ export default async function FairnessPage({
                 className={
                   d === windowDays
                     ? "rounded-full border border-brass/60 bg-brass/15 px-3 py-1"
-                    : "rounded-full border border-rule-surface px-3 py-1 hover:bg-black/[0.04]"
+                    : "rounded-full border border-rule-surface px-3 py-1 hover:bg-white/[0.06]"
                 }
               >
                 {d === 3650 ? "All time" : `${d} days`}
@@ -105,14 +105,14 @@ export default async function FairnessPage({
                 </Link>
 
                 {/* A plain proportional bar. No chart library for eleven rows. */}
-                <div className="h-5 overflow-hidden rounded-full bg-black/[0.06]">
+                <div className="h-5 overflow-hidden rounded-full bg-white/[0.06]">
                   <div
                     className={
                       s.verdict === "under"
-                        ? "h-full bg-brass/70"
+                        ? "h-full bg-brass/85"
                         : s.verdict === "over"
-                          ? "h-full bg-ink/70"
-                          : "h-full bg-ink/30"
+                          ? "h-full bg-on-surface/40"
+                          : "h-full bg-on-surface/20"
                     }
                     style={{ width: `${Math.max(2, (s.count / maxCount) * 100)}%` }}
                   />
@@ -198,8 +198,8 @@ function CountList({ rows }: { rows: Array<{ name: string; count: number }> }) {
         <li key={r.name} className="grid grid-cols-[1fr_auto] items-center gap-2">
           <div className="min-w-0">
             <div className="truncate text-sm">{r.name}</div>
-            <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-black/[0.06]">
-              <div className="h-full bg-ink/40" style={{ width: `${(r.count / max) * 100}%` }} />
+            <div className="mt-0.5 h-1.5 overflow-hidden rounded-full bg-white/[0.06]">
+              <div className="h-full bg-brass/50" style={{ width: `${(r.count / max) * 100}%` }} />
             </div>
           </div>
           <Figure className="text-xs">{r.count}</Figure>

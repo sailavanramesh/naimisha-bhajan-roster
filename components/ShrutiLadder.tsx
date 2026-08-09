@@ -11,7 +11,7 @@
  * warnings or emphasis.
  */
 
-import { saOf, semitoneDelta, tablaPitchOf } from '@/lib/pitch';
+import { saOf, semitoneDelta, tablaPitchOf, NOTE_NAMES } from '@/lib/pitch';
 import { cn } from '@/components/ui';
 
 export type LadderRung = {
@@ -43,13 +43,8 @@ export function ShrutiLadder({
 
   // The ladder shows one row per label. Both series are listed because
   // "1 Madhyam / F" and "4 Pancham / F" are the same Sa written two ways, and
-  // the group uses whichever the source did.
-  const inComfort = (semitone: number) => {
-    if (!comfort) return false;
-    const wrap = (d: number) => { const m = ((d % 12) + 12) % 12; return m > 6 ? m - 12 : m; };
-    const d = wrap(semitone - comfort.centre);
-    return d >= wrap(comfort.low - comfort.centre) && d <= wrap(comfort.high - comfort.centre);
-  };
+  // the group uses whichever the source did — so BOTH are marked as the
+  // reference when Sa is shared. That is correct, not a duplicate.
 
   const summary = buildSummary(reference, actual, delta, actualKind);
 
@@ -58,23 +53,22 @@ export function ShrutiLadder({
       <figcaption className="sr-only">{summary}</figcaption>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-        <Legend swatch="var(--ivory)" ring="var(--brass)" label="Reference" />
-        <Legend swatch="var(--kumkum)" label={actualKind === 'predicted' ? 'Predicted' : 'Sung at'} />
+        <Legend swatch="rgb(var(--ivory))" ring="rgb(var(--brass))" label="Reference" />
+        <Legend swatch="rgb(var(--kumkum))" label={actualKind === 'predicted' ? 'Predicted' : 'Sung at'} />
         {delta !== null ? (
           <span
             className="font-mono tabular-nums font-semibold"
-            style={{ color: delta === 0 ? 'rgb(var(--muted))' : 'var(--kumkum)' }}
+            style={{ color: delta === 0 ? 'rgb(var(--muted))' : 'rgb(var(--kumkum))' }}
           >
             {delta > 0 ? `+${delta}` : delta} {Math.abs(delta) === 1 ? 'semitone' : 'semitones'}
           </span>
         ) : null}
       </div>
 
-      <ol className="overflow-hidden rounded-key border border-rule-surface" role="list">
+      <ol className="overflow-hidden rounded-[12px] border border-rule-surface" role="list">
         {rungs.map((rung) => {
           const isReference = referenceSa !== null && rung.semitone === referenceSa;
           const isActual = actualSa !== null && rung.semitone === actualSa;
-          const comfortable = inComfort(rung.semitone);
 
           return (
             <li
@@ -82,7 +76,12 @@ export function ShrutiLadder({
               aria-current={isActual ? 'true' : undefined}
               className={cn(
                 'flex items-center gap-2 border-b px-2 py-1 last:border-b-0 text-xs',
-                comfortable ? 'bg-surface-sunk' : 'bg-white',
+                // Deliberately NOT shading the comfort band. Measured over the
+                // real history it spans 5-10 semitones for every singer, so
+                // shading "inside" covered nearly every row and left the few
+                // outside rows looking highlighted — emphasis on exactly the
+                // wrong thing. The two rows that matter carry marks instead.
+                isActual || isReference ? 'bg-white/[0.06]' : 'bg-transparent',
               )}
             >
               {/* Marker gutter. Fixed width so labels stay aligned. */}
@@ -91,14 +90,14 @@ export function ShrutiLadder({
                   <span
                     aria-hidden
                     className="h-3 w-3 rounded-full border-2"
-                    style={{ background: 'var(--ivory)', borderColor: 'var(--brass)' }}
+                    style={{ background: 'rgb(var(--ivory))', borderColor: 'rgb(var(--brass))' }}
                   />
                 ) : null}
                 {isActual ? (
                   <span
                     aria-hidden
                     className={cn('rounded-full', isReference ? 'absolute h-1.5 w-1.5' : 'h-3 w-3')}
-                    style={{ background: 'var(--kumkum)' }}
+                    style={{ background: 'rgb(var(--kumkum))' }}
                   />
                 ) : null}
               </span>
@@ -116,7 +115,7 @@ export function ShrutiLadder({
                 <span className="font-mono tabular-nums">tabla {tablaPitchOf(rung.label) ?? '—'}</span>
                 {isReference ? <Tag>reference</Tag> : null}
                 {isActual ? (
-                  <Tag style={{ background: 'var(--kumkum)', color: 'white', borderColor: 'transparent' }}>
+                  <Tag style={{ background: 'rgb(var(--kumkum))', color: 'white', borderColor: 'transparent' }}>
                     {actualKind === 'predicted' ? 'predicted' : 'sung'}
                   </Tag>
                 ) : null}
@@ -128,7 +127,12 @@ export function ShrutiLadder({
 
       {comfort ? (
         <p className="text-xs text-on-surface-muted">
-          Comfort band (p10–p90 of their historical Sa) shaded.
+          Comfort band, p10–p90 of their historical Sa:{' '}
+          <span className="font-mono tabular">
+            {NOTE_NAMES[comfort.low]}–{NOTE_NAMES[comfort.high]}
+          </span>
+          . Not shaded on the ladder — it spans most of the octave for every
+          singer, so it cannot pick anything out.
         </p>
       ) : null}
     </figure>

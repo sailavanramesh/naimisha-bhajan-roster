@@ -84,7 +84,7 @@ export default async function SingerPage({
                     <>
                       Against the reference for {singer.gender ?? "their"} voice,{" "}
                       {singer.name} sits at a median of{" "}
-                      <strong style={{ color: "var(--kumkum)" }}>
+                      <strong className="text-kumkum">
                         {signed(profile.overall.median)}
                       </strong>{" "}
                       semitones across {profile.overall.n} records.
@@ -129,9 +129,9 @@ export default async function SingerPage({
               <p className="text-xs text-on-surface-muted">
                 Only ragas with at least {MIN_RAGA_SAMPLES} records are shown.
               </p>
-              <div className="overflow-x-auto rounded-key border border-rule-surface">
+              <div className="overflow-x-auto rounded-[12px] border border-rule-surface">
                 <table className="w-full text-sm">
-                  <thead className="bg-surface-sunk text-left">
+                  <thead className="bg-white/[0.05] text-left">
                     <tr className="border-b border-rule-surface">
                       <th className="px-3 py-2 font-semibold">Raga</th>
                       <th className="px-3 py-2 font-semibold">n</th>
@@ -171,7 +171,7 @@ export default async function SingerPage({
               <Link
                 key={h.id}
                 href={`/roster/${h.sessionId}`}
-                className="rounded-key border border-rule-surface bg-white/60 p-3 hover:bg-surface-sunk focus-visible:ring-2 focus-visible:ring-black/20"
+                className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-3 hover:bg-white/[0.05] focus-visible:ring-2 focus-visible:ring-black/20"
               >
                 <div className="text-sm font-medium">
                   {new Date(h.session.date).toLocaleDateString(undefined, {
@@ -207,12 +207,9 @@ function Stat({
   accent?: boolean;
 }) {
   return (
-    <div className="rounded-key border border-rule-surface bg-white/60 px-3 py-2">
+    <div className="rounded-[12px] border border-rule-surface bg-white/[0.03] px-3 py-2">
       <div className="text-xs text-on-surface-muted">{label}</div>
-      <div
-        className="font-mono text-lg tabular-nums font-semibold"
-        style={accent ? { color: "var(--kumkum)" } : undefined}
-      >
+      <div className={`font-mono text-lg tabular font-semibold${accent ? " text-kumkum" : ""}`}>
         {value}
       </div>
     </div>

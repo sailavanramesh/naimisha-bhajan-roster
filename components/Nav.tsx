@@ -36,7 +36,7 @@ function Hamburger({ open }: { open: boolean }) {
 export function Nav() {
   const pathname = usePathname();
 
-  const [expanded, setExpanded] = useState<boolean>(false);
+  const [expanded, setExpanded] = useState<boolean>(true);
   const [mobileOpen, setMobileOpen] = useState<boolean>(false);
 
   useEffect(() => {

@@ -168,7 +168,7 @@ export default async function RosterPage({
 
             <div className="flex items-center gap-2">
               <Link
-                className="rounded-key border px-3 py-2 text-sm hover:bg-surface-sunk"
+                className="rounded-[12px] border px-3 py-2 text-sm hover:bg-white/[0.05]"
                 href={`/roster?view=${view === "calendar" ? "list" : "calendar"}`}
               >
                 {view === "calendar" ? "List view" : "Calendar view"}
@@ -177,12 +177,12 @@ export default async function RosterPage({
           </div>
 
           {canEdit ? (
-            <div className="rounded-key border bg-green-50 px-3 py-2 text-sm">
+            <div className="rounded-[12px] border bg-green-50 px-3 py-2 text-sm">
               <span className="font-medium">Edit mode ON</span>
               <span className="text-on-surface-muted"> — this browser can edit.</span>
             </div>
           ) : (
-            <div className="rounded-key border bg-amber-50 px-3 py-2 text-sm grid gap-2">
+            <div className="rounded-[12px] border bg-amber-50 px-3 py-2 text-sm grid gap-2">
               <div>
                 <span className="font-medium">Read-only</span>
                 <span className="text-on-surface-muted"> — enter your edit key here to enable editing in this browser.</span>
@@ -215,7 +215,7 @@ export default async function RosterPage({
                   <Link
                     key={s.id}
                     href={`/roster/${s.id}`}
-                    className="rounded-key border border-rule-surface bg-white/60 p-3 hover:bg-surface-sunk"
+                    className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-3 hover:bg-white/[0.05]"
                   >
                     <div className="text-sm font-medium">
                       {new Date(s.date).toLocaleDateString(undefined, {

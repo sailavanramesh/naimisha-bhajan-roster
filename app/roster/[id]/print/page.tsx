@@ -40,7 +40,7 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
   });
 
   return (
-    <div className="print-sheet grid gap-4 bg-surface p-5 text-on-surface print:bg-white print:p-0">
+    <div className="print-sheet grid gap-4 rounded-[14px] bg-[#FBF8F3] p-6 text-[#14121A] print:rounded-none print:bg-white print:p-0">
       <div className="no-print flex flex-wrap items-center gap-2">
         <Link href={`/roster/${id}`}>
           <Button>Back to the session</Button>

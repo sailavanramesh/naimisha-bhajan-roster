@@ -103,12 +103,12 @@ export default async function BhajanPage({
 
         <CardContent className="grid gap-4">
           <div className="grid gap-2 sm:grid-cols-2">
-            <div className="rounded-key border border-rule-surface bg-white/60 p-3">
+            <div className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-3">
               <div className="text-xs font-semibold text-on-surface-muted">Gents pitch</div>
               <div className="mt-1 text-sm">{bhajan.referenceGentsPitch ?? "—"}</div>
             </div>
 
-            <div className="rounded-key border border-rule-surface bg-white/60 p-3">
+            <div className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-3">
               <div className="text-xs font-semibold text-on-surface-muted">Ladies pitch</div>
               <div className="mt-1 text-sm">{bhajan.referenceLadiesPitch ?? "—"}</div>
             </div>
@@ -122,9 +122,9 @@ export default async function BhajanPage({
                 Nobody in the group has sung this yet.
               </p>
             ) : (
-              <div className="overflow-x-auto rounded-key border border-rule-surface">
+              <div className="overflow-x-auto rounded-[12px] border border-rule-surface">
                 <table className="w-full text-sm">
-                  <thead className="bg-surface-sunk text-left">
+                  <thead className="bg-white/[0.05] text-left">
                     <tr className="border-b border-rule-surface">
                       <th className="px-3 py-2 font-semibold">Singer</th>
                       <th className="px-3 py-2 font-semibold">Date</th>
@@ -143,8 +143,7 @@ export default async function BhajanPage({
                           {r.confirmedPitch ?? "—"}
                         </td>
                         <td
-                          className="px-3 py-2 font-mono tabular-nums font-semibold"
-                          style={r.delta ? { color: "var(--kumkum)" } : undefined}
+                          className={r.delta ? "px-3 py-2 font-mono tabular font-semibold text-kumkum" : "px-3 py-2 font-mono tabular font-semibold"}
                         >
                           {signed(r.delta)}
                         </td>
@@ -183,9 +182,9 @@ export default async function BhajanPage({
                 marked <em>reference only</em> have too little history to predict
                 from, so the plain reference is shown instead.
               </p>
-              <div className="overflow-x-auto rounded-key border border-rule-surface">
+              <div className="overflow-x-auto rounded-[12px] border border-rule-surface">
                 <table className="w-full text-sm">
-                  <thead className="bg-surface-sunk text-left">
+                  <thead className="bg-white/[0.05] text-left">
                     <tr className="border-b border-rule-surface">
                       <th className="px-3 py-2 font-semibold">Singer</th>
                       <th className="px-3 py-2 font-semibold">Pitch</th>
@@ -205,8 +204,7 @@ export default async function BhajanPage({
                           </Link>
                         </td>
                         <td
-                          className="px-3 py-2 font-mono tabular-nums"
-                          style={prediction.predicted ? { color: "var(--kumkum)" } : undefined}
+                          className={prediction.predicted ? "px-3 py-2 font-mono tabular text-kumkum" : "px-3 py-2 font-mono tabular"}
                         >
                           {/*
                             No comfort-range badge here on purpose. A
@@ -236,12 +234,12 @@ export default async function BhajanPage({
           ) : null}
 
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-key border border-rule-surface bg-white/60 p-3">
+            <div className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-3">
               <div className="text-xs font-semibold text-on-surface-muted mb-2">Lyrics</div>
               <div className="text-sm whitespace-pre-wrap">{bhajan.lyrics ?? "—"}</div>
             </div>
 
-            <div className="rounded-key border border-rule-surface bg-white/60 p-3">
+            <div className="rounded-[12px] border border-rule-surface bg-white/[0.03] p-3">
               <div className="text-xs font-semibold text-on-surface-muted mb-2">Meaning</div>
               <div className="text-sm whitespace-pre-wrap">{bhajan.meaning ?? "—"}</div>
             </div>

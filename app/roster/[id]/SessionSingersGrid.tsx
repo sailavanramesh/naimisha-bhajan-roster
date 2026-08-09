@@ -297,7 +297,7 @@ export function SessionSingersGrid(props: {
               maxHeight: Math.min(320, window.innerHeight - (bhPortal.anchorRect.bottom + 16)),
               zIndex: 9999,
             }}
-            className="overflow-auto rounded-key border border-rule-surface bg-white shadow-xl"
+            className="overflow-auto rounded-[12px] border border-rule-surface bg-white/[0.03] shadow-xl"
           >
             {bhPortal.loading ? <div className="px-3 py-2 text-xs text-on-surface-muted">Searching…</div> : null}
             {bhPortal.items.length === 0 && !bhPortal.loading ? (
@@ -307,7 +307,7 @@ export function SessionSingersGrid(props: {
               <button
                 key={it.id}
                 type="button"
-                className="w-full text-left px-3 py-2 text-sm hover:bg-surface-sunk"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-white/[0.05]"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onPickBhajan(bhPortal.localId!, it.id)}
               >
@@ -328,21 +328,21 @@ export function SessionSingersGrid(props: {
         {props.canEdit ? (
           <div className="flex items-center gap-2">
             <Button onClick={addRow}>Add row</Button>
-            <Button onClick={saveAll} className="bg-black text-white hover:bg-black/90">
+            <Button onClick={saveAll} variant="primary">
               {isPending ? "Saving…" : "Save changes"}
             </Button>
           </div>
         ) : null}
       </div>
 
-      <div className="overflow-x-auto rounded-key border border-rule-surface bg-white">
+      <div className="overflow-x-auto rounded-[12px] border border-rule-surface bg-white/[0.03]">
         <table className="min-w-[1120px] w-full text-sm table-fixed">
-          <thead className="bg-surface-sunk">
+          <thead className="bg-white/[0.05]">
             <tr className="border-b border-rule-surface">
-              <th className="sticky left-0 z-50 bg-surface-sunk px-3 py-2 text-left font-semibold w-[190px] border-r shadow-sm">
+              <th className="sticky left-0 z-50 bg-white/[0.05] px-3 py-2 text-left font-semibold w-[190px] border-r shadow-sm">
                 Singer
               </th>
-              <th className="sticky left-[190px] z-40 bg-surface-sunk px-3 py-2 text-left font-semibold w-[340px] border-r shadow-sm">
+              <th className="sticky left-[190px] z-40 bg-white/[0.05] px-3 py-2 text-left font-semibold w-[340px] border-r shadow-sm">
                 Bhajan
               </th>
               <th className="px-3 py-2 text-left font-semibold w-[280px]">Confirmed Pitch</th>
@@ -360,12 +360,12 @@ export function SessionSingersGrid(props: {
               return (
                 <tr key={r._localId} className="border-b align-top">
                   {/* Singer */}
-                  <td className="sticky left-0 z-30 bg-white/60 px-3 py-2 w-[190px] border-r shadow-sm">
+                  <td className="sticky left-0 z-30 bg-white/[0.03] px-3 py-2 w-[190px] border-r shadow-sm">
                     {props.canEdit ? (
                       <select
                         value={r.singerId || ""}
                         onChange={(e) => onSingerChange(r._localId, e.target.value)}
-                        className="w-full rounded-key border px-3 py-2 text-sm"
+                        className="w-full rounded-[12px] border px-3 py-2 text-sm"
                       >
                         <option value="">Select singer…</option>
                         {props.singers.map((x) => (
@@ -381,7 +381,7 @@ export function SessionSingersGrid(props: {
                   </td>
 
                   {/* Bhajan */}
-                  <td className="sticky left-[190px] z-20 bg-white/60 px-3 py-2 w-[340px] border-r shadow-sm">
+                  <td className="sticky left-[190px] z-20 bg-white/[0.03] px-3 py-2 w-[340px] border-r shadow-sm">
                     {props.canEdit ? (
                       <input
                         ref={(el) => {
@@ -409,7 +409,7 @@ export function SessionSingersGrid(props: {
                         onBlur={() => {
                           setTimeout(() => setBhPortal((p) => ({ ...p, open: false })), 150);
                         }}
-                        className="w-full rounded-key border px-3 py-2 text-sm"
+                        className="w-full rounded-[12px] border px-3 py-2 text-sm"
                       />
                     ) : (
                       <div className="whitespace-normal break-words leading-5">
@@ -430,16 +430,16 @@ export function SessionSingersGrid(props: {
                           onChange={(e) => setPitchQuery(r._localId, e.target.value)}
                           onFocus={() => setPitchUI((prev) => ({ ...prev, [r._localId]: { q: pu.q, open: true } }))}
                           onBlur={() => setTimeout(() => closePitch(r._localId), 120)}
-                          className="w-full rounded-key border px-3 py-2 text-sm leading-5 whitespace-pre-wrap resize-y min-h-[44px] focus:ring-2 focus:ring-black/10"
+                          className="w-full rounded-[12px] border px-3 py-2 text-sm leading-5 whitespace-pre-wrap resize-y min-h-[44px] focus:ring-2 focus:ring-black/10"
                           rows={2}
                         />
                         {pu.open && pitchOptions.length > 0 ? (
-                          <div className="absolute z-[60] mt-1 w-full max-h-64 overflow-auto rounded-key border border-rule-surface bg-white shadow">
+                          <div className="absolute z-[60] mt-1 w-full max-h-64 overflow-auto rounded-[12px] border border-rule-surface bg-white/[0.03] shadow">
                             {pitchOptions.map((p) => (
                               <button
                                 key={p}
                                 type="button"
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-surface-sunk"
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-white/[0.05]"
                                 onMouseDown={(e) => e.preventDefault()}
                                 onClick={() => pickPitch(r._localId, p)}
                               >
@@ -450,7 +450,7 @@ export function SessionSingersGrid(props: {
                         ) : null}
                       </div>
                     ) : (
-                      <div className="rounded-key border border-rule-surface bg-white/60 px-3 py-2 whitespace-normal break-words leading-5">
+                      <div className="rounded-[12px] border border-rule-surface bg-white/[0.03] px-3 py-2 whitespace-normal break-words leading-5">
                         {r.confirmedPitch ?? "—"}
                       </div>
                     )}
@@ -458,14 +458,14 @@ export function SessionSingersGrid(props: {
 
                   {/* Recommended Pitch (locked) */}
                   <td className="px-3 py-2">
-                    <div className="rounded-key border bg-surface-sunk px-3 py-2 whitespace-normal break-words leading-5">
+                    <div className="rounded-[12px] border bg-white/[0.05] px-3 py-2 whitespace-normal break-words leading-5">
                       {r.recommendedPitch ?? "—"}
                     </div>
                   </td>
 
                   {/* Tabla (locked) */}
                   <td className="px-3 py-2">
-                    <div className="rounded-key border bg-surface-sunk px-3 py-2 whitespace-normal break-words leading-5">
+                    <div className="rounded-[12px] border bg-white/[0.05] px-3 py-2 whitespace-normal break-words leading-5">
                       {r.confirmedPitch ? (r.alternativeTablaPitch ?? "—") : "—"}
                     </div>
                   </td>

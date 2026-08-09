@@ -162,7 +162,7 @@ export default async function BuildPage({
                   type="date"
                   name="date"
                   defaultValue={date}
-                  className="h-10 w-full rounded-key border px-3 text-sm"
+                  className="h-10 w-full rounded-[12px] border px-3 text-sm"
                 />
               </Field>
 
@@ -170,7 +170,7 @@ export default async function BuildPage({
                 <select
                   name="t"
                   defaultValue={template.name}
-                  className="h-10 w-full rounded-key border px-3 text-sm"
+                  className="h-10 w-full rounded-[12px] border px-3 text-sm"
                 >
                   {templates.map((t) => (
                     <option key={t.id} value={t.name}>
@@ -188,7 +188,7 @@ export default async function BuildPage({
                   min={1}
                   max={20}
                   defaultValue={length}
-                  className="h-10 w-full rounded-key border px-3 text-sm"
+                  className="h-10 w-full rounded-[12px] border px-3 text-sm"
                 />
               </Field>
 
@@ -199,7 +199,7 @@ export default async function BuildPage({
                   min={0}
                   max={999}
                   defaultValue={freshnessDays}
-                  className="h-10 w-full rounded-key border px-3 text-sm"
+                  className="h-10 w-full rounded-[12px] border px-3 text-sm"
                 />
               </Field>
 
@@ -207,7 +207,7 @@ export default async function BuildPage({
                 <select
                   name="sung"
                   defaultValue={one(sp, "sung") ?? "any"}
-                  className="h-10 w-full rounded-key border px-3 text-sm"
+                  className="h-10 w-full rounded-[12px] border px-3 text-sm"
                 >
                   <option value="any">Anything in the masterlist</option>
                   <option value="known">Only bhajans the group has sung</option>
@@ -223,7 +223,7 @@ export default async function BuildPage({
               work this week.
             </p>
 
-            <details className="rounded-key border border-rule-surface bg-white">
+            <details className="rounded-[12px] border border-rule-surface bg-white/[0.03]">
               <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold">
                 Filters
               </summary>
@@ -274,7 +274,7 @@ export default async function BuildPage({
             </details>
 
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="submit" className="bg-black text-white hover:bg-black/90">
+              <Button type="submit" variant="primary">
                 Apply
               </Button>
               <Link href={href(sp, { seed: nextSeed })}>
@@ -290,7 +290,7 @@ export default async function BuildPage({
           </form>
 
           {result.warnings.length > 0 ? (
-            <div className="rounded-key border border-warn/60 bg-warn/10 p-3">
+            <div className="rounded-[12px] border border-warn/60 bg-warn/10 p-3">
               <div className="text-sm font-semibold">Worth knowing</div>
               <ul className="mt-1 list-disc pl-5 text-sm">
                 {result.warnings.map((w) => (
@@ -310,7 +310,7 @@ export default async function BuildPage({
                   // SPEC §6: one orchestrated moment. Unlocked slots settle into
                   // place in sequence after a re-roll; locked ones stay put and
                   // carry no animation. `prefers-reduced-motion` disables it.
-                  className={`rounded-key border border-rule-surface bg-white/60 p-3${slot.locked ? "" : " settle"}`}
+                  className={`rounded-[12px] border border-rule-surface bg-white/[0.03] p-3${slot.locked ? "" : " settle"}`}
                   style={slot.locked ? undefined : { animationDelay: `${(slot.position - 1) * 70}ms` }}
                 >
                   <div className="flex items-start justify-between gap-3">
@@ -388,7 +388,7 @@ export default async function BuildPage({
                   result.slots.map((s) => ({ id: s.candidate.id, title: s.candidate.title })),
                 )}
               />
-              <Button type="submit" className="bg-black text-white hover:bg-black/90">
+              <Button type="submit" variant="primary">
                 Save as draft session on {date}
               </Button>
               <span className="text-xs text-on-surface-muted">
@@ -447,7 +447,7 @@ function MultiField({
         multiple
         defaultValue={selected}
         size={Math.min(6, options.length + 1)}
-        className="w-full rounded-key border px-2 py-1 text-sm"
+        className="w-full rounded-[12px] border px-2 py-1 text-sm"
       >
         {allowUnspecified ? <option value={UNSPECIFIED}>(unspecified)</option> : null}
         {options.map((o) => (
