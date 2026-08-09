@@ -1,55 +1,101 @@
-# Naimisha Bhajan Roster — Web App (Starter)
+# Naimisha Bhajan Roster
 
-This project is a web app version of the Google Sheets roster you provided (exported as XLSX).
+A web app for the Naimisha Sai Centre bhajan group (Melbourne). Suggests a set
+to sing, rosters singers onto it fairly at the right pitch, and remembers who
+sang what, when and at what shruti.
 
-## What you get in this starter
-- Bhajan Masterlist browse/search
-- Session roster (by date) view + per-session detail page
-- Singer detail page (history)
-- Instrumentalist roster view (by date)
-- One-command seed/import from your XLSX into the database
+- **What it is and how it works** → [`CLAUDE.md`](CLAUDE.md)
+- **What it should do** → [`docs/SPEC.md`](docs/SPEC.md)
+- **What has been built, what is next, and why** → [`PROGRESS.md`](PROGRESS.md)
 
-## Stack
-- Next.js (App Router) + TypeScript + Tailwind
-- Prisma ORM
-- Database: **SQLite for local dev** (easy) OR Postgres/Supabase for sharing
+---
 
-## Quick start (local)
-1. Create `.env` from `.env.example`
-2. Install dependencies
-   - `npm install`
-3. Create DB + migrate
-   - `npm run prisma:migrate`
-4. Seed from your XLSX
-   - Put your file at `data/roster.xlsx` (or update `XLSX_PATH` in `.env`)
-   - `npm run db:seed`
-5. Run
-   - `npm run dev`
+## Where it runs
 
-## Deploy / share with multiple people
-For sharing, switch to Postgres (recommended: Supabase).
-- Set `DATABASE_URL` to the Supabase Postgres connection string
-- Run migrations
-- Redeploy to Vercel
+**Azure. Not Vercel** — v1 used Vercel and Neon; v2 does not. Everything now
+runs under the centre's Azure nonprofit sponsorship subscription, at roughly
+**54 AUD/month**.
 
-## Notes
-- Authentication/roles aren’t wired yet in this starter. Add Supabase Auth or NextAuth once the core workflow feels right.
-- The seed script maps these sheets:
-  - `Bhajan Masterlist` → `bhajans`
-  - `Singer Roster` → `sessions` + `session_singers`
-  - `Instrumentalist Roster` → `session_instruments`
-  - `Lookup tables` → `singers`, `pitch_lookup`, `instrument_people`
-  - `Festival Bhajans` → `festival_bhajans`
+| Thing | Where |
+|---|---|
+| Website | `https://naimisha-bhajan-roster.azurewebsites.net` |
+| Database | `psql-naimisha-roster.postgres.database.azure.com` |
+| Everything else | Resource group `rg-naimisha-bhajan-roster`, Australia East |
 
+---
 
-## Link-based editing (no login)
+## Seeing it on your own machine
 
-This app supports **"anyone with the link can edit"** using an **edit key**.
+This is the quickest way to look at it and try things. Nothing you do here
+touches the live website — but it **does** use the real database, so anything
+you save is real.
 
-- Set `EDIT_KEY` in your environment (local `.env`, and Vercel env vars).
-- Share your normal link for read-only access.
-- Share an **edit link** that includes the key once, e.g. `https://your-app.vercel.app/?k=YOUR_LONG_KEY`
-  - The app will set an `edit=1` cookie and then redirect to remove the key from the URL.
-  - Any browser with that cookie can edit.
+```bash
+npm install
+npm run build
+npm run start -- -p 3111
+```
 
-If you need to revoke access, change `EDIT_KEY` and redeploy (or just update env var + redeploy).
+Then open <http://localhost:3111>.
+
+**To be able to edit**, open this once — it sets a cookie that lasts a year:
+
+```
+http://localhost:3111/?k=YOUR_EDIT_KEY
+```
+
+`YOUR_EDIT_KEY` is the `EDIT_KEY` line in your local `.env`. Without it the app
+is read-only, which is also how anybody visiting the public site sees it.
+
+> Your machine's IP address is allowed through the database firewall. If you
+> move to a different network the app will fail to connect — see
+> "Database firewall" in `PROGRESS.md` for the one command that fixes it.
+
+---
+
+## Putting changes on the live website
+
+Deployment is automatic: **anything merged into `main` deploys itself.**
+
+1. Open a pull request from `v2` into `main`.
+2. Merge it.
+3. GitHub Actions builds, lints, tests, and deploys to Azure. Watch it at
+   <https://github.com/sailavanramesh/naimisha-bhajan-roster/actions>.
+
+There is no password or publish profile involved — GitHub proves who it is to
+Azure using a federated identity, so there is no long-lived secret to leak.
+
+---
+
+## Database changes
+
+**Migrations are not run by the deployment.** They are applied by hand, from a
+machine whose IP is allowed through the firewall:
+
+```bash
+npm run prisma:deploy      # applies any new migrations
+```
+
+This is deliberate. The database holds 709 historical `confirmedPitch` values —
+what each singer actually sang at — and they exist nowhere else. No automated
+process is allowed near them. **Never run `prisma migrate reset`.**
+
+---
+
+## Commands
+
+```bash
+npm run dev            # development server, hot reload
+npm run build          # production build
+npm run start          # run the production build
+npm run lint           # ESLint
+npm run test:run       # unit tests (187)
+npm run db:seed        # initial import from data/roster.xlsx — refuses to overwrite
+npm run db:templates   # insert the shipped session templates
+npm run db:eligibility # instrument eligibility defaults
+```
+
+`npm run test:run` includes the **Phase 0 gate**: it reads the live database and
+checks that every singer's pitch-offset profile still reproduces the table in
+`CLAUDE.md` exactly. If that test ever fails, stop and investigate — do not
+adjust the expected numbers.
