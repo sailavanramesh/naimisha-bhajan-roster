@@ -201,6 +201,8 @@ export type BhajanSinger = {
   gender: string | null;
   /** How we know they can sing it — strongest first. */
   basis: 'sung' | 'festival' | 'known';
+  /** When they last sang this bhajan. Null if only on a list. */
+  lastSung: Date | null;
 };
 
 /**
@@ -220,7 +222,11 @@ export async function getSingersForBhajans(
   const [sung, repertoire] = await Promise.all([
     prisma.sessionSlot.findMany({
       where: { bhajanId: { in: [...bhajanIds] }, singerId: { not: null } },
-      select: { bhajanId: true, singer: { select: { id: true, name: true, gender: true } } },
+      select: {
+        bhajanId: true,
+        session: { select: { date: true } },
+        singer: { select: { id: true, name: true, gender: true } },
+      },
     }),
     prisma.singerRepertoire.findMany({
       where: { bhajanId: { in: [...bhajanIds] } },
@@ -228,7 +234,12 @@ export async function getSingersForBhajans(
     }),
   ]);
 
-  const add = (bhajanId: string | null, s: { id: string; name: string; gender: string | null } | null, basis: BhajanSinger['basis']) => {
+  const add = (
+    bhajanId: string | null,
+    s: { id: string; name: string; gender: string | null } | null,
+    basis: BhajanSinger['basis'],
+    lastSung: Date | null = null,
+  ) => {
     if (!bhajanId || !s) return;
     if (!out.has(bhajanId)) out.set(bhajanId, []);
     const list = out.get(bhajanId)!;
@@ -237,12 +248,16 @@ export async function getSingersForBhajans(
     const rank = { sung: 3, festival: 2, known: 1 } as const;
     if (existing) {
       if (rank[basis] > rank[existing.basis]) existing.basis = basis;
+      // Keep the most recent occasion they sang it.
+      if (lastSung && (!existing.lastSung || lastSung > existing.lastSung)) {
+        existing.lastSung = lastSung;
+      }
       return;
     }
-    list.push({ id: s.id, name: s.name, gender: s.gender, basis });
+    list.push({ id: s.id, name: s.name, gender: s.gender, basis, lastSung });
   };
 
-  for (const r of sung) add(r.bhajanId, r.singer, 'sung');
+  for (const r of sung) add(r.bhajanId, r.singer, 'sung', r.session.date);
   for (const r of repertoire) {
     add(r.bhajanId, r.singer, r.kind === RepertoireKind.festival ? 'festival' : 'known');
   }

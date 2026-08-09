@@ -10,6 +10,7 @@ import {
   type TemplateSpec,
 } from "@/lib/sessionBuilder";
 import { saveDraftSession } from "./actions";
+import { DeitySymbol } from "@/components/DeitySymbol";
 
 export const dynamic = "force-dynamic";
 
@@ -150,7 +151,10 @@ export default async function BuildPage({
   const nextSeed = `${seedBase}#${seedCounter + 1}`;
 
   const chosenIds = result.slots.map((s) => s.candidate.id);
-  const singersByBhajan = await getSingersForBhajans(chosenIds);
+  const [singersByBhajan, allSingers] = await Promise.all([
+    getSingersForBhajans(chosenIds),
+    prisma.singer.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, gender: true } }),
+  ]);
 
   return (
     <div className="grid gap-4">
@@ -340,8 +344,13 @@ export default async function BuildPage({
                       </div>
                       <Link
                         href={`/bhajans/${slot.candidate.id}`}
-                        className="mt-1 block font-medium underline-offset-2 hover:underline"
+                        className="mt-1 flex items-center gap-2 font-medium underline-offset-2 hover:underline"
                       >
+                        <DeitySymbol
+                          deity={slot.candidate.deities[0]}
+                          size={17}
+                          className="shrink-0 text-brass-ink"
+                        />
                         {slot.candidate.title}
                       </Link>
                       <div className="mt-1 text-xs text-on-surface-muted">
@@ -384,6 +393,7 @@ export default async function BuildPage({
                   {/* Who can sing this — pick one now, or leave it to rostering. */}
                   <SingerPicks
                     candidates={singersByBhajan.get(slot.candidate.id) ?? []}
+                    allSingers={allSingers}
                     picked={picks.get(slot.candidate.id) ?? null}
                     hrefFor={(singerId) => {
                       const next = new Map(picks);
@@ -509,25 +519,34 @@ function MultiField({
  */
 function SingerPicks({
   candidates,
+  allSingers,
   picked,
   hrefFor,
 }: {
-  candidates: Array<{ id: string; name: string; gender: string | null; basis: string }>;
+  allSingers: Array<{ id: string; name: string; gender: string | null }>;
+  candidates: Array<{
+    id: string;
+    name: string;
+    gender: string | null;
+    basis: string;
+    lastSung: Date | null;
+  }>;
   picked: string | null;
   hrefFor: (singerId: string | null) => string;
 }) {
-  if (candidates.length === 0) {
-    return (
-      <p className="mt-2 border-t border-rule-surface pt-2 text-xs text-on-surface-muted">
-        Nobody has sung this or has it on their list — rostering will still suggest someone.
-      </p>
-    );
-  }
+  const evidenced = new Set(candidates.map((c) => c.id));
+  const others = allSingers.filter((s) => !evidenced.has(s.id));
+
   return (
     <div className="mt-2 border-t border-rule-surface pt-2">
       <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-brass-ink">
-        Can sing this
+        {candidates.length > 0 ? "Can sing this" : "Nobody has sung this"}
       </div>
+      {candidates.length === 0 ? (
+        <p className="mb-1 text-xs text-on-surface-muted">
+          Rostering will still suggest someone — or pick anyone below.
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-1">
         {candidates.map((c) => (
           <Link key={c.id} href={hrefFor(picked === c.id ? null : c.id)}>
@@ -549,12 +568,51 @@ function SingerPicks({
               {picked === c.id ? "✓ " : ""}
               {c.name}
               <span className="text-[10px] text-on-surface-muted">
-                {c.basis === "sung" ? "sung" : c.basis === "festival" ? "festival" : "knows"}
+                {c.lastSung
+                  ? c.lastSung.toLocaleDateString("en-AU", {
+                      month: "short",
+                      year: "2-digit",
+                      timeZone: "UTC",
+                    })
+                  : c.basis === "festival"
+                    ? "festival"
+                    : "knows"}
               </span>
             </span>
           </Link>
         ))}
       </div>
+
+      {/*
+        Anyone may be assigned, not just those with evidence (SPEC §9.3) — but
+        that is the uncommon case, so it sits behind a disclosure rather than
+        doubling the chips on every row.
+      */}
+      {others.length > 0 ? (
+        <details className="mt-1.5">
+          <summary className="cursor-pointer text-xs text-on-surface-muted hover:text-on-surface">
+            Assign someone else
+          </summary>
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {others.map((o) => (
+              <Link key={o.id} href={hrefFor(picked === o.id ? null : o.id)}>
+                <span
+                  className={
+                    "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs transition-colors " +
+                    (picked === o.id
+                      ? "border-brass bg-brass/20 font-semibold text-on-surface"
+                      : "border-dashed border-rule-surface text-on-surface-muted hover:bg-panel-hover")
+                  }
+                >
+                  {picked === o.id ? "✓ " : ""}
+                  {o.name}
+                  <span className="text-[10px] text-on-surface-muted">{o.gender ?? ""}</span>
+                </span>
+              </Link>
+            ))}
+          </div>
+        </details>
+      ) : null}
     </div>
   );
 }
