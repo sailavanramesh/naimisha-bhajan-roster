@@ -60,6 +60,7 @@ export function SessionSingersGrid(props: {
     alternativeTablaPitch: string | null;
     recommendedPitch: string | null;
     raga: string | null;
+    updatedAt: string;
   }>;
   suggestions: {
     pitches: string[];
@@ -67,6 +68,7 @@ export function SessionSingersGrid(props: {
   };
 }) {
   const [isPending, startTransition] = useTransition();
+  const [saveError, setSaveError] = useState<string | null>(null);
   const singerById = useMemo(() => new Map(props.singers.map((s) => [s.id, s])), [props.singers]);
 
   const [rows, setRows] = useState<RowState[]>(
@@ -83,6 +85,7 @@ export function SessionSingersGrid(props: {
       alternativeTablaPitch: r.alternativeTablaPitch,
       recommendedPitch: r.recommendedPitch,
       raga: r.raga,
+      updatedAt: r.updatedAt,
       _bhajanQuery: r.bhajanTitle ?? r.festivalBhajanTitle ?? "",
     }))
   );
@@ -150,6 +153,7 @@ export function SessionSingersGrid(props: {
         alternativeTablaPitch: null,
         recommendedPitch: null,
         raga: null,
+        updatedAt: null,
         _bhajanQuery: "",
       },
     ]);
@@ -259,6 +263,7 @@ export function SessionSingersGrid(props: {
       return;
     }
 
+    setSaveError(null);
     startTransition(async () => {
       // recommendedPitch and raga are deliberately not sent: both are derived
       // from the bhajan and are no longer columns on the slot.
@@ -270,8 +275,17 @@ export function SessionSingersGrid(props: {
         festivalBhajanTitle: r.festivalBhajanTitle,
         confirmedPitch: r.confirmedPitch,
         alternativeTablaPitch: r.alternativeTablaPitch,
+        updatedAt: r.updatedAt ?? null,
       }));
-      await upsertSessionSingerRows(props.sessionId, payload);
+      try {
+        await upsertSessionSingerRows(props.sessionId, payload);
+      } catch (e) {
+        setSaveError(
+          e instanceof Error
+            ? e.message
+            : "The save did not go through. Your changes are still on screen.",
+        );
+      }
     });
   }
 
@@ -299,9 +313,9 @@ export function SessionSingersGrid(props: {
             }}
             className="overflow-auto rounded-[12px] border border-rule-surface bg-panel shadow-xl"
           >
-            {bhPortal.loading ? <div className="px-3 py-2 text-xs text-on-surface-muted">Searching…</div> : null}
+            {bhPortal.loading ? <div className="px-2 py-1.5 text-xs text-on-surface-muted">Searching…</div> : null}
             {bhPortal.items.length === 0 && !bhPortal.loading ? (
-              <div className="px-3 py-2 text-xs text-on-surface-muted">No matches.</div>
+              <div className="px-2 py-1.5 text-xs text-on-surface-muted">No matches.</div>
             ) : null}
             {bhPortal.items.map((it) => (
               <button
@@ -323,6 +337,15 @@ export function SessionSingersGrid(props: {
     <div className="grid gap-3">
       {portalEl}
 
+      {saveError ? (
+        <div
+          role="alert"
+          className="rounded-[12px] border border-warn/50 bg-warn/10 px-3 py-2 text-sm"
+        >
+          {saveError}
+        </div>
+      ) : null}
+
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-semibold">Roster entries</div>
         {props.canEdit ? (
@@ -336,19 +359,19 @@ export function SessionSingersGrid(props: {
       </div>
 
       <div className="overflow-x-auto rounded-[12px] border border-rule-surface bg-panel">
-        <table className="min-w-[1120px] w-full text-sm table-fixed">
+        <table className="w-full min-w-[720px] text-[13px]">
           <thead className="bg-panel">
             <tr className="border-b border-rule-surface">
-              <th className="sticky left-0 z-50 bg-panel px-3 py-2 text-left font-semibold w-[190px] border-r shadow-sm">
+              <th className="sticky left-0 z-50 bg-panel px-3 py-2 text-left font-semibold w-[132px] border-r shadow-sm">
                 Singer
               </th>
-              <th className="sticky left-[190px] z-40 bg-panel px-3 py-2 text-left font-semibold w-[340px] border-r shadow-sm">
+              <th className="sticky left-[132px] z-40 bg-panel px-3 py-2 text-left font-semibold w-[280px] border-r shadow-sm">
                 Bhajan
               </th>
-              <th className="px-3 py-2 text-left font-semibold w-[280px]">Confirmed Pitch</th>
-              <th className="px-3 py-2 text-left font-semibold w-[260px]">Recommended Pitch</th>
-              <th className="px-3 py-2 text-left font-semibold w-[140px]">Tabla</th>
-              {props.canEdit ? <th className="px-3 py-2 text-right font-semibold w-[110px]" /> : null}
+              <th className="px-2 py-1.5 text-left font-semibold w-[132px]">Confirmed</th>
+              <th className="whitespace-nowrap px-2 py-1.5 text-left font-semibold">Recommended</th>
+              <th className="whitespace-nowrap px-2 py-1.5 text-left font-semibold">Tabla</th>
+              {props.canEdit ? <th className="px-2 py-1.5 text-right font-semibold" /> : null}
             </tr>
           </thead>
 
@@ -360,12 +383,12 @@ export function SessionSingersGrid(props: {
               return (
                 <tr key={r._localId} className="border-b align-top">
                   {/* Singer */}
-                  <td className="sticky left-0 z-30 bg-panel px-3 py-2 w-[190px] border-r shadow-sm">
+                  <td className="sticky left-0 z-30 bg-panel px-3 py-2 w-[132px] border-r shadow-sm">
                     {props.canEdit ? (
                       <select
                         value={r.singerId || ""}
                         onChange={(e) => onSingerChange(r._localId, e.target.value)}
-                        className="w-full rounded-[12px] border px-3 py-2 text-sm"
+                        className="w-full rounded-[10px] border border-rule-surface bg-field px-2 py-1.5 text-[13px]"
                       >
                         <option value="">Select singer…</option>
                         {props.singers.map((x) => (
@@ -381,7 +404,7 @@ export function SessionSingersGrid(props: {
                   </td>
 
                   {/* Bhajan */}
-                  <td className="sticky left-[190px] z-20 bg-panel px-3 py-2 w-[340px] border-r shadow-sm">
+                  <td className="sticky left-[132px] z-20 bg-panel px-3 py-2 w-[280px] border-r shadow-sm">
                     {props.canEdit ? (
                       <input
                         ref={(el) => {
@@ -409,7 +432,7 @@ export function SessionSingersGrid(props: {
                         onBlur={() => {
                           setTimeout(() => setBhPortal((p) => ({ ...p, open: false })), 150);
                         }}
-                        className="w-full rounded-[12px] border px-3 py-2 text-sm"
+                        className="w-full rounded-[10px] border border-rule-surface bg-field px-2 py-1.5 text-[13px]"
                       />
                     ) : (
                       <div className="whitespace-normal break-words leading-5">
@@ -421,17 +444,18 @@ export function SessionSingersGrid(props: {
                   </td>
 
                   {/* Confirmed Pitch */}
-                  <td className="px-3 py-2">
+                  <td className="px-2 py-1.5">
                     {props.canEdit ? (
                       <div className="relative">
-                        <textarea
+                        <input
+                          type="text"
                           value={pu.q}
-                          placeholder="Confirmed (main)"
+                          placeholder="Confirmed"
+                          size={16}
                           onChange={(e) => setPitchQuery(r._localId, e.target.value)}
                           onFocus={() => setPitchUI((prev) => ({ ...prev, [r._localId]: { q: pu.q, open: true } }))}
                           onBlur={() => setTimeout(() => closePitch(r._localId), 120)}
-                          className="w-full rounded-[12px] border px-3 py-2 text-sm leading-5 whitespace-pre-wrap resize-y min-h-[44px] focus:ring-2 focus:ring-black/10"
-                          rows={2}
+                          className="w-[15ch] rounded-[10px] border border-rule-surface bg-field px-2 py-1.5 text-[13px] leading-5"
                         />
                         {pu.open && pitchOptions.length > 0 ? (
                           <div className="absolute z-[60] mt-1 w-full max-h-64 overflow-auto rounded-[12px] border border-rule-surface bg-panel shadow">
@@ -450,29 +474,23 @@ export function SessionSingersGrid(props: {
                         ) : null}
                       </div>
                     ) : (
-                      <div className="rounded-[12px] border border-rule-surface bg-panel px-3 py-2 whitespace-normal break-words leading-5">
-                        {r.confirmedPitch ?? "—"}
-                      </div>
+                      <div className="whitespace-nowrap">{r.confirmedPitch ?? "—"}</div>
                     )}
                   </td>
 
-                  {/* Recommended Pitch (locked) */}
-                  <td className="px-3 py-2">
-                    <div className="rounded-[12px] border bg-panel px-3 py-2 whitespace-normal break-words leading-5">
-                      {r.recommendedPitch ?? "—"}
-                    </div>
+                  {/* Recommended — derived, never editable. Plain text. */}
+                  <td className="whitespace-nowrap px-2 py-1.5 text-on-surface-muted">
+                    {r.recommendedPitch ?? "—"}
                   </td>
 
-                  {/* Tabla (locked) */}
-                  <td className="px-3 py-2">
-                    <div className="rounded-[12px] border bg-panel px-3 py-2 whitespace-normal break-words leading-5">
-                      {r.confirmedPitch ? (r.alternativeTablaPitch ?? "—") : "—"}
-                    </div>
+                  {/* Tabla — derived from the confirmed pitch. Plain text. */}
+                  <td className="whitespace-nowrap px-2 py-1.5 text-on-surface-muted">
+                    {r.confirmedPitch ? (r.alternativeTablaPitch ?? "—") : "—"}
                   </td>
 
                   {/* Delete */}
                   {props.canEdit ? (
-                    <td className="px-3 py-2 text-right">
+                    <td className="px-2 py-1.5 text-right">
                       <Button onClick={() => removeRow(r._localId)} className="border-red-300 text-red-700 hover:bg-red-50">
                         Delete
                       </Button>

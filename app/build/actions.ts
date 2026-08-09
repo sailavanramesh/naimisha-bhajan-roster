@@ -19,7 +19,14 @@ const SaveDraft = z.object({
   seed: z.string().min(1),
   type: z.nativeEnum(SessionType),
   slots: z
-    .array(z.object({ id: z.string().min(1), title: z.string() }))
+    .array(
+      z.object({
+        id: z.string().min(1),
+        title: z.string(),
+        /** Optional: a singer picked on the Build page before saving. */
+        singerId: z.string().min(1).nullable().optional(),
+      }),
+    )
     .min(1, "Nothing to save"),
 });
 
@@ -105,6 +112,7 @@ export async function saveDraftSession(formData: FormData): Promise<void> {
         sessionId: session.id,
         bhajanId: s.id,
         bhajanTitle: s.title || null,
+        singerId: s.singerId ?? null,
         position: i + 1,
       })),
     });

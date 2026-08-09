@@ -22,7 +22,19 @@ export type SingerRowInput = {
   festivalBhajanTitle: string | null;
   confirmedPitch: string | null;
   alternativeTablaPitch: string | null;
+  /**
+   * The row's `updatedAt` as it was when this browser loaded the page.
+   * Used to detect that somebody else saved in the meantime — see
+   * `upsertSessionSingerRows`.
+   */
+  updatedAt?: string | null;
 };
+
+/*
+ * A "use server" file may only export async functions, so the concurrent-edit
+ * case is signalled with a plain Error. The message is what the grid shows, so
+ * it is written for the person reading it, not for a log.
+ */
 
 export async function updateSessionNotes(sessionId: string, notes: string) {
   await requireEdit();
@@ -75,6 +87,43 @@ export async function upsertSessionSingerRows(sessionId: string, rows: SingerRow
     const existingIds = rows
       .filter((r) => r.id && !String(r.id).startsWith("new_"))
       .map((r) => r.id as string);
+
+    /*
+     * OPTIMISTIC CONCURRENCY.
+     *
+     * Several people edit a session at once — the coordinator on a laptop, a
+     * singer on a phone. This used to be last-writer-wins on every field,
+     * which meant a stale tab could silently overwrite a confirmedPitch
+     * somebody had just recorded. Those values exist nowhere else.
+     *
+     * So: every row carries the `updatedAt` it had when the page was loaded.
+     * If any row has moved on since, the whole save is refused and nothing is
+     * written. Refusing is the right trade — a save you have to redo is a
+     * nuisance, a pitch quietly lost is not recoverable.
+     */
+    const stamped = rows.filter(
+      (r) => r.id && !String(r.id).startsWith("new_") && r.updatedAt,
+    );
+    if (stamped.length > 0) {
+      const current = await tx.sessionSlot.findMany({
+        where: { id: { in: stamped.map((r) => r.id as string) } },
+        select: { id: true, updatedAt: true },
+      });
+      const now = new Map(current.map((c) => [c.id, c.updatedAt.getTime()]));
+      const clashed = stamped.filter((r) => {
+        const seen = now.get(r.id as string);
+        // A row that has vanished is handled below by the P2025 catch.
+        if (seen === undefined) return false;
+        return seen !== new Date(r.updatedAt as string).getTime();
+      });
+      if (clashed.length > 0) {
+        throw new Error(
+          `Somebody else saved this session while you had it open, so nothing was ` +
+            `written — your changes are still on screen. Open the session again in a ` +
+            `new tab to see theirs, then re-apply yours.`,
+        );
+      }
+    }
 
     // `position` is unique per session, and Postgres checks that per statement
     // rather than at commit. Reordering rows in place would therefore collide

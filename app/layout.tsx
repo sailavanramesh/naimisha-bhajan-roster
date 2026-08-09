@@ -1,6 +1,7 @@
 import "./globals.css";
 import { Faustina, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { Nav } from "@/components/Nav";
+import { YantraFull } from "@/components/Yantra";
 
 /**
  * Three roles, deliberately paired (docs/SPEC.md §6).
@@ -30,7 +31,7 @@ const mono = IBM_Plex_Mono({
 });
 
 export const metadata = {
-  title: "Naimisha Bhajan Roster",
+  title: "Naimiṣa Bhajan Roster",
   description: "Bhajan suggestions, rostering and pitch for the Naimisha Sai Centre",
 };
 
@@ -58,13 +59,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="flex-1">
             <div className="mx-auto max-w-6xl px-3 pb-16 pt-14 sm:px-6 sm:pt-8">
               <header className="no-print mb-6">
-                <div className="border-b border-rule pb-4">
-                  <h1 className="font-display text-2xl font-semibold tracking-tight text-on-ground sm:text-3xl">
-                    Naimisha Bhajan Roster
-                  </h1>
-                  <p className="mt-1 text-sm text-on-ground-muted">
-                    Suggest a set, roster it fairly, remember the pitch.
-                  </p>
+                <div className="flex items-center gap-4 border-b border-rule pb-4">
+                  <YantraFull size={54} className="shrink-0 text-brass" />
+                  <div>
+                    <h1 className="font-display text-2xl font-semibold tracking-tight text-on-ground sm:text-3xl">
+                      Naimiṣa Bhajan Roster
+                    </h1>
+                    <p className="mt-1 text-sm text-on-ground-muted">
+                      Suggest a set, roster it fairly, remember the pitch.
+                    </p>
+                  </div>
                 </div>
               </header>
 

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-60 -60 120 120" width="64" height="64">
+  <g stroke="#2E8B57" stroke-width="3.2" stroke-linejoin="round">
+    <path transform="rotate(30)"  d="M0,-54 C13,-45 21,-32 15,-20 C10,-11 -10,-11 -15,-20 C-21,-32 -13,-45 0,-54 Z" fill="#9DB4DE"/>
+    <path transform="rotate(90)"  d="M0,-54 C13,-45 21,-32 15,-20 C10,-11 -10,-11 -15,-20 C-21,-32 -13,-45 0,-54 Z" fill="#9DB4DE"/>
+    <path transform="rotate(150)" d="M0,-54 C13,-45 21,-32 15,-20 C10,-11 -10,-11 -15,-20 C-21,-32 -13,-45 0,-54 Z" fill="#9DB4DE"/>
+    <path transform="rotate(210)" d="M0,-54 C13,-45 21,-32 15,-20 C10,-11 -10,-11 -15,-20 C-21,-32 -13,-45 0,-54 Z" fill="#9DB4DE"/>
+    <path transform="rotate(270)" d="M0,-54 C13,-45 21,-32 15,-20 C10,-11 -10,-11 -15,-20 C-21,-32 -13,-45 0,-54 Z" fill="#9DB4DE"/>
+    <path transform="rotate(330)" d="M0,-54 C13,-45 21,-32 15,-20 C10,-11 -10,-11 -15,-20 C-21,-32 -13,-45 0,-54 Z" fill="#9DB4DE"/>
+    <circle r="27" fill="#F6D3E4"/>
+    <path d="M0,-25 L21.65,12.5 L-21.65,12.5 Z" fill="#FBFACB"/>
+    <path d="M0,25 L21.65,-12.5 L-21.65,-12.5 Z" fill="#FBFACB" fill-opacity="0.75"/>
+  </g>
+  <circle r="4" fill="#2E8B57"/>
+</svg>

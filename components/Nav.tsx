@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Yantra } from "@/components/Yantra";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
@@ -108,8 +109,9 @@ export function Nav() {
         )}
       >
         <div className="flex items-center justify-between gap-2 px-1 pb-3">
-          <div className={clsx("font-display text-sm font-semibold text-on-ground", expanded ? "opacity-100" : "opacity-0 pointer-events-none")}>
-            Naimisha Roster
+          <div className={clsx("flex items-center gap-2 font-display text-sm font-semibold text-on-ground", expanded ? "opacity-100" : "opacity-0 pointer-events-none")}>
+            <Yantra size={22} className="text-brass" />
+            Naimiṣa Roster
           </div>
 
           <button
@@ -142,7 +144,7 @@ export function Nav() {
           <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
           <div className="absolute left-0 top-0 h-full w-[82%] max-w-[320px] bg-ground-raised border-r border-rule p-3">
             <div className="flex items-center justify-between px-1 pb-3">
-              <div className="font-display text-sm font-semibold text-on-ground">Naimisha Roster</div>
+              <div className="flex items-center gap-2 font-display text-sm font-semibold text-on-ground"><Yantra size={22} className="text-brass" />Naimiṣa Roster</div>
               <button type="button" onClick={() => setMobileOpen(false)} aria-label="Close navigation">
                 <Hamburger open={true} />
               </button>

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { SessionType } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle, Button } from "@/components/ui";
-import { getCandidatePool, getFacetOptions, UNSPECIFIED } from "@/lib/candidateQueries";
+import { getCandidatePool, getFacetOptions, getSingersForBhajans, UNSPECIFIED } from "@/lib/candidateQueries";
 import {
   generateSession,
   DEFAULT_LENGTH,
@@ -73,6 +73,15 @@ export default async function BuildPage({
   const freshnessDays = Number(one(sp, "fresh") ?? DEFAULT_FRESHNESS_DAYS) || DEFAULT_FRESHNESS_DAYS;
   const locked = list(sp, "lock");
 
+  /** `pick` is `bhajanId:singerId` pairs — kept in the URL like the locks. */
+  const picks = new Map<string, string>();
+  for (const part of list(sp, "pick")) {
+    const [bhajanId, singerId] = part.split(":");
+    if (bhajanId && singerId) picks.set(bhajanId, singerId);
+  }
+  const serialisePicks = (m: Map<string, string>) =>
+    [...m.entries()].map(([b, s]) => `${b}:${s}`).join(",");
+
   const [templates, facets] = await Promise.all([
     prisma.sessionTemplate.findMany({
       include: { rules: true },
@@ -141,6 +150,7 @@ export default async function BuildPage({
   const nextSeed = `${seedBase}#${seedCounter + 1}`;
 
   const chosenIds = result.slots.map((s) => s.candidate.id);
+  const singersByBhajan = await getSingersForBhajans(chosenIds);
 
   return (
     <div className="grid gap-4">
@@ -370,6 +380,18 @@ export default async function BuildPage({
                       </Link>
                     </div>
                   </div>
+
+                  {/* Who can sing this — pick one now, or leave it to rostering. */}
+                  <SingerPicks
+                    candidates={singersByBhajan.get(slot.candidate.id) ?? []}
+                    picked={picks.get(slot.candidate.id) ?? null}
+                    hrefFor={(singerId) => {
+                      const next = new Map(picks);
+                      if (singerId === null) next.delete(slot.candidate.id);
+                      else next.set(slot.candidate.id, singerId);
+                      return href(sp, { pick: serialisePicks(next) || undefined });
+                    }}
+                  />
                 </li>
               );
             })}
@@ -385,7 +407,11 @@ export default async function BuildPage({
                 type="hidden"
                 name="slots"
                 value={JSON.stringify(
-                  result.slots.map((s) => ({ id: s.candidate.id, title: s.candidate.title })),
+                  result.slots.map((s) => ({
+                    id: s.candidate.id,
+                    title: s.candidate.title,
+                    singerId: picks.get(s.candidate.id) ?? null,
+                  })),
                 )}
               />
               <Button type="submit" variant="primary">
@@ -439,23 +465,96 @@ function MultiField({
   selected: string[];
   allowUnspecified?: boolean;
 }) {
+  const chosen = new Set(selected);
+  const all = allowUnspecified ? [UNSPECIFIED, ...options] : options;
   return (
-    <label className="grid gap-1">
-      <span className="text-xs font-semibold text-on-surface-muted">{label}</span>
-      <select
-        name={name}
-        multiple
-        defaultValue={selected}
-        size={Math.min(6, options.length + 1)}
-        className="w-full rounded-[12px] border px-2 py-1 text-sm"
-      >
-        {allowUnspecified ? <option value={UNSPECIFIED}>(unspecified)</option> : null}
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {o}
-          </option>
+    <fieldset className="grid gap-1">
+      <legend className="text-xs font-semibold text-on-surface-muted">
+        {label}
+        {chosen.size > 0 ? (
+          <span className="ml-1 font-normal text-brass-ink">({chosen.size})</span>
+        ) : null}
+      </legend>
+      <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">
+        {all.map((o) => (
+          <label
+            key={o}
+            className={
+              "cursor-pointer rounded-full border px-2 py-1 text-xs transition-colors " +
+              (chosen.has(o)
+                ? "border-brass/60 bg-brass/15 text-on-surface"
+                : "border-rule-surface hover:bg-panel-hover")
+            }
+          >
+            <input
+              type="checkbox"
+              name={name}
+              value={o}
+              defaultChecked={chosen.has(o)}
+              className="sr-only"
+            />
+            {o === UNSPECIFIED ? "unspecified" : o}
+          </label>
         ))}
-      </select>
-    </label>
+      </div>
+    </fieldset>
+  );
+}
+
+/**
+ * Singers with evidence they can sing this bhajan, as one-tap chips.
+ *
+ * Evidence, not permission — anybody may still be assigned in rostering
+ * (SPEC §9.3). Picking here just saves a round trip for the obvious case.
+ */
+function SingerPicks({
+  candidates,
+  picked,
+  hrefFor,
+}: {
+  candidates: Array<{ id: string; name: string; gender: string | null; basis: string }>;
+  picked: string | null;
+  hrefFor: (singerId: string | null) => string;
+}) {
+  if (candidates.length === 0) {
+    return (
+      <p className="mt-2 border-t border-rule-surface pt-2 text-xs text-on-surface-muted">
+        Nobody has sung this or has it on their list — rostering will still suggest someone.
+      </p>
+    );
+  }
+  return (
+    <div className="mt-2 border-t border-rule-surface pt-2">
+      <div className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-brass-ink">
+        Can sing this
+      </div>
+      <div className="flex flex-wrap items-center gap-1">
+        {candidates.map((c) => (
+          <Link key={c.id} href={hrefFor(picked === c.id ? null : c.id)}>
+            <span
+              className={
+                "inline-flex items-center gap-1 rounded-full border px-2 py-1 text-xs transition-colors " +
+                (picked === c.id
+                  ? "border-brass bg-brass/20 font-semibold text-on-surface"
+                  : "border-rule-surface hover:bg-panel-hover")
+              }
+              title={
+                c.basis === "sung"
+                  ? "Has sung this before"
+                  : c.basis === "festival"
+                    ? "On their festival list"
+                    : "On their known list"
+              }
+            >
+              {picked === c.id ? "✓ " : ""}
+              {c.name}
+              <span className="text-[10px] text-on-surface-muted">
+                {c.basis === "sung" ? "sung" : c.basis === "festival" ? "festival" : "knows"}
+              </span>
+            </span>
+          </Link>
+        ))}
+      </div>
+    </div>
   );
 }

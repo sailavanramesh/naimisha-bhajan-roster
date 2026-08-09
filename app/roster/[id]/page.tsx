@@ -48,6 +48,8 @@ export default async function RosterSessionPage({
     festivalBhajanTitle: x.festivalBhajanTitle,
     confirmedPitch: x.confirmedPitch,
     alternativeTablaPitch: x.alternativeTablaPitch,
+    // Carried so a save can detect that somebody else got there first.
+    updatedAt: x.updatedAt.toISOString(),
     // Derived on read (CLAUDE.md rule 5), not stored. Where the slot's title
     // never resolved to a masterlist bhajan — 11 rows do not — fall back to the
     // recommendation the sheet recorded, so the column is not blank.

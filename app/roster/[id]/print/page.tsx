@@ -52,7 +52,7 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
       </div>
 
       <header className="border-b-2 border-black/70 pb-2">
-        <h1 className="font-display text-3xl font-semibold">Naimisha Bhajan Roster</h1>
+        <h1 className="font-display text-3xl font-semibold">Naimiṣa Bhajan Roster</h1>
         <p className="mt-1 text-lg">{dateLabel}</p>
       </header>
 

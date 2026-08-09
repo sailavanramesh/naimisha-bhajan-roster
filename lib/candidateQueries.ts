@@ -194,3 +194,62 @@ export async function getCandidatePool(
 
   return pool;
 }
+
+export type BhajanSinger = {
+  id: string;
+  name: string;
+  gender: string | null;
+  /** How we know they can sing it — strongest first. */
+  basis: 'sung' | 'festival' | 'known';
+};
+
+/**
+ * Who can sing each of these bhajans.
+ *
+ * "Can" is evidence, not permission: they have sung it before, or it is on
+ * their festival or known list. Repertoire never restricts who may be assigned
+ * (SPEC §9.3) — this only surfaces the obvious candidates so a coordinator can
+ * pick one without leaving the page.
+ */
+export async function getSingersForBhajans(
+  bhajanIds: readonly string[],
+): Promise<Map<string, BhajanSinger[]>> {
+  const out = new Map<string, BhajanSinger[]>();
+  if (bhajanIds.length === 0) return out;
+
+  const [sung, repertoire] = await Promise.all([
+    prisma.sessionSlot.findMany({
+      where: { bhajanId: { in: [...bhajanIds] }, singerId: { not: null } },
+      select: { bhajanId: true, singer: { select: { id: true, name: true, gender: true } } },
+    }),
+    prisma.singerRepertoire.findMany({
+      where: { bhajanId: { in: [...bhajanIds] } },
+      select: { bhajanId: true, kind: true, singer: { select: { id: true, name: true, gender: true } } },
+    }),
+  ]);
+
+  const add = (bhajanId: string | null, s: { id: string; name: string; gender: string | null } | null, basis: BhajanSinger['basis']) => {
+    if (!bhajanId || !s) return;
+    if (!out.has(bhajanId)) out.set(bhajanId, []);
+    const list = out.get(bhajanId)!;
+    const existing = list.find((x) => x.id === s.id);
+    // Strongest evidence wins: having sung it beats being on a list.
+    const rank = { sung: 3, festival: 2, known: 1 } as const;
+    if (existing) {
+      if (rank[basis] > rank[existing.basis]) existing.basis = basis;
+      return;
+    }
+    list.push({ id: s.id, name: s.name, gender: s.gender, basis });
+  };
+
+  for (const r of sung) add(r.bhajanId, r.singer, 'sung');
+  for (const r of repertoire) {
+    add(r.bhajanId, r.singer, r.kind === RepertoireKind.festival ? 'festival' : 'known');
+  }
+
+  for (const list of out.values()) {
+    const rank = { sung: 3, festival: 2, known: 1 } as const;
+    list.sort((a, b) => rank[b.basis] - rank[a.basis] || a.name.localeCompare(b.name));
+  }
+  return out;
+}
