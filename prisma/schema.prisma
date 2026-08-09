@@ -42,9 +42,17 @@ enum SessionStatus {
   Published
 }
 
+/// A singer's relationship to a bhajan.
+///
+/// `known` and `festival` came from the import. `wantToLearn` and `learning`
+/// are the personal list: a singer moves a bhajan along until they are
+/// confident, and graduating it to `known` makes it count in the session
+/// builder's repertoire scoring with no other wiring.
 enum RepertoireKind {
   known
   festival
+  wantToLearn
+  learning
 }
 
 /// Slot rules are mostly advisory. Confirmed with Sailavan (SPEC §9.1): the
@@ -275,7 +283,15 @@ model SingerRepertoire {
   kind     RepertoireKind
   order    Int?
 
+  /// The singer's own note — what they are finding hard, where they heard it.
+  /// Visible to them and to editors only.
+  note     String?
+  /// The shruti this singer wants for it, if they have settled on one.
+  /// Overrides the derived recommendation for them on this bhajan.
+  preferredPitch String?
+
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt @default(now())
 
   singer Singer  @relation(fields: [singerId], references: [id], onDelete: Cascade)
   bhajan Bhajan? @relation(fields: [bhajanId], references: [id], onDelete: SetNull)

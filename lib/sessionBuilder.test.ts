@@ -9,6 +9,7 @@ import {
   resolvePosition,
   ruleForSlot,
   generateSession,
+  sampleBhajans,
   DEFAULT_LENGTH,
   type Candidate,
   type TemplateSpec,
@@ -372,5 +373,44 @@ describe('generateSession', () => {
       for (const d of s.candidate.deities) counts.set(d, (counts.get(d) ?? 0) + 1);
     }
     for (const n of counts.values()) expect(n).toBeLessThanOrEqual(2);
+  });
+});
+
+describe('sampleBhajans', () => {
+  it('returns the requested number', () => {
+    expect(sampleBhajans(pool(50), { seed: 's', count: 12 })).toHaveLength(12);
+  });
+
+  it('never repeats a bhajan', () => {
+    const got = sampleBhajans(pool(50), { seed: 's', count: 40 });
+    expect(new Set(got.map((c) => c.id)).size).toBe(40);
+  });
+
+  it('cannot ask for more than the pool holds', () => {
+    expect(sampleBhajans(pool(7), { seed: 's', count: 30 })).toHaveLength(7);
+  });
+
+  it('is reproducible for a seed and different across seeds', () => {
+    const a = sampleBhajans(pool(50), { seed: 'a', count: 8 }).map((c) => c.id);
+    const b = sampleBhajans(pool(50), { seed: 'a', count: 8 }).map((c) => c.id);
+    const c = sampleBhajans(pool(50), { seed: 'b', count: 8 }).map((c) => c.id);
+    expect(a).toEqual(b);
+    expect(a).not.toEqual(c);
+  });
+
+  it('copes with an empty pool', () => {
+    expect(sampleBhajans([], { seed: 's', count: 5 })).toEqual([]);
+  });
+
+  it('favours the fresher, less-sung bhajan over many draws', () => {
+    const p = [
+      candidate({ id: 'fresh', timesSung: 0, lastSungDaysAgo: null }),
+      candidate({ id: 'stale', timesSung: 30, lastSungDaysAgo: 1 }),
+    ];
+    let fresh = 0;
+    for (let i = 0; i < 200; i++) {
+      if (sampleBhajans(p, { seed: `s${i}`, count: 1 })[0].id === 'fresh') fresh++;
+    }
+    expect(fresh).toBeGreaterThan(150);
   });
 });

@@ -91,7 +91,6 @@ export default async function RosterPage({
       slots: {
         select: { bhajanTitle: true, singer: { select: { name: true } } },
         orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-        take: 3,
       },
     },
     orderBy: { date: "asc" },
@@ -212,26 +211,56 @@ export default async function RosterPage({
 
               <div className="grid gap-2">
                 {(listSessions ?? []).map((s) => (
+                  /*
+                    One slot per line, not a run-on sentence. The old version
+                    joined every singer and bhajan with a middle dot, so a
+                    Sunday of ten slots wrapped into an unreadable paragraph
+                    and an empty session was an unexplained blank card.
+                  */
                   <Link
                     key={s.id}
                     href={`/roster/${s.id}`}
-                    className="rounded-[12px] border border-rule-surface bg-panel p-3 hover:bg-panel-hover"
+                    className="group rounded-[12px] border border-rule-surface bg-panel p-3 transition-colors hover:border-brass/40 hover:bg-panel-hover"
                   >
-                    <div className="text-sm font-medium">
-                      {new Date(s.date).toLocaleDateString(undefined, {
-                        weekday: "short",
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })}
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="font-display text-[15px]">
+                        {new Date(s.date).toLocaleDateString("en-AU", {
+                          weekday: "short",
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                          timeZone: "UTC",
+                        })}
+                      </span>
+                      <span className="shrink-0 text-[11px] text-on-surface-muted">
+                        {s.slots.length === 0
+                          ? "nothing rostered"
+                          : `${s.slots.length} slot${s.slots.length === 1 ? "" : "s"}`}
+                      </span>
                     </div>
-                    <div className="mt-1 text-sm text-on-surface-muted">
-                      {s.slots
-                        .slice(0, 8)
-                        .map((x) => `${x.singer?.name ?? "Unassigned"}${x.bhajanTitle ? ` — ${x.bhajanTitle}` : ""}`)
-                        .join(" · ")}
-                      {s.slots.length > 8 ? " …" : ""}
-                    </div>
+
+                    {s.slots.length > 0 ? (
+                      <ul className="mt-2 grid gap-0.5">
+                        {s.slots.slice(0, 5).map((x, i) => (
+                          <li
+                            key={i}
+                            className="grid grid-cols-[7rem_1fr] items-baseline gap-2 text-[13px]"
+                          >
+                            <span className="truncate font-medium">
+                              {x.singer?.name ?? "Unassigned"}
+                            </span>
+                            <span className="truncate text-on-surface-muted">
+                              {x.bhajanTitle ?? "—"}
+                            </span>
+                          </li>
+                        ))}
+                        {s.slots.length > 5 ? (
+                          <li className="mt-0.5 text-[11px] text-on-surface-muted">
+                            + {s.slots.length - 5} more
+                          </li>
+                        ) : null}
+                      </ul>
+                    ) : null}
                   </Link>
                 ))}
               </div>

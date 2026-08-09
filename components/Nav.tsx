@@ -20,8 +20,6 @@ const ITEMS: NavItem[] = [
   { href: "/roster", label: "Roster", short: "R" },
   { href: "/bhajans", label: "Bhajans", short: "B" },
   { href: "/singers", label: "Singers", short: "S" },
-  { href: "/instruments", label: "Instruments", short: "I" },
-  { href: "/festival", label: "Festival", short: "F" },
   { href: "/fairness", label: "Fairness", short: "≡" },
   { href: "/admin", label: "Admin", short: "⚙" },
 ];

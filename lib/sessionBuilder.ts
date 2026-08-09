@@ -435,3 +435,37 @@ function explain(
 
   return reasons;
 }
+
+/**
+ * Draw `count` bhajans at random from a pool, weighted the same way the
+ * session builder weights them.
+ *
+ * This is NOT session generation: no slot rules, no diversity constraints, no
+ * tempo arc. It is the Explore view — a member browsing for something to learn
+ * wants a fresh, varied slice of the masterlist, not a set that works as a
+ * session. Sharing `candidateWeight` keeps "interesting" meaning the same
+ * thing in both places.
+ */
+export function sampleBhajans(
+  pool: readonly Candidate[],
+  options: { seed: string; count: number; freshnessDays?: number },
+): Candidate[] {
+  const freshnessDays = options.freshnessDays ?? DEFAULT_FRESHNESS_DAYS;
+  const rng = makeRng(options.seed);
+  const remaining = [...pool];
+  const weights = remaining.map((c) => candidateWeight(c, freshnessDays));
+  const out: Candidate[] = [];
+  const want = Math.max(0, Math.min(options.count, remaining.length));
+
+  while (out.length < want) {
+    const i = weightedPick(weights, rng);
+    if (i < 0) break;
+    out.push(remaining[i]);
+    // Sample without replacement: swap-and-pop keeps this O(1) per draw.
+    remaining[i] = remaining[remaining.length - 1];
+    weights[i] = weights[weights.length - 1];
+    remaining.pop();
+    weights.pop();
+  }
+  return out;
+}

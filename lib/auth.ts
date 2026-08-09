@@ -41,6 +41,8 @@ export type Capability =
   | "editSlotBhajan" // which bhajan is in a slot
   | "editConfirmedPitch"
   | "addBhajan"
+  | "exploreBhajans" // browse a randomised slice of the masterlist
+  | "manageOwnLearning" // keep a personal learning list
   | "viewAllPages";
 
 const MATRIX: Record<Role, ReadonlySet<Capability>> = {
@@ -52,6 +54,8 @@ const MATRIX: Record<Role, ReadonlySet<Capability>> = {
     "editSlotBhajan",
     "editConfirmedPitch",
     "addBhajan",
+    "exploreBhajans",
+    "manageOwnLearning",
     "viewAllPages",
   ]),
   member: new Set<Capability>([
@@ -59,6 +63,8 @@ const MATRIX: Record<Role, ReadonlySet<Capability>> = {
     // allocation of singers." Taken literally — confirmed pitch is left to an
     // editor too. See OPEN-QUESTIONS in PROGRESS.md.
     "editSlotBhajan",
+    "exploreBhajans",
+    "manageOwnLearning",
   ]),
   viewer: new Set<Capability>(),
 };
@@ -68,7 +74,7 @@ export function can(role: Role, capability: Capability): boolean {
 }
 
 /** Pages a member may reach. Everything else is owner/editor only. */
-export const MEMBER_PAGES = ["/roster", "/bhajans", "/singers"];
+export const MEMBER_PAGES = ["/roster", "/bhajans", "/singers", "/explore", "/my-list"];
 
 export function canSeePage(role: Role, path: string): boolean {
   if (role === "editor") return true;
