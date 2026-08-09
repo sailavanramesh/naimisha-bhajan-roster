@@ -19,6 +19,8 @@ const ITEMS: NavItem[] = [
   { href: "/build", label: "Build", short: "+" },
   { href: "/roster", label: "Roster", short: "R" },
   { href: "/bhajans", label: "Bhajans", short: "B" },
+  { href: "/explore", label: "Explore", short: "?" },
+  { href: "/my-list", label: "My list", short: "♪" },
   { href: "/singers", label: "Singers", short: "S" },
   { href: "/fairness", label: "Fairness", short: "≡" },
   { href: "/admin", label: "Admin", short: "⚙" },
@@ -70,7 +72,7 @@ export function Nav({ role = "viewer" }: { role?: string }) {
   const visible =
     role === "editor"
       ? ITEMS
-      : ITEMS.filter((i) => ["/", "/roster", "/bhajans", "/singers"].includes(i.href));
+      : ITEMS.filter((i) => ["/", "/roster", "/bhajans", "/singers", "/explore", "/my-list"].includes(i.href));
 
   const NavLinks = ({ collapsed }: { collapsed: boolean }) => (
     <nav className="grid gap-1">
