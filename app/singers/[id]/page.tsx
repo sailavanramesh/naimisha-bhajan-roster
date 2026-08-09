@@ -50,7 +50,7 @@ export default async function SingerPage({
       <Card>
         <CardHeader>
           <CardTitle>{singer.name}</CardTitle>
-          <div className="mt-2 text-sm text-gray-600">
+          <div className="mt-2 text-sm text-on-surface-muted">
             {singer.gender ?? "Gender not recorded"} · {profile.overall.n} sung{" "}
             {profile.overall.n === 1 ? "record" : "records"} with a usable pitch
           </div>
@@ -61,7 +61,7 @@ export default async function SingerPage({
           <section className="grid gap-2">
             <h2 className="text-sm font-semibold">Pitch offset</h2>
             {profile.overall.n === 0 ? (
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-on-surface-muted">
                 No confirmed pitches recorded yet, so there is nothing to learn from.
               </p>
             ) : (
@@ -79,7 +79,7 @@ export default async function SingerPage({
                     }
                   />
                 </div>
-                <p className="text-sm text-gray-700">
+                <p className="text-sm text-on-surface-muted">
                   {confident ? (
                     <>
                       Against the reference for {singer.gender ?? "their"} voice,{" "}
@@ -108,7 +108,7 @@ export default async function SingerPage({
               <h2 className="text-sm font-semibold">
                 Shruti ladder — most recent sung bhajan
               </h2>
-              <div className="text-sm text-gray-600">
+              <div className="text-sm text-on-surface-muted">
                 {latest.bhajanTitle ?? "—"} ·{" "}
                 {latest.date.toISOString().slice(0, 10)}
               </div>
@@ -126,13 +126,13 @@ export default async function SingerPage({
           {ragaRows.length > 0 ? (
             <section className="grid gap-2">
               <h2 className="text-sm font-semibold">By raga</h2>
-              <p className="text-xs text-gray-600">
+              <p className="text-xs text-on-surface-muted">
                 Only ragas with at least {MIN_RAGA_SAMPLES} records are shown.
               </p>
-              <div className="overflow-x-auto rounded-xl border">
+              <div className="overflow-x-auto rounded-key border border-rule-surface">
                 <table className="w-full text-sm">
-                  <thead className="bg-slate-50 text-left">
-                    <tr className="border-b">
+                  <thead className="bg-surface-sunk text-left">
+                    <tr className="border-b border-rule-surface">
                       <th className="px-3 py-2 font-semibold">Raga</th>
                       <th className="px-3 py-2 font-semibold">n</th>
                       <th className="px-3 py-2 font-semibold">Median</th>
@@ -141,7 +141,7 @@ export default async function SingerPage({
                   </thead>
                   <tbody>
                     {ragaRows.map(([raga, p]) => (
-                      <tr key={raga} className="border-b last:border-b-0">
+                      <tr key={raga} className="border-b border-rule-surface last:border-b-0">
                         <td className="px-3 py-2">{raga}</td>
                         <td className="px-3 py-2 font-mono tabular-nums">{p.n}</td>
                         <td className="px-3 py-2 font-mono tabular-nums">
@@ -163,7 +163,7 @@ export default async function SingerPage({
       <Card>
         <CardHeader>
           <CardTitle>Recent history</CardTitle>
-          <div className="mt-2 text-sm text-gray-600">Latest 50.</div>
+          <div className="mt-2 text-sm text-on-surface-muted">Latest 50.</div>
         </CardHeader>
         <CardContent>
           <div className="grid gap-2">
@@ -171,7 +171,7 @@ export default async function SingerPage({
               <Link
                 key={h.id}
                 href={`/roster/${h.sessionId}`}
-                className="rounded-xl border bg-white p-3 hover:bg-gray-50 focus-visible:ring-2 focus-visible:ring-black/20"
+                className="rounded-key border border-rule-surface bg-white/60 p-3 hover:bg-surface-sunk focus-visible:ring-2 focus-visible:ring-black/20"
               >
                 <div className="text-sm font-medium">
                   {new Date(h.session.date).toLocaleDateString(undefined, {
@@ -180,11 +180,11 @@ export default async function SingerPage({
                     day: "numeric",
                   })}
                 </div>
-                <div className="mt-1 text-sm text-gray-700">
+                <div className="mt-1 text-sm text-on-surface-muted">
                   {h.bhajanTitle ?? h.festivalBhajanTitle ?? "—"}
                 </div>
                 {h.confirmedPitch ? (
-                  <div className="mt-1 font-mono text-xs tabular-nums text-gray-600">
+                  <div className="mt-1 font-mono text-xs tabular-nums text-on-surface-muted">
                     {h.confirmedPitch}
                   </div>
                 ) : null}
@@ -207,8 +207,8 @@ function Stat({
   accent?: boolean;
 }) {
   return (
-    <div className="rounded-xl border bg-white px-3 py-2">
-      <div className="text-xs text-gray-600">{label}</div>
+    <div className="rounded-key border border-rule-surface bg-white/60 px-3 py-2">
+      <div className="text-xs text-on-surface-muted">{label}</div>
       <div
         className="font-mono text-lg tabular-nums font-semibold"
         style={accent ? { color: "var(--kumkum)" } : undefined}

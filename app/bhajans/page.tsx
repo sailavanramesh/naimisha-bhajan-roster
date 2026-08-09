@@ -54,7 +54,7 @@ export default async function BhajansPage({
       <Card>
         <CardHeader>
           <CardTitle>Bhajans</CardTitle>
-          <div className="mt-2 text-sm text-gray-600">
+          <div className="mt-2 text-sm text-on-surface-muted">
             Search by title / lyrics / meaning / raga. Filter by deity or language.
           </div>
         </CardHeader>
@@ -66,7 +66,7 @@ export default async function BhajansPage({
             <select
               name="deity"
               defaultValue={deity}
-              className="w-full rounded-xl border px-3 py-2 text-sm bg-white"
+              className="w-full rounded-key border px-3 py-2 text-sm bg-white"
             >
               <option value="">All deities</option>
               {deityOptions.map((d) => (
@@ -79,7 +79,7 @@ export default async function BhajansPage({
             <select
               name="lang"
               defaultValue={lang}
-              className="w-full rounded-xl border px-3 py-2 text-sm bg-white"
+              className="w-full rounded-key border px-3 py-2 text-sm bg-white"
             >
               <option value="">All languages</option>
               {langOptions.map((l) => (
@@ -90,7 +90,7 @@ export default async function BhajansPage({
             </select>
           </form>
 
-          <div className="text-sm text-gray-600 mb-2">
+          <div className="text-sm text-on-surface-muted mb-2">
             Showing {items.length} results
           </div>
 
@@ -99,10 +99,10 @@ export default async function BhajansPage({
               <Link
                 key={b.id}
                 href={`/bhajans/${b.id}`}
-                className="rounded-2xl border bg-white p-3 hover:bg-gray-50"
+                className="rounded-key border border-rule-surface bg-white/60 p-3 hover:bg-surface-sunk"
               >
                 <div className="text-sm font-semibold">{b.title}</div>
-                <div className="mt-1 text-xs text-gray-600">
+                <div className="mt-1 text-xs text-on-surface-muted">
                   {[
                     b.deity ? `Deity: ${b.deity}` : null,
                     b.language ? `Lang: ${b.language}` : null,

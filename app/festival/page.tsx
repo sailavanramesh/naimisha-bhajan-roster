@@ -19,16 +19,16 @@ export default async function FestivalPage() {
       <Card>
         <CardHeader>
           <CardTitle>Festival Bhajans</CardTitle>
-          <div className="mt-2 text-sm text-gray-600">Per-singer festival list.</div>
+          <div className="mt-2 text-sm text-on-surface-muted">Per-singer festival list.</div>
         </CardHeader>
         <CardContent>
           <div className="grid gap-3 md:grid-cols-2">
             {singers.map((s) => (
-              <div key={s.id} className="rounded-2xl border bg-white p-4">
+              <div key={s.id} className="rounded-key border border-rule-surface bg-white/60 p-4">
                 <div className="text-sm font-semibold">{s.name}</div>
-                <ol className="mt-2 list-decimal pl-5 text-sm text-gray-700">
+                <ol className="mt-2 list-decimal pl-5 text-sm text-on-surface-muted">
                   {s.repertoire.length === 0 ? (
-                    <li className="list-none text-gray-600">No festival bhajans.</li>
+                    <li className="list-none text-on-surface-muted">No festival bhajans.</li>
                   ) : (
                     s.repertoire.map((b) => <li key={b.id}>{b.title}</li>)
                   )}

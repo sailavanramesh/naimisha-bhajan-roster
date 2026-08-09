@@ -2,41 +2,95 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * docs/SPEC.md §6. The visual world is a harmonium: a deep lacquered case,
+ * ivory and ebony keys, aged brass reed plates — and the numbered pitch ladder.
+ *
+ * Five tokens, no more. The most important rule in this file:
+ *
+ *   --kumkum IS RESERVED FOR PITCH DEVIATION.
+ *
+ * Not buttons, not errors, not decoration, not emphasis. Reserving one colour
+ * to one meaning is what lets the Shruti Ladder read in a single glance. There
+ * is a separate --warn for warnings precisely so nothing is tempted to borrow
+ * kumkum for them.
+ */
+
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 
-  /* App palette */
-  --bg0: 248 250 252; /* slate-50 */
-  --bg1: 245 243 255; /* violet-50 */
-  --bg2: 238 242 255; /* indigo-50 */
+  /* The five */
+  --ink: 18 20 28; /* #12141C — deep lacquered indigo-black. The ground. */
+  --ivory: 239 234 225; /* #EFEAE1 — warm off-white. Surface, key white. */
+  --brass: 176 141 63; /* #B08D3F — aged brass. Structure and accent. */
+  --kumkum: 179 58 58; /* #B33A3A — deep vermilion. PITCH DEVIATION ONLY. */
+  --muted: 122 129 143; /* desaturated slate. Secondary text, rules. */
 
-  --surface: 255 255 255; /* white */
-  --surface2: 250 250 252;
+  /* Derived, so components never hand-mix colour */
+  --ground: var(--ink);
+  --ground-raised: 26 29 39; /* a lacquer highlight, one step up from ink */
+  --surface: var(--ivory);
+  --surface-sunk: 226 220 209; /* ivory pressed in, for table heads */
+  --on-ground: 226 223 216;
+  --on-ground-muted: var(--muted);
+  --on-surface: var(--ink);
+  --on-surface-muted: 92 88 82;
+  --rule: 47 51 63;
+  --rule-on-surface: 205 198 186;
 
-  --text: 15 23 42; /* slate-900 */
-  --muted: 71 85 105; /* slate-600 */
-  --muted2: 100 116 139; /* slate-500 */
+  /* Deliberately NOT kumkum. Warnings are not pitch deviation. */
+  --warn: 191 149 63;
+}
 
-  --border: 226 232 240; /* slate-200 */
-  --border2: 203 213 225; /* slate-300 */
+html,
+body {
+  height: 100%;
+}
 
-  --accent: 79 70 229; /* indigo-600 */
-  --accent2: 124 58 237; /* violet-600 */
-
-  --danger: 220 38 38; /* red-600 */
-
+body {
+  color: rgb(var(--on-ground));
+  background-color: rgb(var(--ground));
   /*
-   * Pitch palette (docs/SPEC.md §6). Introduced in Phase 1 for the Shruti
-   * Ladder; the full redesign that uses them everywhere is Phase 4.
-   *
-   * --kumkum is RESERVED FOR PITCH DEVIATION. Not buttons, not errors, not
-   * decoration. Reserving it to one meaning is what makes the ladder readable
-   * at a glance.
+   * A single soft brass bloom, as if light caught the reed plate. One gradient,
+   * not three — the old build stacked violet and indigo washes and read as a
+   * generic SaaS dashboard.
    */
-  --ink: 18 20 28;
-  --ivory: 239 234 225;
-  --brass: 176 141 63;
-  --kumkum: 179 58 58;
+  background-image: radial-gradient(
+    120% 80% at 50% -20%,
+    rgba(var(--brass), 0.1),
+    transparent 60%
+  );
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+a,
+button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * Visible focus everywhere. The old build removed the outline and put nothing
+ * back, which left the app unusable by keyboard.
+ */
+*:focus-visible {
+  outline: 2px solid rgb(var(--brass));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Numbers must not shift width while re-rolling. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -50,36 +104,52 @@
   }
 }
 
-html,
-body {
-  height: 100%;
+/*
+ * The one orchestrated moment (SPEC §6): after a re-roll, unlocked slots settle
+ * into place in sequence. Locked slots do not carry this class and stay put.
+ */
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
-body {
-  color: rgb(var(--text));
-  background:
-    radial-gradient(1200px 700px at 20% 0%, rgba(var(--bg1), 0.9), transparent 60%),
-    radial-gradient(1000px 600px at 90% 10%, rgba(var(--bg2), 0.9), transparent 55%),
-    linear-gradient(to bottom, rgba(var(--bg0), 1), rgba(var(--bg0), 1));
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+.settle {
+  animation: settle 320ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
 }
 
-/* Mobile form polish */
-input,
-select,
-textarea,
-button {
-  font: inherit;
-}
+/* Print: the roster sheet on a music stand, read at arm's length. */
+@media print {
+  @page {
+    margin: 14mm;
+  }
 
-/* Better tap highlights */
-a,
-button {
-  -webkit-tap-highlight-color: transparent;
-}
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
 
-/* Softer focus without default outline */
-*:focus-visible {
-  outline: none;
+  .no-print {
+    display: none !important;
+  }
+
+  .print-sheet {
+    font-size: 12pt;
+  }
+
+  a {
+    text-decoration: none;
+    color: #000;
+  }
+
+  /* A slot must never be split across a page break. */
+  .print-slot {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
 }

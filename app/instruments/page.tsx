@@ -14,25 +14,25 @@ export default async function InstrumentsPage() {
       <Card>
         <CardHeader>
           <CardTitle>Instrumentalist Roster</CardTitle>
-          <div className="mt-2 text-sm text-gray-600">Latest 120 sessions.</div>
+          <div className="mt-2 text-sm text-on-surface-muted">Latest 120 sessions.</div>
         </CardHeader>
         <CardContent>
           <div className="grid gap-2">
             {sessions.map((s) => (
-              <div key={s.id} className="rounded-xl border bg-white p-3">
+              <div key={s.id} className="rounded-key border border-rule-surface bg-white/60 p-3">
                 <div className="text-sm font-medium">
                   {new Date(s.date).toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric" })}
                 </div>
                 <div className="mt-2 grid gap-1 md:grid-cols-2">
                   {s.instruments.length === 0 ? (
-                    <div className="text-sm text-gray-600">No instrument assignments.</div>
+                    <div className="text-sm text-on-surface-muted">No instrument assignments.</div>
                   ) : (
                     s.instruments
                       .sort((a,b) => a.instrument.localeCompare(b.instrument))
                       .map((i) => (
                         <div key={i.id} className="text-sm">
                           <span className="font-medium">{i.instrument}:</span>{" "}
-                          <span className="text-gray-700">{i.person ?? "—"}</span>
+                          <span className="text-on-surface-muted">{i.person ?? "—"}</span>
                         </div>
                       ))
                   )}

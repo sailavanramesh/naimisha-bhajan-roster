@@ -12,9 +12,9 @@ export default async function SingersPage() {
         <CardContent>
           <div className="grid gap-2">
             {singers.map((s) => (
-              <Link key={s.id} href={`/singers/${s.id}`} className="rounded-xl border bg-white p-3 hover:bg-gray-50">
+              <Link key={s.id} href={`/singers/${s.id}`} className="rounded-key border border-rule-surface bg-white/60 p-3 hover:bg-surface-sunk">
                 <div className="text-sm font-medium">{s.name}</div>
-                <div className="text-xs text-gray-600">{s.gender ?? "—"}</div>
+                <div className="text-xs text-on-surface-muted">{s.gender ?? "—"}</div>
               </Link>
             ))}
           </div>

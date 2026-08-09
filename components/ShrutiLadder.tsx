@@ -70,7 +70,7 @@ export function ShrutiLadder({
         ) : null}
       </div>
 
-      <ol className="overflow-hidden rounded-xl border" role="list">
+      <ol className="overflow-hidden rounded-key border border-rule-surface" role="list">
         {rungs.map((rung) => {
           const isReference = referenceSa !== null && rung.semitone === referenceSa;
           const isActual = actualSa !== null && rung.semitone === actualSa;
@@ -82,7 +82,7 @@ export function ShrutiLadder({
               aria-current={isActual ? 'true' : undefined}
               className={cn(
                 'flex items-center gap-2 border-b px-2 py-1 last:border-b-0 text-xs',
-                comfortable ? 'bg-slate-50' : 'bg-white',
+                comfortable ? 'bg-surface-sunk' : 'bg-white',
               )}
             >
               {/* Marker gutter. Fixed width so labels stay aligned. */}
@@ -106,13 +106,13 @@ export function ShrutiLadder({
               <span
                 className={cn(
                   'font-mono tabular-nums',
-                  isActual || isReference ? 'font-semibold' : 'text-slate-500',
+                  isActual || isReference ? 'font-semibold' : 'text-on-surface-muted',
                 )}
               >
                 {rung.label}
               </span>
 
-              <span className="ml-auto flex items-center gap-2 text-[11px] text-slate-500">
+              <span className="ml-auto flex items-center gap-2 text-[11px] text-on-surface-muted">
                 <span className="font-mono tabular-nums">tabla {tablaPitchOf(rung.label) ?? '—'}</span>
                 {isReference ? <Tag>reference</Tag> : null}
                 {isActual ? (
@@ -127,7 +127,7 @@ export function ShrutiLadder({
       </ol>
 
       {comfort ? (
-        <p className="text-xs text-slate-600">
+        <p className="text-xs text-on-surface-muted">
           Comfort band (p10–p90 of their historical Sa) shaded.
         </p>
       ) : null}
@@ -151,7 +151,7 @@ function Tag({
 
 function Legend({ swatch, ring, label }: { swatch: string; ring?: string; label: string }) {
   return (
-    <span className="flex items-center gap-1.5 text-slate-600">
+    <span className="flex items-center gap-1.5 text-on-surface-muted">
       <span
         aria-hidden
         className="h-3 w-3 rounded-full border-2"

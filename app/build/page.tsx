@@ -87,7 +87,7 @@ export default async function BuildPage({
         <CardHeader>
           <CardTitle>No templates yet</CardTitle>
         </CardHeader>
-        <CardContent className="text-sm text-gray-700">
+        <CardContent className="text-sm text-on-surface-muted">
           Run <code className="rounded bg-slate-100 px-1">npm run db:templates</code> to insert the
           shipped shape templates, then reload.
         </CardContent>
@@ -147,7 +147,7 @@ export default async function BuildPage({
       <Card>
         <CardHeader>
           <CardTitle>Build a session</CardTitle>
-          <div className="mt-1 text-sm text-gray-600">
+          <div className="mt-1 text-sm text-on-surface-muted">
             {result.poolSize.toLocaleString()} bhajans match the filters. Everything is in the
             URL, so this exact set can be shared or bookmarked.
           </div>
@@ -162,7 +162,7 @@ export default async function BuildPage({
                   type="date"
                   name="date"
                   defaultValue={date}
-                  className="h-10 w-full rounded-xl border px-3 text-sm"
+                  className="h-10 w-full rounded-key border px-3 text-sm"
                 />
               </Field>
 
@@ -170,7 +170,7 @@ export default async function BuildPage({
                 <select
                   name="t"
                   defaultValue={template.name}
-                  className="h-10 w-full rounded-xl border px-3 text-sm"
+                  className="h-10 w-full rounded-key border px-3 text-sm"
                 >
                   {templates.map((t) => (
                     <option key={t.id} value={t.name}>
@@ -188,7 +188,7 @@ export default async function BuildPage({
                   min={1}
                   max={20}
                   defaultValue={length}
-                  className="h-10 w-full rounded-xl border px-3 text-sm"
+                  className="h-10 w-full rounded-key border px-3 text-sm"
                 />
               </Field>
 
@@ -199,7 +199,7 @@ export default async function BuildPage({
                   min={0}
                   max={999}
                   defaultValue={freshnessDays}
-                  className="h-10 w-full rounded-xl border px-3 text-sm"
+                  className="h-10 w-full rounded-key border px-3 text-sm"
                 />
               </Field>
 
@@ -207,7 +207,7 @@ export default async function BuildPage({
                 <select
                   name="sung"
                   defaultValue={one(sp, "sung") ?? "any"}
-                  className="h-10 w-full rounded-xl border px-3 text-sm"
+                  className="h-10 w-full rounded-key border px-3 text-sm"
                 >
                   <option value="any">Anything in the masterlist</option>
                   <option value="known">Only bhajans the group has sung</option>
@@ -215,7 +215,7 @@ export default async function BuildPage({
                 </select>
               </Field>
             </div>
-            <p className="-mt-1 text-xs text-gray-600">
+            <p className="-mt-1 text-xs text-on-surface-muted">
               Only about 600 of the 3,607 bhajans have ever been sung here, so
               &ldquo;anything&rdquo; will often suggest songs nobody knows yet. That is
               deliberate — it is how the group learns new material — but pick{" "}
@@ -223,7 +223,7 @@ export default async function BuildPage({
               work this week.
             </p>
 
-            <details className="rounded-2xl border bg-white">
+            <details className="rounded-key border border-rule-surface bg-white">
               <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold">
                 Filters
               </summary>
@@ -260,12 +260,12 @@ export default async function BuildPage({
                   selected={list(sp, "level")}
                 />
                 <fieldset className="grid gap-1">
-                  <legend className="text-xs font-semibold text-gray-700">Must have</legend>
+                  <legend className="text-xs font-semibold text-on-surface-muted">Must have</legend>
                   <Check name="lyrics" label="Lyrics" checked={one(sp, "lyrics") === "1"} />
                   <Check name="audio" label="Audio" checked={one(sp, "audio") === "1"} />
                   <Check name="ref" label="Reference pitch" checked={one(sp, "ref") === "1"} />
                 </fieldset>
-                <p className="text-xs text-gray-600 sm:col-span-2 lg:col-span-3">
+                <p className="text-xs text-on-surface-muted sm:col-span-2 lg:col-span-3">
                   Every facet offers <strong>unspecified</strong>, because a third of the
                   masterlist has no tempo and nearly a third no level. Leaving a facet unset never
                   drops a bhajan for lacking that field.
@@ -285,12 +285,12 @@ export default async function BuildPage({
                   <Button type="button">Unlock all</Button>
                 </Link>
               ) : null}
-              <span className="font-mono text-xs text-gray-500">seed {seed}</span>
+              <span className="font-mono text-xs text-on-surface-muted">seed {seed}</span>
             </div>
           </form>
 
           {result.warnings.length > 0 ? (
-            <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3">
+            <div className="rounded-key border border-warn/60 bg-warn/10 p-3">
               <div className="text-sm font-semibold">Worth knowing</div>
               <ul className="mt-1 list-disc pl-5 text-sm">
                 {result.warnings.map((w) => (
@@ -305,11 +305,18 @@ export default async function BuildPage({
             {result.slots.map((slot) => {
               const otherLocks = chosenIds.filter((id) => id !== slot.candidate.id);
               return (
-                <li key={slot.candidate.id} className="rounded-2xl border bg-white p-3">
+                <li
+                  key={slot.candidate.id}
+                  // SPEC §6: one orchestrated moment. Unlocked slots settle into
+                  // place in sequence after a re-roll; locked ones stay put and
+                  // carry no animation. `prefers-reduced-motion` disables it.
+                  className={`rounded-key border border-rule-surface bg-white/60 p-3${slot.locked ? "" : " settle"}`}
+                  style={slot.locked ? undefined : { animationDelay: `${(slot.position - 1) * 70}ms` }}
+                >
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-gray-500">
+                        <span className="font-mono text-xs text-on-surface-muted">
                           {String(slot.position).padStart(2, "0")}
                         </span>
                         {slot.locked ? (
@@ -327,7 +334,7 @@ export default async function BuildPage({
                       >
                         {slot.candidate.title}
                       </Link>
-                      <div className="mt-1 text-xs text-gray-600">
+                      <div className="mt-1 text-xs text-on-surface-muted">
                         {[
                           slot.candidate.deities.join(", ") || "deity unspecified",
                           slot.candidate.raga ?? "raga unspecified",
@@ -338,7 +345,7 @@ export default async function BuildPage({
                         {slot.reasons.join(" · ")}
                       </div>
                       {slot.relaxed.length > 0 ? (
-                        <div className="mt-1 text-xs font-medium text-amber-700">
+                        <div className="mt-1 text-xs font-medium text-on-surface">
                           Relaxed to fill this slot: {slot.relaxed.join(", ")}
                         </div>
                       ) : null}
@@ -384,7 +391,7 @@ export default async function BuildPage({
               <Button type="submit" className="bg-black text-white hover:bg-black/90">
                 Save as draft session on {date}
               </Button>
-              <span className="text-xs text-gray-600">
+              <span className="text-xs text-on-surface-muted">
                 Saves the bhajans, not the seed — the generator&rsquo;s weights change as history
                 grows, so the same seed will not reproduce this set later. Singers are assigned in
                 the roster.
@@ -400,7 +407,7 @@ export default async function BuildPage({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="grid gap-1">
-      <span className="text-xs font-semibold text-gray-700">{label}</span>
+      <span className="text-xs font-semibold text-on-surface-muted">{label}</span>
       {children}
     </label>
   );
@@ -434,13 +441,13 @@ function MultiField({
 }) {
   return (
     <label className="grid gap-1">
-      <span className="text-xs font-semibold text-gray-700">{label}</span>
+      <span className="text-xs font-semibold text-on-surface-muted">{label}</span>
       <select
         name={name}
         multiple
         defaultValue={selected}
         size={Math.min(6, options.length + 1)}
-        className="w-full rounded-xl border px-2 py-1 text-sm"
+        className="w-full rounded-key border px-2 py-1 text-sm"
       >
         {allowUnspecified ? <option value={UNSPECIFIED}>(unspecified)</option> : null}
         {options.map((o) => (

@@ -159,7 +159,7 @@ export default async function RosterPage({
           <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle>Roster</CardTitle>
-              <div className="mt-1 text-sm text-gray-600">
+              <div className="mt-1 text-sm text-on-surface-muted">
                 {view === "calendar"
                   ? "Tap a day to open the session (edit mode will create if missing)."
                   : "List view. Search + date range available."}
@@ -168,7 +168,7 @@ export default async function RosterPage({
 
             <div className="flex items-center gap-2">
               <Link
-                className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
+                className="rounded-key border px-3 py-2 text-sm hover:bg-surface-sunk"
                 href={`/roster?view=${view === "calendar" ? "list" : "calendar"}`}
               >
                 {view === "calendar" ? "List view" : "Calendar view"}
@@ -177,15 +177,15 @@ export default async function RosterPage({
           </div>
 
           {canEdit ? (
-            <div className="rounded-2xl border bg-green-50 px-3 py-2 text-sm">
+            <div className="rounded-key border bg-green-50 px-3 py-2 text-sm">
               <span className="font-medium">Edit mode ON</span>
-              <span className="text-gray-700"> — this browser can edit.</span>
+              <span className="text-on-surface-muted"> — this browser can edit.</span>
             </div>
           ) : (
-            <div className="rounded-2xl border bg-amber-50 px-3 py-2 text-sm grid gap-2">
+            <div className="rounded-key border bg-amber-50 px-3 py-2 text-sm grid gap-2">
               <div>
                 <span className="font-medium">Read-only</span>
-                <span className="text-gray-700"> — enter your edit key here to enable editing in this browser.</span>
+                <span className="text-on-surface-muted"> — enter your edit key here to enable editing in this browser.</span>
               </div>
               <EnableEditForm returnTo={`/roster?view=${view}`} />
             </div>
@@ -215,7 +215,7 @@ export default async function RosterPage({
                   <Link
                     key={s.id}
                     href={`/roster/${s.id}`}
-                    className="rounded-2xl border bg-white p-3 hover:bg-gray-50"
+                    className="rounded-key border border-rule-surface bg-white/60 p-3 hover:bg-surface-sunk"
                   >
                     <div className="text-sm font-medium">
                       {new Date(s.date).toLocaleDateString(undefined, {
@@ -225,7 +225,7 @@ export default async function RosterPage({
                         day: "numeric",
                       })}
                     </div>
-                    <div className="mt-1 text-sm text-gray-700">
+                    <div className="mt-1 text-sm text-on-surface-muted">
                       {s.slots
                         .slice(0, 8)
                         .map((x) => `${x.singer?.name ?? "Unassigned"}${x.bhajanTitle ? ` — ${x.bhajanTitle}` : ""}`)

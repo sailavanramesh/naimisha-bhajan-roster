@@ -158,7 +158,7 @@ export default function RosterCalendarClient(props: {
         </div>
       </div>
 
-      <div className="grid grid-cols-7 gap-2 text-xs text-slate-600">
+      <div className="grid grid-cols-7 gap-2 text-xs text-on-surface-muted">
         {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
           <div key={d} className="text-center">{d}</div>
         ))}
@@ -180,9 +180,9 @@ export default function RosterCalendarClient(props: {
               type="button"
               onClick={() => onDayClick(date)}
               className={[
-                "relative rounded-2xl border px-2 py-2 text-left hover:bg-slate-50",
+                "relative rounded-key border px-2 py-2 text-left hover:bg-surface-sunk",
                 isSelected ? "border-slate-900" : "border-slate-200",
-                inMonth ? "bg-white" : "bg-slate-50 text-slate-400",
+                inMonth ? "bg-white" : "bg-surface-sunk text-slate-400",
               ].join(" ")}
             >
               <div className="text-xs">{d.getUTCDate()}</div>
@@ -203,24 +203,24 @@ export default function RosterCalendarClient(props: {
         })}
       </div>
 
-      <div className="rounded-2xl border bg-white p-3 text-sm">
+      <div className="rounded-key border border-rule-surface bg-white/60 p-3 text-sm">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="font-semibold">{selectedLabel}</div>
           <div className="flex items-center gap-2 text-xs">
             <span className={[
               "rounded-full border px-2 py-1",
-              selectedHasSession ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700",
+              selectedHasSession ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-on-surface",
             ].join(" ")}>
               {selectedHasSession ? "Session exists" : "No session"}
             </span>
-            <span className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-slate-700">
+            <span className="rounded-full border border-slate-200 bg-surface-sunk px-2 py-1 text-slate-700">
               {selectedEntries} row{selectedEntries === 1 ? "" : "s"}
             </span>
           </div>
         </div>
 
         {selectedInfo?.summary ? (
-          <div className="mt-2 rounded-xl border bg-slate-50 px-3 py-2 text-slate-700">
+          <div className="mt-2 rounded-key border bg-surface-sunk px-3 py-2 text-slate-700">
             {selectedInfo.summary}
           </div>
         ) : null}
@@ -234,7 +234,7 @@ export default function RosterCalendarClient(props: {
         </div>
       </div>
 
-      {isPending ? <div className="text-xs text-slate-500">Loading…</div> : null}
+      {isPending ? <div className="text-xs text-on-surface-muted">Loading…</div> : null}
     </div>
   );
 }

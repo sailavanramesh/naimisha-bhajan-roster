@@ -33,7 +33,7 @@ export default async function BhajanPage({
             <CardTitle>Bhajan not found</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-sm text-gray-600 mb-3">
+            <div className="text-sm text-on-surface-muted mb-3">
               This bhajan may have been deleted or the link is incorrect.
             </div>
             <Link href="/bhajans">
@@ -90,7 +90,7 @@ export default async function BhajanPage({
           <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle>{bhajan.title}</CardTitle>
-              <div className="mt-2 text-sm text-gray-600">
+              <div className="mt-2 text-sm text-on-surface-muted">
                 {bhajan.raga ? `Raga: ${bhajan.raga}` : "Raga: —"}
               </div>
             </div>
@@ -103,13 +103,13 @@ export default async function BhajanPage({
 
         <CardContent className="grid gap-4">
           <div className="grid gap-2 sm:grid-cols-2">
-            <div className="rounded-2xl border bg-white p-3">
-              <div className="text-xs font-semibold text-gray-700">Gents pitch</div>
+            <div className="rounded-key border border-rule-surface bg-white/60 p-3">
+              <div className="text-xs font-semibold text-on-surface-muted">Gents pitch</div>
               <div className="mt-1 text-sm">{bhajan.referenceGentsPitch ?? "—"}</div>
             </div>
 
-            <div className="rounded-2xl border bg-white p-3">
-              <div className="text-xs font-semibold text-gray-700">Ladies pitch</div>
+            <div className="rounded-key border border-rule-surface bg-white/60 p-3">
+              <div className="text-xs font-semibold text-on-surface-muted">Ladies pitch</div>
               <div className="mt-1 text-sm">{bhajan.referenceLadiesPitch ?? "—"}</div>
             </div>
           </div>
@@ -118,14 +118,14 @@ export default async function BhajanPage({
           <section className="grid gap-2">
             <h2 className="text-sm font-semibold">Who has sung this</h2>
             {sungBy.length === 0 ? (
-              <p className="text-sm text-gray-600">
+              <p className="text-sm text-on-surface-muted">
                 Nobody in the group has sung this yet.
               </p>
             ) : (
-              <div className="overflow-x-auto rounded-2xl border">
+              <div className="overflow-x-auto rounded-key border border-rule-surface">
                 <table className="w-full text-sm">
-                  <thead className="bg-slate-50 text-left">
-                    <tr className="border-b">
+                  <thead className="bg-surface-sunk text-left">
+                    <tr className="border-b border-rule-surface">
                       <th className="px-3 py-2 font-semibold">Singer</th>
                       <th className="px-3 py-2 font-semibold">Date</th>
                       <th className="px-3 py-2 font-semibold">Sang at</th>
@@ -134,9 +134,9 @@ export default async function BhajanPage({
                   </thead>
                   <tbody>
                     {sungBy.map((r, i) => (
-                      <tr key={`${r.singerName}-${i}`} className="border-b last:border-b-0">
+                      <tr key={`${r.singerName}-${i}`} className="border-b border-rule-surface last:border-b-0">
                         <td className="px-3 py-2">{r.singerName}</td>
-                        <td className="px-3 py-2 font-mono tabular-nums text-xs text-gray-600">
+                        <td className="px-3 py-2 font-mono tabular-nums text-xs text-on-surface-muted">
                           {r.date.toISOString().slice(0, 10)}
                         </td>
                         <td className="px-3 py-2 font-mono tabular-nums">
@@ -178,15 +178,15 @@ export default async function BhajanPage({
               <h2 className="text-sm font-semibold">
                 Predicted pitch for singers who have not sung this
               </h2>
-              <p className="text-xs text-gray-600">
+              <p className="text-xs text-on-surface-muted">
                 Their gender reference shifted by their own median offset. Rows
                 marked <em>reference only</em> have too little history to predict
                 from, so the plain reference is shown instead.
               </p>
-              <div className="overflow-x-auto rounded-2xl border">
+              <div className="overflow-x-auto rounded-key border border-rule-surface">
                 <table className="w-full text-sm">
-                  <thead className="bg-slate-50 text-left">
-                    <tr className="border-b">
+                  <thead className="bg-surface-sunk text-left">
+                    <tr className="border-b border-rule-surface">
                       <th className="px-3 py-2 font-semibold">Singer</th>
                       <th className="px-3 py-2 font-semibold">Pitch</th>
                       <th className="px-3 py-2 font-semibold">Shift</th>
@@ -195,7 +195,7 @@ export default async function BhajanPage({
                   </thead>
                   <tbody>
                     {predictions.map(({ singer, prediction }) => (
-                      <tr key={singer.id} className="border-b last:border-b-0">
+                      <tr key={singer.id} className="border-b border-rule-surface last:border-b-0">
                         <td className="px-3 py-2">
                           <Link
                             href={`/singers/${singer.id}`}
@@ -222,7 +222,7 @@ export default async function BhajanPage({
                         <td className="px-3 py-2 font-mono tabular-nums">
                           {prediction.predicted ? signed(prediction.offset) : "—"}
                         </td>
-                        <td className="px-3 py-2 text-xs text-gray-600">
+                        <td className="px-3 py-2 text-xs text-on-surface-muted">
                           {prediction.predicted
                             ? `${prediction.n} records${prediction.basis === "raga" ? ", this raga" : ""}`
                             : `reference only (${prediction.n} records)`}
@@ -236,13 +236,13 @@ export default async function BhajanPage({
           ) : null}
 
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-2xl border bg-white p-3">
-              <div className="text-xs font-semibold text-gray-700 mb-2">Lyrics</div>
+            <div className="rounded-key border border-rule-surface bg-white/60 p-3">
+              <div className="text-xs font-semibold text-on-surface-muted mb-2">Lyrics</div>
               <div className="text-sm whitespace-pre-wrap">{bhajan.lyrics ?? "—"}</div>
             </div>
 
-            <div className="rounded-2xl border bg-white p-3">
-              <div className="text-xs font-semibold text-gray-700 mb-2">Meaning</div>
+            <div className="rounded-key border border-rule-surface bg-white/60 p-3">
+              <div className="text-xs font-semibold text-on-surface-muted mb-2">Meaning</div>
               <div className="text-sm whitespace-pre-wrap">{bhajan.meaning ?? "—"}</div>
             </div>
           </div>

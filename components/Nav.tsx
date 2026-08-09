@@ -25,7 +25,7 @@ const ITEMS: NavItem[] = [
 
 function Hamburger({ open }: { open: boolean }) {
   return (
-    <div className="flex h-9 w-9 items-center justify-center rounded-xl border bg-white hover:bg-gray-50">
+    <div className="flex h-11 w-11 items-center justify-center rounded-key border border-rule bg-ground-raised text-on-ground hover:bg-white/[0.08]">
       <span className="text-lg leading-none">{open ? "×" : "≡"}</span>
     </div>
   );
@@ -74,14 +74,16 @@ export function Nav() {
             title={collapsed ? item.label : undefined}
             className={clsx(
               "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm",
-              active ? "bg-slate-900 text-white" : "text-slate-800 hover:bg-slate-100"
+              active
+                ? "bg-brass/15 text-on-ground ring-1 ring-brass/40"
+                : "text-on-ground-muted hover:bg-white/[0.06] hover:text-on-ground"
             )}
             onClick={() => setMobileOpen(false)}
           >
             <div
               className={clsx(
                 "flex h-8 w-8 items-center justify-center rounded-lg border text-sm font-semibold",
-                active ? "border-white/20 bg-white/10" : "border-slate-200 bg-white"
+                active ? "border-brass/50 bg-brass/20 text-on-ground" : "border-rule bg-white/[0.04]"
               )}
             >
               {item.short}
@@ -99,12 +101,12 @@ export function Nav() {
       {/* Desktop sidebar */}
       <aside
         className={clsx(
-          "hidden md:flex md:sticky md:top-0 md:h-screen md:flex-col md:border-r md:bg-white md:p-3",
+          "no-print hidden md:flex md:sticky md:top-0 md:h-screen md:flex-col md:border-r md:border-rule md:bg-ground-raised md:p-3",
           expanded ? "md:w-64" : "md:w-20"
         )}
       >
         <div className="flex items-center justify-between gap-2 px-1 pb-3">
-          <div className={clsx("text-sm font-semibold", expanded ? "opacity-100" : "opacity-0 pointer-events-none")}>
+          <div className={clsx("font-display text-sm font-semibold text-on-ground", expanded ? "opacity-100" : "opacity-0 pointer-events-none")}>
             Naimisha Roster
           </div>
 
@@ -120,13 +122,13 @@ export function Nav() {
 
         <NavLinks collapsed={!expanded} />
 
-        <div className={clsx("mt-auto pt-3 text-xs text-gray-500", expanded ? "opacity-100" : "opacity-0")}>
+        <div className={clsx("mt-auto pt-3 text-xs text-on-ground-muted", expanded ? "opacity-100" : "opacity-0")}>
           Tip: use the editable link to enable editing.
         </div>
       </aside>
 
       {/* Mobile top-left trigger */}
-      <div className="md:hidden fixed left-3 top-3 z-50">
+      <div className="no-print md:hidden fixed left-3 top-3 z-50">
         <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open navigation">
           <Hamburger open={false} />
         </button>
@@ -135,10 +137,10 @@ export function Nav() {
       {/* Mobile drawer */}
       {mobileOpen ? (
         <div className="md:hidden fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setMobileOpen(false)} />
-          <div className="absolute left-0 top-0 h-full w-[82%] max-w-[320px] bg-white border-r p-3">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
+          <div className="absolute left-0 top-0 h-full w-[82%] max-w-[320px] bg-ground-raised border-r border-rule p-3">
             <div className="flex items-center justify-between px-1 pb-3">
-              <div className="text-sm font-semibold">Naimisha Roster</div>
+              <div className="font-display text-sm font-semibold text-on-ground">Naimisha Roster</div>
               <button type="button" onClick={() => setMobileOpen(false)} aria-label="Close navigation">
                 <Hamburger open={true} />
               </button>

@@ -88,7 +88,7 @@ export default async function AssignPage({
       <Card>
         <CardHeader>
           <CardTitle>Assign singers — {dateKey}</CardTitle>
-          <div className="mt-1 text-sm text-gray-600">
+          <div className="mt-1 text-sm text-on-surface-muted">
             Suggestions only. Nothing is written until you apply, and applying only sets the
             singer — it never touches a confirmed pitch.
           </div>
@@ -101,7 +101,7 @@ export default async function AssignPage({
 
         <CardContent className="grid gap-4">
           {slots.length === 0 ? (
-            <p className="text-sm text-gray-700">
+            <p className="text-sm text-on-surface-muted">
               This session has no slots yet. Build one on the{" "}
               <Link href="/build" className="underline underline-offset-2">
                 Build
@@ -111,7 +111,7 @@ export default async function AssignPage({
           ) : (
             <>
               {result.warnings.length > 0 ? (
-                <div className="rounded-2xl border border-amber-300 bg-amber-50 p-3">
+                <div className="rounded-key border border-warn/60 bg-warn/10 p-3">
                   <div className="text-sm font-semibold">Worth knowing</div>
                   <ul className="mt-1 list-disc pl-5 text-sm">
                     {result.warnings.map((w) => (
@@ -128,11 +128,11 @@ export default async function AssignPage({
                   else if (a.singer) nextPins.set(a.position, a.singer.id);
 
                   return (
-                    <li key={a.position} className="rounded-2xl border bg-white p-3">
+                    <li key={a.position} className="rounded-key border border-rule-surface bg-white/60 p-3">
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="font-mono text-xs text-gray-500">
+                            <span className="font-mono text-xs text-on-surface-muted">
                               {String(a.position).padStart(2, "0")}
                             </span>
                             {a.pinned ? (
@@ -144,12 +144,12 @@ export default async function AssignPage({
                           <div className="mt-1 font-medium">
                             {a.singer ? a.singer.name : "— nobody available —"}
                             {a.singer?.gender ? (
-                              <span className="ml-2 text-xs font-normal text-gray-600">
+                              <span className="ml-2 text-xs font-normal text-on-surface-muted">
                                 {a.singer.gender}
                               </span>
                             ) : null}
                           </div>
-                          <div className="mt-1 text-sm text-gray-700">
+                          <div className="mt-1 text-sm text-on-surface-muted">
                             {a.slot.bhajanTitle ?? "no bhajan chosen"}
                           </div>
                           <div className="mt-1 text-xs" style={{ color: "rgb(var(--muted))" }}>
@@ -170,7 +170,7 @@ export default async function AssignPage({
 
                       {/* Manual override: pin anyone directly. */}
                       <details className="mt-2">
-                        <summary className="cursor-pointer text-xs text-gray-600">
+                        <summary className="cursor-pointer text-xs text-on-surface-muted">
                           Choose someone else
                         </summary>
                         <div className="mt-2 flex flex-wrap gap-1">
@@ -179,7 +179,7 @@ export default async function AssignPage({
                             m.set(a.position, s.id);
                             return (
                               <Link key={s.id} href={href({ pin: serialisePins(m) })}>
-                                <span className="rounded-full border px-2 py-1 text-xs hover:bg-gray-50">
+                                <span className="rounded-full border px-2 py-1 text-xs hover:bg-surface-sunk">
                                   {s.name}
                                   {!s.available ? " (unavailable)" : ""}
                                 </span>
@@ -206,7 +206,7 @@ export default async function AssignPage({
           )}
 
           {/* Weights */}
-          <details className="rounded-2xl border bg-white">
+          <details className="rounded-key border border-rule-surface bg-white">
             <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold">
               Scoring weights
             </summary>
@@ -214,14 +214,14 @@ export default async function AssignPage({
               <input type="hidden" name="pin" value={serialisePins(pins)} />
               {(Object.keys(DEFAULT_WEIGHTS) as (keyof Weights)[]).map((k) => (
                 <label key={k} className="grid gap-1">
-                  <span className="text-xs font-semibold text-gray-700">{k}</span>
+                  <span className="text-xs font-semibold text-on-surface-muted">{k}</span>
                   <input
                     type="number"
                     step="0.1"
                     min="0"
                     name={`w_${k}`}
                     defaultValue={weights[k]}
-                    className="h-10 w-full rounded-xl border px-3 text-sm"
+                    className="h-10 w-full rounded-key border px-3 text-sm"
                   />
                 </label>
               ))}
@@ -231,7 +231,7 @@ export default async function AssignPage({
                   <Button type="button">Reset</Button>
                 </Link>
               </div>
-              <p className="text-xs text-gray-600 sm:col-span-3">
+              <p className="text-xs text-on-surface-muted sm:col-span-3">
                 Every component is normalised to 0–1 before weighting, so these numbers are
                 directly comparable. Load balance is weighted above repertoire on purpose:
                 the point is to stop the same few people singing every week.
@@ -240,7 +240,7 @@ export default async function AssignPage({
           </details>
 
           {/* Availability */}
-          <details className="rounded-2xl border bg-white">
+          <details className="rounded-key border border-rule-surface bg-white">
             <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold">
               Availability for {dateKey}
             </summary>
@@ -252,7 +252,7 @@ export default async function AssignPage({
                   <input type="hidden" name="sessionId" value={sessionId} />
                   <input type="hidden" name="available" value={s.available ? "0" : "1"} />
                   <span className="w-28 text-sm">{s.name}</span>
-                  <span className="text-xs text-gray-600">
+                  <span className="text-xs text-on-surface-muted">
                     {s.recentCount} in the last {RECENT_WINDOW_DAYS} days
                   </span>
                   <Button type="submit" className="ml-auto text-xs">

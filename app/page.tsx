@@ -37,7 +37,7 @@ export default async function Page() {
           <CardHeader>
             <CardTitle>Database setup required</CardTitle>
           </CardHeader>
-          <CardContent className="grid gap-2 text-sm text-gray-700">
+          <CardContent className="grid gap-2 text-sm text-on-surface-muted">
             <p>The app could not connect to the database in this environment.</p>
             <p>
               On Vercel, set <code>DATABASE_URL</code> (and redeploy). If you are using Prisma Accelerate or a pooled
@@ -76,15 +76,15 @@ export default async function Page() {
         <CardHeader><CardTitle>Upcoming (next 30 days)</CardTitle></CardHeader>
         <CardContent>
           {upcoming.length === 0 ? (
-            <div className="text-sm text-gray-600">No upcoming sessions found. Seed/import your XLSX first.</div>
+            <div className="text-sm text-on-surface-muted">No upcoming sessions found. Seed/import your XLSX first.</div>
           ) : (
             <div className="grid gap-2">
               {upcoming.map((s) => (
-                <Link key={s.id} href={`/roster/${s.id}`} className="rounded-xl border bg-white p-3 hover:bg-gray-50">
+                <Link key={s.id} href={`/roster/${s.id}`} className="rounded-key border border-rule-surface bg-white/60 p-3 hover:bg-surface-sunk">
                   <div className="text-sm font-medium">
                     {new Date(s.date).toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric" })}
                   </div>
-                  <div className="mt-1 text-sm text-gray-700">
+                  <div className="mt-1 text-sm text-on-surface-muted">
                     {s.slots
                       .slice(0, 6)
                       .map((x) => x.singer?.name ?? "Unassigned")

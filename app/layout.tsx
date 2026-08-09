@@ -1,31 +1,74 @@
 import "./globals.css";
+import { Faustina, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { Nav } from "@/components/Nav";
+
+/**
+ * Three roles, deliberately paired (docs/SPEC.md §6).
+ *
+ * Faustina carries the transliterated Sanskrit — it has the diacritic coverage
+ * and reads as belonging to the tradition rather than to a dashboard.
+ */
+const display = Faustina({
+  subsets: ["latin", "latin-ext"],
+  weight: ["500", "600", "700"],
+  variable: "--font-display",
+  display: "swap",
+});
+
+const sans = IBM_Plex_Sans({
+  subsets: ["latin", "latin-ext"],
+  weight: ["400", "500", "600"],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+const mono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  variable: "--font-mono",
+  display: "swap",
+});
 
 export const metadata = {
   title: "Naimisha Bhajan Roster",
-  description: "Bhajan roster + masterlist",
+  description: "Bhajan suggestions, rostering and pitch for the Naimisha Sai Centre",
+};
+
+export const viewport = {
+  themeColor: "#12141C",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
-      <body className="min-h-screen bg-gradient-to-b from-slate-50 via-white to-slate-50 text-slate-900">
-        <div className="min-h-screen flex">
+    <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
+      <body className="min-h-screen font-sans antialiased">
+        {/* Keyboard users land here first. The old build had no skip link. */}
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:absolute focus:left-3 focus:top-3 focus:z-50 focus:rounded-key focus:bg-surface focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-on-surface"
+        >
+          Skip to content
+        </a>
+
+        <div className="flex min-h-screen">
           <Nav />
 
           <div className="flex-1">
-            <div className="mx-auto max-w-6xl px-3 pb-12 pt-14 sm:px-6 sm:pt-8">
-              {/* small header (keeps things tidy; nav moved to sidebar) */}
-              <header className="mb-5">
-                <div className="rounded-[28px] border border-slate-200 bg-white/70 backdrop-blur px-4 py-3 sm:px-5 sm:py-4">
-                  <div className="text-base sm:text-lg font-semibold">Naimisha Bhajan Roster</div>
-                  <div className="text-xs sm:text-sm text-slate-600 mt-1">
-                    Calendar + session editor + masterlist.
-                  </div>
+            <div className="mx-auto max-w-6xl px-3 pb-16 pt-14 sm:px-6 sm:pt-8">
+              <header className="no-print mb-6">
+                <div className="border-b border-rule pb-4">
+                  <h1 className="font-display text-2xl font-semibold tracking-tight text-on-ground sm:text-3xl">
+                    Naimisha Bhajan Roster
+                  </h1>
+                  <p className="mt-1 text-sm text-on-ground-muted">
+                    Suggest a set, roster it fairly, remember the pitch.
+                  </p>
                 </div>
               </header>
 
-              <main>{children}</main>
+              <main id="main">{children}</main>
             </div>
           </div>
         </div>
