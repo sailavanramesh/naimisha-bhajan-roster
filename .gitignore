@@ -25,3 +25,6 @@ pnpm-debug.log*
 
 # misc
 *.zip
+
+# saved env (never commit)
+.env.save
