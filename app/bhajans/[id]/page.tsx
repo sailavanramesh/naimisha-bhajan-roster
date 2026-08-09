@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { Gender } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle, Button } from "@/components/ui";
 import { ShrutiLadder } from "@/components/ShrutiLadder";
+import { DeitySymbols } from "@/components/DeitySymbol";
 import { getPitchLabels, getAllProfiles, getSungRowsForBhajan } from "@/lib/pitchQueries";
 import { predictForSinger } from "@/lib/singerProfile";
 import { semitoneDelta } from "@/lib/pitch";
@@ -77,6 +78,7 @@ export default async function BhajanPage({
 
   const bhajan = await prisma.bhajan.findUnique({
     where: { id },
+    include: { deities: { include: { deity: true } } },
   });
 
   if (!bhajan) {
@@ -143,7 +145,10 @@ export default async function BhajanPage({
         <CardHeader>
           <div className="flex items-start justify-between gap-3">
             <div>
-              <CardTitle>{bhajan.title}</CardTitle>
+              <div className="flex items-start gap-3">
+                <DeitySymbols deities={bhajan.deities.map((d) => d.deity.name)} size={22} className="mt-1" />
+                <CardTitle>{bhajan.title}</CardTitle>
+              </div>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-on-surface-muted">
                 <span>{bhajan.raga ? `Raga: ${bhajan.raga}` : "Raga: —"}</span>
                 {/* Deliberately quiet. The group should be able to tell its own
@@ -188,62 +193,35 @@ export default async function BhajanPage({
             </div>
           </div>
 
-          {/* Who has sung it */}
-          <section className="grid gap-2">
-            <h2 className="text-sm font-semibold">Who has sung this</h2>
-            {sungBy.length === 0 ? (
-              <p className="text-sm text-on-surface-muted">
-                Nobody in the group has sung this yet.
-              </p>
-            ) : (
-              <div className="overflow-x-auto rounded-[12px] border border-rule-surface">
-                <table className="w-full text-sm">
-                  <thead className="bg-panel text-left">
-                    <tr className="border-b border-rule-surface">
-                      <th className="px-3 py-2 font-semibold">Singer</th>
-                      <th className="px-3 py-2 font-semibold">Date</th>
-                      <th className="px-3 py-2 font-semibold">Sang at</th>
-                      <th className="px-3 py-2 font-semibold">vs reference</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {sungBy.map((r, i) => (
-                      <tr key={`${r.singerName}-${i}`} className="border-b border-rule-surface last:border-b-0">
-                        <td className="px-3 py-2">{r.singerName}</td>
-                        <td className="px-3 py-2 font-mono tabular-nums text-xs text-on-surface-muted">
-                          {r.date.toISOString().slice(0, 10)}
-                        </td>
-                        <td className="px-3 py-2 font-mono tabular-nums">
-                          {r.confirmedPitch ?? "—"}
-                        </td>
-                        <td
-                          className={r.delta ? "px-3 py-2 font-mono tabular font-semibold text-kumkum" : "px-3 py-2 font-mono tabular font-semibold"}
-                        >
-                          {signed(r.delta)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-
-          {/* Ladder for the most recent performance */}
-          {mostRecent ? (
-            <section className="grid gap-2">
-              <h2 className="text-sm font-semibold">
-                Shruti ladder — {mostRecent.singerName},{" "}
-                {mostRecent.date.toISOString().slice(0, 10)}
+          {/*
+            Lyrics and meaning lead. This is what somebody opens a bhajan for —
+            mid-session, on a phone, wanting the words. The pitch analysis is
+            valuable, but it is reference, and it was pushing the words below
+            three sections of tables.
+          */}
+          <section className="grid gap-3 md:grid-cols-2">
+            <article className="rounded-[12px] border border-brass/25 bg-surface p-4">
+              <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brass-ink">
+                Lyrics
               </h2>
-              <ShrutiLadder
-                rungs={rungs}
-                reference={mostRecent.reference}
-                actual={mostRecent.confirmedPitch}
-                actualKind="confirmed"
-              />
-            </section>
-          ) : null}
+              <div className="mt-2 whitespace-pre-wrap text-[15px] leading-7">
+                {bhajan.lyrics ?? (
+                  <span className="text-on-surface-muted">Not recorded for this bhajan.</span>
+                )}
+              </div>
+            </article>
+
+            <article className="rounded-[12px] border border-brass/25 bg-surface p-4">
+              <h2 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-brass-ink">
+                Meaning
+              </h2>
+              <div className="mt-2 whitespace-pre-wrap text-[15px] leading-7">
+                {bhajan.meaning ?? (
+                  <span className="text-on-surface-muted">Not recorded for this bhajan.</span>
+                )}
+              </div>
+            </article>
+          </section>
 
           {/* Predictions for everyone else */}
           {predictions.length > 0 ? (
@@ -307,17 +285,63 @@ export default async function BhajanPage({
             </section>
           ) : null}
 
-          <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-[12px] border border-rule-surface bg-panel p-3">
-              <div className="text-xs font-semibold text-on-surface-muted mb-2">Lyrics</div>
-              <div className="text-sm whitespace-pre-wrap">{bhajan.lyrics ?? "—"}</div>
-            </div>
+          {/* Who has sung it */}
+          <section className="grid gap-2">
+            <h2 className="text-sm font-semibold">Who has sung this</h2>
+            {sungBy.length === 0 ? (
+              <p className="text-sm text-on-surface-muted">
+                Nobody in the group has sung this yet.
+              </p>
+            ) : (
+              <div className="overflow-x-auto rounded-[12px] border border-rule-surface">
+                <table className="w-full text-sm">
+                  <thead className="bg-panel text-left">
+                    <tr className="border-b border-rule-surface">
+                      <th className="px-3 py-2 font-semibold">Singer</th>
+                      <th className="px-3 py-2 font-semibold">Date</th>
+                      <th className="px-3 py-2 font-semibold">Sang at</th>
+                      <th className="px-3 py-2 font-semibold">vs reference</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {sungBy.map((r, i) => (
+                      <tr key={`${r.singerName}-${i}`} className="border-b border-rule-surface last:border-b-0">
+                        <td className="px-3 py-2">{r.singerName}</td>
+                        <td className="px-3 py-2 font-mono tabular-nums text-xs text-on-surface-muted">
+                          {r.date.toISOString().slice(0, 10)}
+                        </td>
+                        <td className="px-3 py-2 font-mono tabular-nums">
+                          {r.confirmedPitch ?? "—"}
+                        </td>
+                        <td
+                          className={r.delta ? "px-3 py-2 font-mono tabular font-semibold text-kumkum" : "px-3 py-2 font-mono tabular font-semibold"}
+                        >
+                          {signed(r.delta)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
 
-            <div className="rounded-[12px] border border-rule-surface bg-panel p-3">
-              <div className="text-xs font-semibold text-on-surface-muted mb-2">Meaning</div>
-              <div className="text-sm whitespace-pre-wrap">{bhajan.meaning ?? "—"}</div>
-            </div>
-          </div>
+          {/* Ladder for the most recent performance */}
+          {mostRecent ? (
+            <section className="grid gap-2">
+              <h2 className="text-sm font-semibold">
+                Shruti ladder — {mostRecent.singerName},{" "}
+                {mostRecent.date.toISOString().slice(0, 10)}
+              </h2>
+              <ShrutiLadder
+                rungs={rungs}
+                reference={mostRecent.reference}
+                actual={mostRecent.confirmedPitch}
+                actualKind="confirmed"
+              />
+            </section>
+          ) : null}
+
         </CardContent>
       </Card>
     </div>

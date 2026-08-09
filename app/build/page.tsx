@@ -16,6 +16,9 @@ export const dynamic = "force-dynamic";
 
 type SP = Record<string, string | string[] | undefined>;
 
+/** The languages the group actually sings in. The rest are behind a toggle. */
+const PRIMARY_LANGUAGES = ["Sanskrit / Hindi", "English", "Tamil", "Telugu"];
+
 const one = (sp: SP, key: string): string | undefined => {
   const v = sp[key];
   return Array.isArray(v) ? v[0] : v;
@@ -292,12 +295,16 @@ export default async function BuildPage({
                 <MultiField
                   label="Language"
                   name="lang"
-                  // 40 distinct values, most of them one-off combinations like
-                  // "English, Sanskrit / Hindi, Spanish, Telugu". Only the ones
-                  // with real weight are offered, plus anything already chosen.
-                  options={facets.languages
-                    .filter((l) => l.count >= 10 || list(sp, "lang").includes(l.name))
-                    .map((l) => l.name)}
+                  // The four the group actually sings in. The masterlist holds
+                  // 40 values, most of them one-off combinations, and offering
+                  // all of them buried the useful ones.
+                  options={PRIMARY_LANGUAGES.filter((l) =>
+                    facets.languages.some((f) => f.name === l),
+                  )}
+                  moreOptions={facets.languages
+                    .map((l) => l.name)
+                    .filter((l) => !PRIMARY_LANGUAGES.includes(l))}
+                  moreLabel="Other languages"
                   selected={list(sp, "lang")}
                   clearHref={list(sp, "lang").length ? href(sp, { lang: undefined }) : undefined}
                 />
@@ -361,9 +368,9 @@ export default async function BuildPage({
                 </div>
 
                 <p className="text-xs text-on-surface-muted md:col-span-2">
-                  Every facet offers <strong>unspecified</strong>: a third of the masterlist has
-                  no tempo and nearly a third no level, and leaving a facet unset never drops a
-                  bhajan for lacking that field.
+                  Every facet offers <strong>not recorded</strong>, for bhajans the masterlist
+                  never filled in — a third have no tempo and nearly a third no level. Leaving a
+                  facet untouched never drops a bhajan for lacking that field.
                 </p>
               </div>
             </details>
@@ -563,6 +570,8 @@ function MultiField({
   selected,
   allowUnspecified = true,
   clearHref,
+  moreOptions = [],
+  moreLabel = "More",
 }: {
   label: string;
   name: string;
@@ -570,9 +579,16 @@ function MultiField({
   selected: string[];
   allowUnspecified?: boolean;
   clearHref?: string;
+  /** Rarely used values, tucked behind a toggle. */
+  moreOptions?: string[];
+  moreLabel?: string;
 }) {
   const chosen = new Set(selected);
-  const all = allowUnspecified ? [UNSPECIFIED, ...options] : options;
+  // Anything already chosen is promoted, so a selection can never be hidden.
+  const promoted = moreOptions.filter((o) => chosen.has(o));
+  const rest = moreOptions.filter((o) => !chosen.has(o));
+  // "unspecified" goes LAST: it is a fallback, not a first choice.
+  const all = [...options, ...promoted, ...(allowUnspecified ? [UNSPECIFIED] : [])];
   return (
     <fieldset className="grid gap-1">
       {label ? (
@@ -612,17 +628,38 @@ function MultiField({
             <span
               className={
                 "inline-block rounded-full border px-2 py-1 text-xs transition-colors " +
-                "border-rule-surface hover:bg-panel-hover " +
+                (o === UNSPECIFIED
+                  ? "border-dashed border-rule-surface italic text-on-surface-muted "
+                  : "border-rule-surface ") +
+                "hover:bg-panel-hover " +
                 "peer-checked:border-brass peer-checked:bg-brass/20 peer-checked:font-semibold " +
-                "peer-checked:text-on-surface " +
+                "peer-checked:not-italic peer-checked:text-on-surface " +
                 "peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-brass"
               }
             >
-              {o === UNSPECIFIED ? "unspecified" : o}
+              {o === UNSPECIFIED ? "not recorded" : o}
             </span>
           </label>
         ))}
       </div>
+
+      {rest.length > 0 ? (
+        <details className="mt-1">
+          <summary className="cursor-pointer text-[11px] text-on-surface-muted hover:text-on-surface">
+            {moreLabel} ({rest.length})
+          </summary>
+          <div className="mt-1 flex flex-wrap items-start content-start gap-1">
+            {rest.map((o) => (
+              <label key={o} className="cursor-pointer">
+                <input type="checkbox" name={name} value={o} className="peer sr-only" />
+                <span className="inline-block rounded-full border border-dashed border-rule-surface px-2 py-1 text-xs text-on-surface-muted hover:bg-panel-hover peer-checked:border-solid peer-checked:border-brass peer-checked:bg-brass/20 peer-checked:font-semibold peer-checked:text-on-surface">
+                  {o}
+                </span>
+              </label>
+            ))}
+          </div>
+        </details>
+      ) : null}
     </fieldset>
   );
 }

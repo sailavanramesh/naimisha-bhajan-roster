@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Button } from "@/components/ui";
+import { DeitySymbols } from "@/components/DeitySymbol";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle, Input } from "@/components/ui";
@@ -34,6 +35,7 @@ export default async function BhajansPage({
       where,
       orderBy: { title: "asc" },
       take: 500,
+      include: { deities: { include: { deity: true } } },
     }),
     prisma.bhajan.findMany({
       distinct: ["deity"],
@@ -107,7 +109,10 @@ export default async function BhajansPage({
                 href={`/bhajans/${b.id}`}
                 className="rounded-[12px] border border-rule-surface bg-panel p-3 hover:bg-panel-hover"
               >
-                <div className="text-sm font-semibold">{b.title}</div>
+                <div className="flex items-center gap-2">
+                  <DeitySymbols deities={b.deities.map((d) => d.deity.name)} size={16} />
+                  <span className="text-sm font-semibold">{b.title}</span>
+                </div>
                 <div className="mt-1 text-xs text-on-surface-muted">
                   {[
                     b.deity ? `Deity: ${b.deity}` : null,

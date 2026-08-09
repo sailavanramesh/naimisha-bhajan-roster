@@ -23,7 +23,10 @@ export default async function RosterSessionPage({
     where: { id: sessionId },
     include: {
       slots: {
-        include: { singer: true, bhajan: true },
+        include: {
+          singer: true,
+          bhajan: { include: { deities: { include: { deity: true } } } },
+        },
         orderBy: [{ position: "asc" }, { createdAt: "asc" }],
       },
       instruments: { orderBy: { createdAt: "asc" } },
@@ -56,6 +59,7 @@ export default async function RosterSessionPage({
     recommendedPitch:
       computeRecommendedPitch(x.singer?.gender ?? null, x.bhajan) || x.historicalRecommendedPitch || null,
     raga: x.bhajan?.raga ?? null,
+    deities: x.bhajan?.deities.map((d) => d.deity.name) ?? [],
   }));
 
   const suggestions = await getPitchSuggestions();

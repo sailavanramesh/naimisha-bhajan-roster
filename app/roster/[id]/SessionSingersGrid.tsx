@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState, useTransition, useEffect } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { DeitySymbols } from "@/components/DeitySymbol";
 import { Button } from "@/components/ui";
 import { deleteSingerRow, upsertSessionSingerRows, type SingerRowInput } from "./actions";
 
@@ -25,6 +26,7 @@ type RowState = SingerRowInput & {
   /** Display only. Derived from the bhajan; never sent back to the server. */
   recommendedPitch: string | null;
   raga: string | null;
+  deities: string[];
 };
 
 function normalizeGender(g?: string | null): "gents" | "ladies" | null {
@@ -61,6 +63,7 @@ export function SessionSingersGrid(props: {
     alternativeTablaPitch: string | null;
     recommendedPitch: string | null;
     raga: string | null;
+    deities: string[];
     updatedAt: string;
   }>;
   suggestions: {
@@ -86,6 +89,7 @@ export function SessionSingersGrid(props: {
       alternativeTablaPitch: r.alternativeTablaPitch,
       recommendedPitch: r.recommendedPitch,
       raga: r.raga,
+      deities: r.deities,
       updatedAt: r.updatedAt,
       _bhajanQuery: r.bhajanTitle ?? r.festivalBhajanTitle ?? "",
     }))
@@ -154,6 +158,7 @@ export function SessionSingersGrid(props: {
         alternativeTablaPitch: null,
         recommendedPitch: null,
         raga: null,
+        deities: [],
         updatedAt: null,
         _bhajanQuery: "",
       },
@@ -436,8 +441,11 @@ export function SessionSingersGrid(props: {
                         className="w-full rounded-[10px] border border-rule-surface bg-field px-2 py-1.5 text-[13px]"
                       />
                     ) : (
-                      <div className="whitespace-normal break-words text-[14px] font-medium leading-5">
-                        {r.bhajanTitle ?? r.festivalBhajanTitle ?? "—"}
+                      <div className="flex items-center gap-2">
+                        <DeitySymbols deities={r.deities} size={16} />
+                        <span className="whitespace-normal break-words text-[14px] font-medium leading-5">
+                          {r.bhajanTitle ?? r.festivalBhajanTitle ?? "—"}
+                        </span>
                       </div>
                     )}
 
