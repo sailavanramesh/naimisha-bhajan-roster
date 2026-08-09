@@ -10,8 +10,8 @@ open uncertainties.
 
 ## Current state
 
-**Branch:** `v2` (branched from `main` @ `0788398`), **not yet pushed** — see
-[Blocked](#blocked).
+**Branch:** `v2`, branched from `main` @ `0788398` and **pushed** to
+`origin/v2` (2026-08-09). Not yet merged, so nothing has deployed.
 **Phase:** **Phases 0–5 are complete and green.** What remains needs Sailavan —
 see [Next](#next).
 
@@ -23,16 +23,22 @@ database-backed gate, which skips only when `DATABASE_URL` is absent).
 reproduces the CLAUDE.md offset table exactly.** If it ever fails, stop and
 report it — do not adjust the expected values.
 
-### Blocked
+### Deploying
 
-- **`gh` token is missing the `workflow` scope**, so pushing `v2` is rejected:
-  `refusing to allow an OAuth App to create or update workflow ...`. Fix with
-  `gh auth refresh -s workflow`, then `git push -u origin v2`. Everything else
-  is committed locally; nothing is lost by the delay.
-- SPEC §7 says "ship each phase to production before starting the next." That
-  needs `v2` merged to `main`, which triggers the deploy workflow. Until the
-  push above happens, no phase has been shipped. Phases are being built in
-  order regardless.
+`v2` is pushed. **Merging `v2` into `main` triggers a real production deploy** —
+that is the only remaining step to ship, and it is deliberately a human
+decision.
+
+Two things to know before merging:
+
+- Migrations are **already applied** to the live database and are **not** run by
+  CI, so the merge deploys code against a schema that is already correct.
+- `gh workflow list` shows nothing yet, and that is expected: GitHub only
+  registers a workflow once it exists on the **default branch**. It will appear
+  after the merge.
+- The OIDC federated credential is scoped to `repo:...:ref:refs/heads/main`, so
+  a `workflow_dispatch` run from any other branch will fail to authenticate to
+  Azure. Add a second credential if branch deploys are ever wanted.
 
 ---
 
@@ -134,8 +140,7 @@ else.
 **Phases 0–5 are built, tested and committed**, plus instrument rotation, an
 admin section and a server-side edit gate. What remains:
 
-1. **Push `v2`.** Still blocked on `gh auth refresh -s workflow`. Twenty
-   commits are local and nothing has been deployed.
+1. **Merge `v2` into `main`** to deploy. Everything else is pushed.
 2. **Named auth (SPEC §4.I Phase 2 / roadmap Phase 5).** Google sign-in via
    Auth.js behind a coordinator-maintained email allowlist. It needs a Google
    Cloud OAuth client ID and secret, which only Sailavan can create. The schema
