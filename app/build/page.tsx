@@ -241,24 +241,22 @@ export default async function BuildPage({
               <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold">
                 Filters
               </summary>
-              <div className="grid gap-3 px-4 pb-4 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 px-4 pb-4 md:grid-cols-2">
                 <MultiField
-                  label="Deity (include)"
+                  label="Deity"
                   name="deity"
                   options={facets.deities}
                   selected={list(sp, "deity")}
                 />
                 <MultiField
-                  label="Deity (exclude)"
-                  name="notdeity"
-                  options={facets.deities}
-                  selected={list(sp, "notdeity")}
-                  allowUnspecified={false}
-                />
-                <MultiField
                   label="Language"
                   name="lang"
-                  options={facets.languages}
+                  // 40 distinct values, most of them one-off combinations like
+                  // "English, Sanskrit / Hindi, Spanish, Telugu". Only the ones
+                  // with real weight are offered, plus anything already chosen.
+                  options={facets.languages
+                    .filter((l) => l.count >= 10 || list(sp, "lang").includes(l.name))
+                    .map((l) => l.name)}
                   selected={list(sp, "lang")}
                 />
                 <MultiField
@@ -273,16 +271,40 @@ export default async function BuildPage({
                   options={facets.levels}
                   selected={list(sp, "level")}
                 />
-                <fieldset className="grid gap-1">
-                  <legend className="text-xs font-semibold text-on-surface-muted">Must have</legend>
+
+                <fieldset className="grid gap-1.5">
+                  <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-brass-ink">
+                    Must have
+                  </legend>
                   <Check name="lyrics" label="Lyrics" checked={one(sp, "lyrics") === "1"} />
                   <Check name="audio" label="Audio" checked={one(sp, "audio") === "1"} />
                   <Check name="ref" label="Reference pitch" checked={one(sp, "ref") === "1"} />
                 </fieldset>
-                <p className="text-xs text-on-surface-muted sm:col-span-2 lg:col-span-3">
-                  Every facet offers <strong>unspecified</strong>, because a third of the
-                  masterlist has no tempo and nearly a third no level. Leaving a facet unset never
-                  drops a bhajan for lacking that field.
+
+                {/* Excluding a deity is the uncommon case; it does not deserve
+                    a second copy of all 21 chips on screen by default. */}
+                <details className="self-start">
+                  <summary className="cursor-pointer text-xs text-on-surface-muted hover:text-on-surface">
+                    Exclude a deity
+                    {list(sp, "notdeity").length > 0
+                      ? ` (${list(sp, "notdeity").length})`
+                      : ""}
+                  </summary>
+                  <div className="mt-2">
+                    <MultiField
+                      label=""
+                      name="notdeity"
+                      options={facets.deities}
+                      selected={list(sp, "notdeity")}
+                      allowUnspecified={false}
+                    />
+                  </div>
+                </details>
+
+                <p className="text-xs text-on-surface-muted md:col-span-2">
+                  Every facet offers <strong>unspecified</strong>: a third of the masterlist has
+                  no tempo and nearly a third no level, and leaving a facet unset never drops a
+                  bhajan for lacking that field.
                 </p>
               </div>
             </details>
@@ -479,13 +501,17 @@ function MultiField({
   const all = allowUnspecified ? [UNSPECIFIED, ...options] : options;
   return (
     <fieldset className="grid gap-1">
-      <legend className="text-xs font-semibold text-on-surface-muted">
-        {label}
-        {chosen.size > 0 ? (
-          <span className="ml-1 font-normal text-brass-ink">({chosen.size})</span>
-        ) : null}
-      </legend>
-      <div className="flex max-h-40 flex-wrap gap-1 overflow-y-auto">
+      {label ? (
+        <legend className="mb-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-brass-ink">
+          {label}
+          {chosen.size > 0 ? (
+            <span className="ml-1 normal-case tracking-normal text-on-surface-muted">
+              · {chosen.size} selected
+            </span>
+          ) : null}
+        </legend>
+      ) : null}
+      <div className="flex max-h-44 flex-wrap items-start content-start gap-1 overflow-y-auto pr-1">
         {all.map((o) => (
           <label
             key={o}
@@ -606,7 +632,6 @@ function SingerPicks({
                 >
                   {picked === o.id ? "✓ " : ""}
                   {o.name}
-                  <span className="text-[10px] text-on-surface-muted">{o.gender ?? ""}</span>
                 </span>
               </Link>
             ))}

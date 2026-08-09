@@ -34,9 +34,13 @@ export type CandidateFilters = {
   sungBefore?: 'any' | 'known' | 'new';
 };
 
+export type FacetValue = { name: string; count: number };
+
 export type FacetOptions = {
   deities: string[];
-  languages: string[];
+  /** Languages with their bhajan counts — 40 distinct values, most of them
+   *  one-off combinations, so the UI shows only the common ones. */
+  languages: FacetValue[];
   tempos: string[];
   levels: string[];
   beats: string[];
@@ -46,7 +50,7 @@ export type FacetOptions = {
 export async function getFacetOptions(): Promise<FacetOptions> {
   const [deities, languages, tempos, levels, beats] = await Promise.all([
     prisma.deity.findMany({ orderBy: { name: 'asc' }, select: { name: true } }),
-    prisma.bhajan.groupBy({ by: ['language'] }),
+    prisma.bhajan.groupBy({ by: ['language'], _count: { _all: true } }),
     prisma.bhajan.groupBy({ by: ['tempo'] }),
     prisma.bhajan.groupBy({ by: ['level'] }),
     prisma.bhajan.groupBy({ by: ['beat'] }),
@@ -60,7 +64,10 @@ export async function getFacetOptions(): Promise<FacetOptions> {
 
   return {
     deities: deities.map((d) => d.name),
-    languages: values(languages, 'language'),
+    languages: (languages as Array<{ language: string | null; _count: { _all: number } }>)
+      .filter((r) => typeof r.language === 'string' && r.language.trim() !== '')
+      .map((r) => ({ name: r.language as string, count: r._count._all }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
     tempos: values(tempos, 'tempo'),
     levels: values(levels, 'level'),
     beats: values(beats, 'beat'),
