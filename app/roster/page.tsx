@@ -40,14 +40,14 @@ function monthKey(d: Date) {
 }
 
 function buildDaySummary(
-  singers: Array<{ singer: { name: string }; bhajanTitle: string | null }>
+  slots: Array<{ singer: { name: string } | null; bhajanTitle: string | null }>
 ) {
-  const parts = singers
+  const parts = slots
     .slice(0, 3)
-    .map((x) => `${x.singer.name}${x.bhajanTitle ? ` — ${x.bhajanTitle}` : ""}`)
+    .map((x) => `${x.singer?.name ?? "Unassigned"}${x.bhajanTitle ? ` — ${x.bhajanTitle}` : ""}`)
     .filter(Boolean);
   if (!parts.length) return null;
-  const suffix = singers.length > 3 ? " …" : "";
+  const suffix = slots.length > 3 ? " …" : "";
   return parts.join(" · ") + suffix;
 }
 
@@ -118,7 +118,7 @@ export default async function RosterPage({
         id: string;
         date: Date;
         notes: string | null;
-        slots: { singer: { name: string }; bhajanTitle: string | null }[];
+        slots: { singer: { name: string } | null; bhajanTitle: string | null }[];
       }>
     | null = null;
 
@@ -228,7 +228,7 @@ export default async function RosterPage({
                     <div className="mt-1 text-sm text-gray-700">
                       {s.slots
                         .slice(0, 8)
-                        .map((x) => `${x.singer.name}${x.bhajanTitle ? ` — ${x.bhajanTitle}` : ""}`)
+                        .map((x) => `${x.singer?.name ?? "Unassigned"}${x.bhajanTitle ? ` — ${x.bhajanTitle}` : ""}`)
                         .join(" · ")}
                       {s.slots.length > 8 ? " …" : ""}
                     </div>

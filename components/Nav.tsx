@@ -15,6 +15,7 @@ const STORAGE_KEY = "naimisha_nav_expanded";
 
 const ITEMS: NavItem[] = [
   { href: "/", label: "Dashboard", short: "D" },
+  { href: "/build", label: "Build", short: "+" },
   { href: "/roster", label: "Roster", short: "R" },
   { href: "/bhajans", label: "Bhajans", short: "B" },
   { href: "/singers", label: "Singers", short: "S" },

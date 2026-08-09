@@ -13,7 +13,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "db:seed": "tsx scripts/seedFromXlsx.ts",
     "test": "vitest",
-    "test:run": "vitest run"
+    "test:run": "vitest run",
+    "db:templates": "tsx scripts/seedTemplates.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",

@@ -87,7 +87,7 @@ export default async function Page() {
                   <div className="mt-1 text-sm text-gray-700">
                     {s.slots
                       .slice(0, 6)
-                      .map((x) => x.singer.name)
+                      .map((x) => x.singer?.name ?? "Unassigned")
                       .join(" · ")}
                     {s.slots.length > 6 ? " …" : ""}
                   </div>

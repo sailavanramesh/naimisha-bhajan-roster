@@ -48,6 +48,10 @@ describe.skipIf(!hasDatabase)('singer offset profiles reproduce from the seeded 
       where: {
         confirmedPitch: { not: null },
         historicalRecommendedPitch: { not: null },
+        // singerId became nullable when the session builder needed to draft
+        // slots before rostering. Every historical row has a singer; this
+        // narrows the type and keeps the gate measuring only real history.
+        singerId: { not: null },
       },
       select: {
         confirmedPitch: true,
@@ -60,6 +64,7 @@ describe.skipIf(!hasDatabase)('singer offset profiles reproduce from the seeded 
     for (const slot of slots) {
       const delta = semitoneDelta(slot.confirmedPitch, slot.historicalRecommendedPitch);
       if (delta === null) continue;
+      if (!slot.singer) continue;
       const name = slot.singer.name;
       if (!profiles.has(name)) {
         profiles.set(name, { gender: slot.singer.gender, deltas: [] });

@@ -190,7 +190,11 @@ model Session {
 model SessionSlot {
   id        String @id @default(cuid())
   sessionId String
-  singerId  String
+  /// Null until a singer is assigned. The session builder chooses bhajans
+  /// first and drafts a session with unassigned slots; rostering fills these
+  /// in. Also `SetNull` rather than `Cascade`: removing a singer must never
+  /// silently delete their confirmedPitch history.
+  singerId  String?
   bhajanId  String?
   /// Ordered from 1. Order carries meaning — the set builds.
   position  Int
@@ -222,7 +226,7 @@ model SessionSlot {
   updatedAt DateTime @updatedAt
 
   session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  singer  Singer  @relation(fields: [singerId], references: [id], onDelete: Cascade)
+  singer  Singer? @relation(fields: [singerId], references: [id], onDelete: SetNull)
   bhajan  Bhajan? @relation(fields: [bhajanId], references: [id], onDelete: SetNull)
 
   @@unique([sessionId, position])
@@ -287,6 +291,9 @@ model SessionTemplate {
   /// Default session length. 3, per SPEC §9.2.
   defaultLength Int     @default(3)
   isDefault     Boolean @default(false)
+  /// Festival mode: constrain every slot to this deity, as a HARD rule.
+  /// Null for ordinary templates. Generalises beyond Shivaratri (SPEC §4.G).
+  singleDeity   String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

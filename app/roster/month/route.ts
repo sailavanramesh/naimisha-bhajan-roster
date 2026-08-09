@@ -27,14 +27,14 @@ function isoDateLocal(d: Date) {
 }
 
 function buildDaySummary(
-  singers: Array<{ singer: { name: string }; bhajanTitle: string | null }>
+  slots: Array<{ singer: { name: string } | null; bhajanTitle: string | null }>
 ) {
-  const parts = singers
+  const parts = slots
     .slice(0, 3)
-    .map((x) => `${x.singer.name}${x.bhajanTitle ? ` — ${x.bhajanTitle}` : ""}`)
+    .map((x) => `${x.singer?.name ?? "Unassigned"}${x.bhajanTitle ? ` — ${x.bhajanTitle}` : ""}`)
     .filter(Boolean);
   if (!parts.length) return null;
-  const suffix = singers.length > 3 ? " …" : "";
+  const suffix = slots.length > 3 ? " …" : "";
   return parts.join(" · ") + suffix;
 }
 

@@ -40,9 +40,9 @@ export default async function RosterSessionPage({
 
   const initialRows = session.slots.map((x) => ({
     id: x.id,
-    singerId: x.singerId,
-    singerName: x.singer.name,
-    singerGender: x.singer.gender,
+    singerId: x.singerId ?? "",
+    singerName: x.singer?.name ?? "Unassigned",
+    singerGender: x.singer?.gender ?? null,
     bhajanId: x.bhajanId,
     bhajanTitle: x.bhajanTitle,
     festivalBhajanTitle: x.festivalBhajanTitle,
@@ -52,7 +52,7 @@ export default async function RosterSessionPage({
     // never resolved to a masterlist bhajan — 11 rows do not — fall back to the
     // recommendation the sheet recorded, so the column is not blank.
     recommendedPitch:
-      computeRecommendedPitch(x.singer.gender, x.bhajan) || x.historicalRecommendedPitch || null,
+      computeRecommendedPitch(x.singer?.gender ?? null, x.bhajan) || x.historicalRecommendedPitch || null,
     raga: x.bhajan?.raga ?? null,
   }));
 

@@ -44,7 +44,8 @@ type RawSlot = {
   historicalRecommendedPitch: string | null;
   bhajanId: string | null;
   bhajanTitle: string | null;
-  singer: { name: string; gender: Gender | null };
+  /** Null on a drafted-but-unrostered slot. Such rows carry no profile signal. */
+  singer: { name: string; gender: Gender | null } | null;
   session: { date: Date };
   bhajan: {
     raga: string | null;
@@ -54,8 +55,14 @@ type RawSlot = {
   } | null;
 };
 
+/** Drop slots with no singer — a profile is by definition per singer. */
+function toSungRows(slots: RawSlot[]): SungRow[] {
+  return slots.filter((s) => s.singer !== null).map(toSungRow);
+}
+
 function toSungRow(slot: RawSlot): SungRow {
-  const gender = slot.singer.gender;
+  const singer = slot.singer!;
+  const gender = singer.gender;
   const masterlistReference = slot.bhajan
     ? gender === Gender.Ladies
       ? slot.bhajan.referenceLadiesPitch
@@ -63,7 +70,7 @@ function toSungRow(slot: RawSlot): SungRow {
     : null;
 
   return {
-    singerName: slot.singer.name,
+    singerName: singer.name,
     gender: gender ?? null,
     confirmedPitch: slot.confirmedPitch,
     historicalRecommendedPitch: slot.historicalRecommendedPitch,
@@ -82,7 +89,7 @@ export async function getAllSungRows(): Promise<SungRow[]> {
     select: SUNG_SLOT_SELECT,
     orderBy: { session: { date: 'desc' } },
   });
-  return slots.map(toSungRow);
+  return toSungRows(slots);
 }
 
 export async function getSungRowsForSinger(singerId: string): Promise<SungRow[]> {
@@ -91,7 +98,7 @@ export async function getSungRowsForSinger(singerId: string): Promise<SungRow[]>
     select: SUNG_SLOT_SELECT,
     orderBy: { session: { date: 'desc' } },
   });
-  return slots.map(toSungRow);
+  return toSungRows(slots);
 }
 
 export async function getSungRowsForBhajan(bhajanId: string): Promise<SungRow[]> {
@@ -100,7 +107,7 @@ export async function getSungRowsForBhajan(bhajanId: string): Promise<SungRow[]>
     select: SUNG_SLOT_SELECT,
     orderBy: { session: { date: 'desc' } },
   });
-  return slots.map(toSungRow);
+  return toSungRows(slots);
 }
 
 /** One singer's profile, built from their whole history. */
