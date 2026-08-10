@@ -2,6 +2,8 @@
 
 import { useMemo, useRef, useState, useTransition, useEffect } from "react";
 import { createPortal } from "react-dom";
+import Link from "next/link";
+import { DeitySymbols } from "@/components/DeitySymbol";
 import { Button } from "@/components/ui";
 import { deleteSingerRow, upsertSessionSingerRows, type SingerRowInput } from "./actions";
 
@@ -21,6 +23,10 @@ type RowState = SingerRowInput & {
   singerName?: string;
   singerGender?: string | null;
   _bhajanQuery?: string;
+  /** Display only. Derived from the bhajan; never sent back to the server. */
+  recommendedPitch: string | null;
+  raga: string | null;
+  deities: string[];
 };
 
 function normalizeGender(g?: string | null): "gents" | "ladies" | null {
@@ -43,6 +49,8 @@ type BhSearchState = { q: string; items: { id: string; title: string }[]; open: 
 
 export function SessionSingersGrid(props: {
   canEdit: boolean;
+  /** May move singers between slots. Members may not. */
+  canAssign: boolean;
   sessionId: string;
   singers: SingerLite[];
   initialRows: Array<{
@@ -57,6 +65,8 @@ export function SessionSingersGrid(props: {
     alternativeTablaPitch: string | null;
     recommendedPitch: string | null;
     raga: string | null;
+    deities: string[];
+    updatedAt: string;
   }>;
   suggestions: {
     pitches: string[];
@@ -64,6 +74,7 @@ export function SessionSingersGrid(props: {
   };
 }) {
   const [isPending, startTransition] = useTransition();
+  const [saveError, setSaveError] = useState<string | null>(null);
   const singerById = useMemo(() => new Map(props.singers.map((s) => [s.id, s])), [props.singers]);
 
   const [rows, setRows] = useState<RowState[]>(
@@ -80,6 +91,8 @@ export function SessionSingersGrid(props: {
       alternativeTablaPitch: r.alternativeTablaPitch,
       recommendedPitch: r.recommendedPitch,
       raga: r.raga,
+      deities: r.deities,
+      updatedAt: r.updatedAt,
       _bhajanQuery: r.bhajanTitle ?? r.festivalBhajanTitle ?? "",
     }))
   );
@@ -147,6 +160,8 @@ export function SessionSingersGrid(props: {
         alternativeTablaPitch: null,
         recommendedPitch: null,
         raga: null,
+        deities: [],
+        updatedAt: null,
         _bhajanQuery: "",
       },
     ]);
@@ -199,15 +214,16 @@ export function SessionSingersGrid(props: {
     setRows((prev) =>
       prev.map((r) => {
         if (r._localId !== localId) return r;
-        const auto = pickRecommendedPitch(r.singerGender ?? null, b);
-        const keepExisting = (r.recommendedPitch || "").trim().length > 0;
+        // The recommendation follows the bhajan, so it is recomputed outright
+        // rather than preserved — a stale value from the previous bhajan would
+        // be worse than none.
         return {
           ...r,
           bhajanId,
           bhajanTitle: b?.title ?? r.bhajanTitle ?? null,
           festivalBhajanTitle: null,
           _bhajanQuery: b?.title ?? "",
-          recommendedPitch: keepExisting ? r.recommendedPitch : (auto || null),
+          recommendedPitch: pickRecommendedPitch(r.singerGender ?? null, b) || null,
         };
       })
     );
@@ -255,7 +271,10 @@ export function SessionSingersGrid(props: {
       return;
     }
 
+    setSaveError(null);
     startTransition(async () => {
+      // recommendedPitch and raga are deliberately not sent: both are derived
+      // from the bhajan and are no longer columns on the slot.
       const payload: SingerRowInput[] = rows.map((r) => ({
         id: r.id,
         singerId: r.singerId,
@@ -264,10 +283,17 @@ export function SessionSingersGrid(props: {
         festivalBhajanTitle: r.festivalBhajanTitle,
         confirmedPitch: r.confirmedPitch,
         alternativeTablaPitch: r.alternativeTablaPitch,
-        recommendedPitch: r.recommendedPitch,
-        raga: r.raga,
+        updatedAt: r.updatedAt ?? null,
       }));
-      await upsertSessionSingerRows(props.sessionId, payload);
+      try {
+        await upsertSessionSingerRows(props.sessionId, payload);
+      } catch (e) {
+        setSaveError(
+          e instanceof Error
+            ? e.message
+            : "The save did not go through. Your changes are still on screen.",
+        );
+      }
     });
   }
 
@@ -293,17 +319,17 @@ export function SessionSingersGrid(props: {
               maxHeight: Math.min(320, window.innerHeight - (bhPortal.anchorRect.bottom + 16)),
               zIndex: 9999,
             }}
-            className="overflow-auto rounded-xl border bg-white shadow-xl"
+            className="overflow-auto rounded-[12px] border border-rule-surface bg-panel shadow-xl"
           >
-            {bhPortal.loading ? <div className="px-3 py-2 text-xs text-gray-600">Searching…</div> : null}
+            {bhPortal.loading ? <div className="px-2 py-1.5 text-xs text-on-surface-muted">Searching…</div> : null}
             {bhPortal.items.length === 0 && !bhPortal.loading ? (
-              <div className="px-3 py-2 text-xs text-gray-600">No matches.</div>
+              <div className="px-2 py-1.5 text-xs text-on-surface-muted">No matches.</div>
             ) : null}
             {bhPortal.items.map((it) => (
               <button
                 key={it.id}
                 type="button"
-                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                className="w-full text-left px-3 py-2 text-sm hover:bg-panel-hover"
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onPickBhajan(bhPortal.localId!, it.id)}
               >
@@ -319,32 +345,41 @@ export function SessionSingersGrid(props: {
     <div className="grid gap-3">
       {portalEl}
 
+      {saveError ? (
+        <div
+          role="alert"
+          className="rounded-[12px] border border-warn/50 bg-warn/10 px-3 py-2 text-sm"
+        >
+          {saveError}
+        </div>
+      ) : null}
+
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-semibold">Roster entries</div>
-        {props.canEdit ? (
+        {props.canAssign ? (
           <div className="flex items-center gap-2">
             <Button onClick={addRow}>Add row</Button>
-            <Button onClick={saveAll} className="bg-black text-white hover:bg-black/90">
+            <Button onClick={saveAll} variant="primary">
               {isPending ? "Saving…" : "Save changes"}
             </Button>
           </div>
         ) : null}
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border bg-white">
-        <table className="min-w-[1120px] w-full text-sm table-fixed">
-          <thead className="bg-slate-50">
-            <tr className="border-b">
-              <th className="sticky left-0 z-50 bg-slate-50 px-3 py-2 text-left font-semibold w-[190px] border-r shadow-sm">
+      <div className="overflow-x-auto rounded-[12px] border border-rule-surface bg-panel">
+        <table className="stacked-table w-full min-w-[720px] text-[13px]">
+          <thead className="bg-panel">
+            <tr className="border-b border-rule-surface">
+              <th className="sticky left-0 z-50 bg-panel px-3 py-2 text-left font-semibold w-[132px] border-r shadow-sm">
                 Singer
               </th>
-              <th className="sticky left-[190px] z-40 bg-slate-50 px-3 py-2 text-left font-semibold w-[340px] border-r shadow-sm">
+              <th className="sticky left-[132px] z-40 bg-panel px-3 py-2 text-left font-semibold w-[280px] border-r shadow-sm">
                 Bhajan
               </th>
-              <th className="px-3 py-2 text-left font-semibold w-[280px]">Confirmed Pitch</th>
-              <th className="px-3 py-2 text-left font-semibold w-[260px]">Recommended Pitch</th>
-              <th className="px-3 py-2 text-left font-semibold w-[140px]">Tabla</th>
-              {props.canEdit ? <th className="px-3 py-2 text-right font-semibold w-[110px]" /> : null}
+              <th className="px-2 py-1.5 text-left font-semibold w-[132px]">Confirmed</th>
+              <th className="whitespace-nowrap px-2 py-1.5 text-left font-semibold">Recommended</th>
+              <th className="whitespace-nowrap px-2 py-1.5 text-left font-semibold">Tabla</th>
+              {props.canEdit ? <th className="px-2 py-1.5 text-right font-semibold" /> : null}
             </tr>
           </thead>
 
@@ -356,12 +391,12 @@ export function SessionSingersGrid(props: {
               return (
                 <tr key={r._localId} className="border-b align-top">
                   {/* Singer */}
-                  <td className="sticky left-0 z-30 bg-white px-3 py-2 w-[190px] border-r shadow-sm">
-                    {props.canEdit ? (
+                  <td data-label="Singer" data-key="1" className="sticky left-0 z-30 whitespace-nowrap bg-surface px-2 py-1.5 border-r border-rule-surface shadow-sm">
+                    {props.canAssign ? (
                       <select
                         value={r.singerId || ""}
                         onChange={(e) => onSingerChange(r._localId, e.target.value)}
-                        className="w-full rounded-xl border px-3 py-2 text-sm"
+                        className="w-full rounded-[10px] border border-rule-surface bg-field px-2 py-1.5 text-[13px]"
                       >
                         <option value="">Select singer…</option>
                         {props.singers.map((x) => (
@@ -371,13 +406,13 @@ export function SessionSingersGrid(props: {
                         ))}
                       </select>
                     ) : (
-                      <div className="text-sm font-medium">{r.singerName ?? "—"}</div>
+                      <div className="text-[14px] font-semibold">{r.singerName ?? "—"}</div>
                     )}
-                    <div className="mt-1 text-xs text-gray-600">{r.singerGender ?? "—"}</div>
+                    <div className="mt-1 text-xs text-on-surface-muted">{r.singerGender ?? "—"}</div>
                   </td>
 
                   {/* Bhajan */}
-                  <td className="sticky left-[190px] z-20 bg-white px-3 py-2 w-[340px] border-r shadow-sm">
+                  <td data-label="Bhajan" data-key="1" className="px-2 py-1.5">
                     {props.canEdit ? (
                       <input
                         ref={(el) => {
@@ -405,37 +440,55 @@ export function SessionSingersGrid(props: {
                         onBlur={() => {
                           setTimeout(() => setBhPortal((p) => ({ ...p, open: false })), 150);
                         }}
-                        className="w-full rounded-xl border px-3 py-2 text-sm"
+                        className="w-full rounded-[10px] border border-rule-surface bg-field px-2 py-1.5 text-[13px]"
                       />
                     ) : (
-                      <div className="whitespace-normal break-words leading-5">
-                        {r.bhajanTitle ?? r.festivalBhajanTitle ?? "—"}
+                      <div className="flex items-center gap-2">
+                        <DeitySymbols deities={r.deities} size={16} />
+                        <span className="whitespace-normal break-words text-[14px] font-medium leading-5">
+                          {r.bhajanTitle ?? r.festivalBhajanTitle ?? "—"}
+                        </span>
                       </div>
                     )}
 
-                    {r.bhajanId ? <div className="mt-1 text-[11px] text-gray-500">Linked to masterlist</div> : null}
+                    {/* Open the song itself — lyrics, meaning, pitches, who
+                        has sung it. Previously this said "Linked to
+                        masterlist" and went nowhere. */}
+                    {r.bhajanId ? (
+                      <Link
+                        href={`/bhajans/${r.bhajanId}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-1 inline-flex items-center gap-1 text-[11px] text-brass-ink underline-offset-2 hover:underline"
+                      >
+                        Lyrics &amp; details
+                        <span aria-hidden>↗</span>
+                        <span className="sr-only">(opens in a new tab)</span>
+                      </Link>
+                    ) : null}
                   </td>
 
                   {/* Confirmed Pitch */}
-                  <td className="px-3 py-2">
+                  <td data-label="Confirmed" data-key="1" className="px-2 py-1.5">
                     {props.canEdit ? (
                       <div className="relative">
-                        <textarea
+                        <input
+                          type="text"
                           value={pu.q}
-                          placeholder="Confirmed (main)"
+                          placeholder="Confirmed"
+                          size={16}
                           onChange={(e) => setPitchQuery(r._localId, e.target.value)}
                           onFocus={() => setPitchUI((prev) => ({ ...prev, [r._localId]: { q: pu.q, open: true } }))}
                           onBlur={() => setTimeout(() => closePitch(r._localId), 120)}
-                          className="w-full rounded-xl border px-3 py-2 text-sm leading-5 whitespace-pre-wrap resize-y min-h-[44px] focus:ring-2 focus:ring-black/10"
-                          rows={2}
+                          className="w-[15ch] rounded-[10px] border-2 border-brass/45 bg-field px-2 py-1.5 text-[14px] font-semibold leading-5"
                         />
                         {pu.open && pitchOptions.length > 0 ? (
-                          <div className="absolute z-[60] mt-1 w-full max-h-64 overflow-auto rounded-xl border bg-white shadow">
+                          <div className="absolute z-[60] mt-1 w-full max-h-64 overflow-auto rounded-[12px] border border-rule-surface bg-panel shadow">
                             {pitchOptions.map((p) => (
                               <button
                                 key={p}
                                 type="button"
-                                className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                                className="w-full text-left px-3 py-2 text-sm hover:bg-panel-hover"
                                 onMouseDown={(e) => e.preventDefault()}
                                 onClick={() => pickPitch(r._localId, p)}
                               >
@@ -446,29 +499,23 @@ export function SessionSingersGrid(props: {
                         ) : null}
                       </div>
                     ) : (
-                      <div className="rounded-xl border bg-white px-3 py-2 whitespace-normal break-words leading-5">
-                        {r.confirmedPitch ?? "—"}
-                      </div>
+                      <div className="whitespace-nowrap text-[14px] font-semibold">{r.confirmedPitch ?? "—"}</div>
                     )}
                   </td>
 
-                  {/* Recommended Pitch (locked) */}
-                  <td className="px-3 py-2">
-                    <div className="rounded-xl border bg-slate-50 px-3 py-2 whitespace-normal break-words leading-5">
-                      {r.recommendedPitch ?? "—"}
-                    </div>
+                  {/* Recommended — derived, never editable. Plain text. */}
+                  <td data-label="Recommended" className="whitespace-nowrap px-2 py-1.5 text-[12px] text-on-surface-muted">
+                    {r.recommendedPitch ?? "—"}
                   </td>
 
-                  {/* Tabla (locked) */}
-                  <td className="px-3 py-2">
-                    <div className="rounded-xl border bg-slate-50 px-3 py-2 whitespace-normal break-words leading-5">
-                      {r.confirmedPitch ? (r.alternativeTablaPitch ?? "—") : "—"}
-                    </div>
+                  {/* Tabla — derived from the confirmed pitch. Plain text. */}
+                  <td data-label="Tabla" className="whitespace-nowrap px-2 py-1.5 text-[12px] text-on-surface-muted">
+                    {r.confirmedPitch ? (r.alternativeTablaPitch ?? "—") : "—"}
                   </td>
 
                   {/* Delete */}
-                  {props.canEdit ? (
-                    <td className="px-3 py-2 text-right">
+                  {props.canAssign ? (
+                    <td data-label="" className="px-2 py-1.5 text-right">
                       <Button onClick={() => removeRow(r._localId)} className="border-red-300 text-red-700 hover:bg-red-50">
                         Delete
                       </Button>

@@ -6,17 +6,24 @@
     "dev": "next dev",
     "build": "prisma generate && next build",
     "start": "next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "postinstall": "prisma generate",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
-    "db:seed": "tsx scripts/seedFromXlsx.ts"
+    "prisma:deploy": "prisma migrate deploy",
+    "db:seed": "tsx scripts/seedFromXlsx.ts",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "db:templates": "tsx scripts/seedTemplates.ts",
+    "db:eligibility": "tsx scripts/seedEligibility.ts",
+    "db:backfill-text": "tsx scripts/backfillText.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",
     "@tanstack/react-table": "^8.20.5",
     "clsx": "^2.1.1",
     "next": "^15.0.0",
+    "next-auth": "^5.0.0-beta.32",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwind-merge": "^2.5.2",
@@ -24,9 +31,11 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^3.3.6",
     "@types/node": "^20.16.5",
     "@types/react": "^18.3.8",
     "@types/react-dom": "^18.3.0",
+    "@vitest/coverage-v8": "^4.1.10",
     "autoprefixer": "^10.4.20",
     "eslint": "^9.10.0",
     "eslint-config-next": "^15.0.0",
@@ -35,6 +44,7 @@
     "tailwindcss": "^3.4.13",
     "ts-node": "^10.9.2",
     "tsx": "^4.21.0",
-    "typescript": "^5.6.3"
+    "typescript": "^5.6.3",
+    "vitest": "^4.1.10"
   }
 }

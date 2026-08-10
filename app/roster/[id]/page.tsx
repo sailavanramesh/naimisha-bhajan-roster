@@ -4,8 +4,10 @@ import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle, Input, Button } from "@/components/ui";
 import { SessionSingersGrid } from "./SessionSingersGrid";
 import { getPitchSuggestions } from "@/lib/pitchSuggestions";
+import { computeRecommendedPitch } from "@/lib/computeRecommendedPitch";
 import { deleteInstrumentRow, updateSessionNotes } from "./actions";
 import { EnableEditForm } from "@/components/EnableEditForm";
+import { getRole, can } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export default async function RosterSessionPage({
@@ -16,14 +18,20 @@ export default async function RosterSessionPage({
   const { id: sessionId } = await params;
 
   const cookieStore = await cookies();
-  const canEdit = cookieStore.get("edit")?.value === "1";
+  void cookieStore;
+  const role = await getRole();
+  const canEdit = can(role, "editSlotBhajan");
+  const canAssign = can(role, "assignSingers");
 
   const session = await prisma.session.findUnique({
     where: { id: sessionId },
     include: {
-      singers: {
-        include: { singer: true, bhajan: true },
-        orderBy: [{ slot: "asc" }, { createdAt: "asc" }],
+      slots: {
+        include: {
+          singer: true,
+          bhajan: { include: { deities: { include: { deity: true } } } },
+        },
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
       },
       instruments: { orderBy: { createdAt: "asc" } },
     },
@@ -33,22 +41,29 @@ export default async function RosterSessionPage({
 
   const sid = session.id;
 
-  const allSingers = canEdit
+  const allSingers = canAssign
     ? await prisma.singer.findMany({ orderBy: { name: "asc" } })
     : [];
 
-  const initialRows = session.singers.map((x) => ({
+  const initialRows = session.slots.map((x) => ({
     id: x.id,
-    singerId: x.singerId,
-    singerName: x.singer.name,
-    singerGender: x.singer.gender,
+    singerId: x.singerId ?? "",
+    singerName: x.singer?.name ?? "Unassigned",
+    singerGender: x.singer?.gender ?? null,
     bhajanId: x.bhajanId,
     bhajanTitle: x.bhajanTitle,
     festivalBhajanTitle: x.festivalBhajanTitle,
     confirmedPitch: x.confirmedPitch,
     alternativeTablaPitch: x.alternativeTablaPitch,
-    recommendedPitch: x.recommendedPitch,
-    raga: x.raga,
+    // Carried so a save can detect that somebody else got there first.
+    updatedAt: x.updatedAt.toISOString(),
+    // Derived on read (CLAUDE.md rule 5), not stored. Where the slot's title
+    // never resolved to a masterlist bhajan — 11 rows do not — fall back to the
+    // recommendation the sheet recorded, so the column is not blank.
+    recommendedPitch:
+      computeRecommendedPitch(x.singer?.gender ?? null, x.bhajan) || x.historicalRecommendedPitch || null,
+    raga: x.bhajan?.raga ?? null,
+    deities: x.bhajan?.deities.map((d) => d.deity.name) ?? [],
   }));
 
   const suggestions = await getPitchSuggestions();
@@ -90,13 +105,27 @@ export default async function RosterSessionPage({
           <div className="mt-2 grid gap-2 text-sm">
             <div className="flex items-center gap-2">
               {canEdit ? (
-                <span className="rounded-xl border bg-green-50 px-3 py-1">Edit mode ON</span>
+                <span className="rounded-[12px] border bg-green-50 px-3 py-1">Edit mode ON</span>
               ) : (
-                <span className="rounded-xl border bg-amber-50 px-3 py-1">Read-only</span>
+                <span className="rounded-[12px] border bg-amber-50 px-3 py-1">Read-only</span>
               )}
 
               <Link href={backToRosterHref} className="underline underline-offset-2">
                 Back to roster
+              </Link>
+
+              <Link
+                href={`/roster/${sessionId}/assign`}
+                className="underline underline-offset-2"
+              >
+                Assign singers
+              </Link>
+
+              <Link
+                href={`/roster/${sessionId}/print`}
+                className="underline underline-offset-2"
+              >
+                Print sheet
               </Link>
             </div>
 
@@ -110,15 +139,16 @@ export default async function RosterSessionPage({
             canEdit={canEdit}
             sessionId={sessionId}
             singers={allSingers}
+            canAssign={canAssign}
             initialRows={initialRows}
             suggestions={suggestions}
           />
 
           {/* Collapsible: Instruments */}
-          <details className="rounded-2xl border bg-white">
+          <details className="rounded-[12px] border border-rule-surface bg-panel">
             <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold flex items-center justify-between">
               <span>Instruments</span>
-              <span className="text-xs font-normal text-gray-600">
+              <span className="text-xs font-normal text-on-surface-muted">
                 {session.instruments.length
                   ? `${session.instruments.length} item${session.instruments.length === 1 ? "" : "s"}`
                   : "None"}
@@ -127,7 +157,7 @@ export default async function RosterSessionPage({
 
             <div className="px-4 pb-4 pt-0 grid gap-3">
               {canEdit ? (
-                <form action={onAddInstrument} className="rounded-2xl border bg-slate-50 p-3 grid gap-2">
+                <form action={onAddInstrument} className="rounded-[12px] border bg-panel p-3 grid gap-2">
                   <div className="text-sm font-medium">Add instrument</div>
                   <Input name="instrument" placeholder="Instrument (e.g., Tabla)" />
                   <Input name="person" placeholder="Person (optional)" />
@@ -139,14 +169,14 @@ export default async function RosterSessionPage({
 
               <div className="grid gap-2">
                 {session.instruments.length === 0 ? (
-                  <div className="text-sm text-gray-600">No instrument assignments.</div>
+                  <div className="text-sm text-on-surface-muted">No instrument assignments.</div>
                 ) : (
                   session.instruments.map((i) => (
-                    <div key={i.id} className="rounded-xl border bg-white p-3 text-sm">
+                    <div key={i.id} className="rounded-[12px] border border-rule-surface bg-panel p-3 text-sm">
                       <div className="flex items-start justify-between gap-3">
                         <div>
                           <div className="font-medium">{i.instrument}</div>
-                          <div className="text-gray-700">{i.person ?? "—"}</div>
+                          <div className="text-on-surface-muted">{i.person ?? "—"}</div>
                         </div>
 
                         {canEdit ? (
@@ -170,10 +200,10 @@ export default async function RosterSessionPage({
           </details>
 
           {/* Collapsible: Notes */}
-          <details className="rounded-2xl border bg-white">
+          <details className="rounded-[12px] border border-rule-surface bg-panel">
             <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold flex items-center justify-between">
               <span>Notes</span>
-              <span className="text-xs font-normal text-gray-600">
+              <span className="text-xs font-normal text-on-surface-muted">
                 {(session.notes?.trim()?.length ?? 0) > 0 ? "Has notes" : "Empty"}
               </span>
             </summary>
@@ -184,7 +214,7 @@ export default async function RosterSessionPage({
                   <textarea
                     name="notes"
                     defaultValue={session.notes ?? ""}
-                    className="min-h-[80px] w-full rounded-xl border p-3 text-sm outline-none focus:ring-2 focus:ring-black/10"
+                    className="min-h-[80px] w-full rounded-[12px] border p-3 text-sm outline-none focus:ring-2 focus:ring-black/10"
                     placeholder="Session notes…"
                   />
                   <div>
@@ -192,7 +222,7 @@ export default async function RosterSessionPage({
                   </div>
                 </form>
               ) : (
-                <div className="rounded-xl border bg-white p-3 text-sm whitespace-pre-wrap">
+                <div className="rounded-[12px] border border-rule-surface bg-panel p-3 text-sm whitespace-pre-wrap">
                   {session.notes ?? "—"}
                 </div>
               )}

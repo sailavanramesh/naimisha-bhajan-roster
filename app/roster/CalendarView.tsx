@@ -103,12 +103,12 @@ export function CalendarView(props: { initialMonth: string; sessions: CalSession
   const weekdays = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
   return (
-    <div className="rounded-2xl border bg-white p-4 sm:p-5">
+    <div className="rounded-[12px] border border-rule-surface bg-panel p-4 sm:p-5">
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="text-sm font-semibold text-gray-900">{monthLabel(monthStart)}</div>
-          <div className="mt-1 text-sm text-gray-600">
+          <div className="mt-1 text-sm text-on-surface-muted">
             Badge shows number of roster entries (bhajans), not sessions.
           </div>
         </div>
@@ -117,21 +117,21 @@ export function CalendarView(props: { initialMonth: string; sessions: CalSession
           <button
             type="button"
             onClick={() => goToMonth(addMonths(monthStart, -1))}
-            className="rounded-xl border bg-white px-3 py-2 text-sm hover:bg-gray-50"
+            className="rounded-[12px] border border-rule-surface bg-panel px-3 py-2 text-sm hover:bg-panel-hover"
           >
             Prev
           </button>
           <button
             type="button"
             onClick={goToday}
-            className="rounded-xl border bg-white px-3 py-2 text-sm hover:bg-gray-50"
+            className="rounded-[12px] border border-rule-surface bg-panel px-3 py-2 text-sm hover:bg-panel-hover"
           >
             Today
           </button>
           <button
             type="button"
             onClick={() => goToMonth(addMonths(monthStart, 1))}
-            className="rounded-xl border bg-white px-3 py-2 text-sm hover:bg-gray-50"
+            className="rounded-[12px] border border-rule-surface bg-panel px-3 py-2 text-sm hover:bg-panel-hover"
           >
             Next
           </button>
@@ -139,7 +139,7 @@ export function CalendarView(props: { initialMonth: string; sessions: CalSession
       </div>
 
       {/* Weekday header */}
-      <div className="mt-4 grid grid-cols-7 gap-2 text-center text-xs font-semibold text-gray-500">
+      <div className="mt-4 grid grid-cols-7 gap-2 text-center text-xs font-semibold text-on-surface-muted">
         {weekdays.map((w) => (
           <div key={w} className="py-1">
             {w}
@@ -168,9 +168,9 @@ export function CalendarView(props: { initialMonth: string; sessions: CalSession
               key={key}
               onClick={() => setSelectedKey(key)}
               className={[
-                "relative rounded-2xl border p-2 text-left transition",
-                inMonth ? "bg-white" : "bg-gray-50 text-gray-400",
-                isSelected ? "border-black/30 ring-2 ring-black/10" : "hover:bg-gray-50",
+                "relative rounded-[12px] border p-2 text-left transition",
+                inMonth ? "bg-panel" : "bg-panel text-gray-400",
+                isSelected ? "border-black/30 ring-2 ring-black/10" : "hover:bg-panel-hover",
               ].join(" ")}
               title={
                 showBadge
@@ -210,7 +210,7 @@ export function CalendarView(props: { initialMonth: string; sessions: CalSession
       </div>
 
       {/* Selected day panel */}
-      <div className="mt-5 rounded-2xl border bg-gray-50 p-4">
+      <div className="mt-5 rounded-[12px] border bg-panel p-4">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="text-sm font-semibold text-gray-900">
@@ -221,7 +221,7 @@ export function CalendarView(props: { initialMonth: string; sessions: CalSession
                 day: "numeric",
               })}
             </div>
-            <div className="mt-1 text-sm text-gray-600">
+            <div className="mt-1 text-sm text-on-surface-muted">
               {selectedSessions.length === 0
                 ? "No session found for this day."
                 : selectedTotalRows > 0
@@ -232,7 +232,7 @@ export function CalendarView(props: { initialMonth: string; sessions: CalSession
 
           <Link
             href="/roster?view=list"
-            className="self-start rounded-xl border bg-white px-3 py-2 text-sm hover:bg-gray-50"
+            className="self-start rounded-[12px] border border-rule-surface bg-panel px-3 py-2 text-sm hover:bg-panel-hover"
           >
             Switch to list
           </Link>
@@ -240,19 +240,19 @@ export function CalendarView(props: { initialMonth: string; sessions: CalSession
 
         <div className="mt-3 grid gap-2">
           {selectedSessions.length === 0 ? (
-            <div className="rounded-xl border bg-white p-3 text-sm text-gray-700">Nothing recorded yet.</div>
+            <div className="rounded-[12px] border border-rule-surface bg-panel p-3 text-sm text-on-surface-muted">Nothing recorded yet.</div>
           ) : (
             selectedSessions.map((s) => (
               <Link
                 key={s.id}
                 href={`/roster/${s.id}`}
-                className="rounded-xl border bg-white p-3 hover:bg-gray-50"
+                className="rounded-[12px] border border-rule-surface bg-panel p-3 hover:bg-panel-hover"
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="text-sm font-semibold">Open session</div>
-                  <div className="text-xs text-gray-600">{s.count} rows</div>
+                  <div className="text-xs text-on-surface-muted">{s.count} rows</div>
                 </div>
-                <div className="mt-1 text-sm text-gray-700">{s.preview || "—"}</div>
+                <div className="mt-1 text-sm text-on-surface-muted">{s.preview || "—"}</div>
               </Link>
             ))
           )}

@@ -2,28 +2,65 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * docs/SPEC.md §6. The visual world is a harmonium: a deep lacquered case,
+ * ivory and ebony keys, aged brass reed plates — and the numbered pitch ladder.
+ *
+ * Five tokens, no more. The most important rule in this file:
+ *
+ *   --kumkum IS RESERVED FOR PITCH DEVIATION.
+ *
+ * Not buttons, not errors, not decoration, not emphasis. Reserving one colour
+ * to one meaning is what lets the Shruti Ladder read in a single glance. There
+ * is a separate --warn for warnings precisely so nothing is tempted to borrow
+ * kumkum for them.
+ */
+
 :root {
   color-scheme: light;
 
-  /* App palette */
-  --bg0: 248 250 252; /* slate-50 */
-  --bg1: 245 243 255; /* violet-50 */
-  --bg2: 238 242 255; /* indigo-50 */
+  /* The five (docs/SPEC.md §6) */
+  --ink: 26 18 23; /* deep lacquered rosewood-black */
+  --ivory: 250 247 242; /* warm paper */
+  --brass: 176 141 63; /* #B08D3F — aged brass. Fills, rules, marks. */
+  --kumkum: 168 46 46; /* deep vermilion. PITCH DEVIATION ONLY. */
+  --muted: 122 110 112; /* warm desaturated grey */
 
-  --surface: 255 255 255; /* white */
-  --surface2: 250 250 252;
+  /*
+   * Derived roles. Light theme: warm paper ground, white cards, brass rules.
+   *
+   * Everything below is semantic, so a theme flip is a change to THIS BLOCK
+   * and nothing else. Components must never reach for a raw colour —
+   * `bg-white/[0.03]` reads as a panel on a dark ground and as nothing at all
+   * on a light one, which is exactly the trap this avoids.
+   */
+  --ground: 247 243 237;
+  --ground-raised: 252 250 246;
+  --surface: 255 255 255;
+  --surface-sunk: 249 246 241;
 
-  --text: 15 23 42; /* slate-900 */
-  --muted: 71 85 105; /* slate-600 */
-  --muted2: 100 116 139; /* slate-500 */
+  --on-ground: 26 18 23;
+  --on-ground-muted: 122 110 112;
+  --on-surface: 26 18 23;
+  --on-surface-muted: 118 106 108;
 
-  --border: 226 232 240; /* slate-200 */
-  --border2: 203 213 225; /* slate-300 */
+  --rule: 228 220 209;
+  --rule-on-surface: 231 224 214;
 
-  --accent: 79 70 229; /* indigo-600 */
-  --accent2: 124 58 237; /* violet-600 */
+  /* Inner panels, hovers and fields — named, so they flip with the theme. */
+  --panel: 250 247 242;
+  --panel-hover: 244 239 231;
+  --field: 255 255 255;
+  --card-edge: 224 213 196;
 
-  --danger: 220 38 38; /* red-600 */
+  /*
+   * Brass at #B08D3F is ~2.9:1 on white — fine as a fill or a rule, NOT as
+   * small text. This is the same brass darkened until it passes for body copy.
+   */
+  --brass-ink: 124 95 32;
+
+  /* Deliberately NOT kumkum. Warnings are not pitch deviation. */
+  --warn: 146 106 20;
 }
 
 html,
@@ -32,16 +69,22 @@ body {
 }
 
 body {
-  color: rgb(var(--text));
-  background:
-    radial-gradient(1200px 700px at 20% 0%, rgba(var(--bg1), 0.9), transparent 60%),
-    radial-gradient(1000px 600px at 90% 10%, rgba(var(--bg2), 0.9), transparent 55%),
-    linear-gradient(to bottom, rgba(var(--bg0), 1), rgba(var(--bg0), 1));
+  color: rgb(var(--on-ground));
+  background-color: rgb(var(--ground));
+  /*
+   * A single soft brass bloom, as if light caught the reed plate. One gradient,
+   * not three — the old build stacked violet and indigo washes and read as a
+   * generic SaaS dashboard.
+   */
+  /* One warm bloom, as if light caught the reed plate. */
+  background-image:
+    radial-gradient(110% 60% at 50% -10%, rgba(var(--brass), 0.10), transparent 62%),
+    radial-gradient(80% 50% at 88% 108%, rgba(var(--kumkum), 0.04), transparent 60%);
+  background-attachment: fixed;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Mobile form polish */
 input,
 select,
 textarea,
@@ -49,13 +92,176 @@ button {
   font: inherit;
 }
 
-/* Better tap highlights */
 a,
 button {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Softer focus without default outline */
+/*
+ * Visible focus everywhere. The old build removed the outline and put nothing
+ * back, which left the app unusable by keyboard.
+ */
 *:focus-visible {
-  outline: none;
+  outline: 2px solid rgb(var(--brass));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Numbers must not shift width while re-rolling. */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/*
+ * The one orchestrated moment (SPEC §6): after a re-roll, unlocked slots settle
+ * into place in sequence. Locked slots do not carry this class and stay put.
+ */
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.settle {
+  animation: settle 320ms cubic-bezier(0.2, 0.7, 0.3, 1) both;
+}
+
+/* Print: the roster sheet on a music stand, read at arm's length. */
+@media print {
+  @page {
+    margin: 14mm;
+  }
+
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-sheet {
+    font-size: 12pt;
+  }
+
+  a {
+    text-decoration: none;
+    color: #000;
+  }
+
+  /* A slot must never be split across a page break. */
+  .print-slot {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+}
+
+/*
+ * Stacked table — the roster grid on a phone.
+ *
+ * A horizontally scrolling table hid Confirmed, Recommended and Tabla off the
+ * right edge, so on a 375px screen a slot showed only the singer and the
+ * bhajan. SPEC §6: "375px is the design target, not the fallback."
+ *
+ * Below the breakpoint each row becomes a card and each cell a labelled line,
+ * driven by `data-label`. One set of markup, so the editing controls cannot
+ * drift between a mobile and a desktop copy.
+ */
+@media (max-width: 767px) {
+  .stacked-table,
+  .stacked-table tbody,
+  .stacked-table tr,
+  .stacked-table td {
+    display: block;
+    width: auto;
+  }
+
+  .stacked-table thead {
+    display: none;
+  }
+
+  .stacked-table {
+    min-width: 0 !important;
+  }
+
+  .stacked-table tr {
+    margin-bottom: 0.75rem;
+    border: 1px solid rgb(var(--rule-on-surface));
+    border-radius: 12px;
+    background: rgb(var(--surface));
+    padding: 0.5rem 0.25rem;
+  }
+
+  .stacked-table td {
+    display: grid;
+    grid-template-columns: 8.5rem 1fr;
+    align-items: center;
+    gap: 0.5rem;
+    border: 0 !important;
+    box-shadow: none !important;
+    position: static !important;
+    padding: 0.3rem 0.6rem;
+  }
+
+  .stacked-table td::before {
+    content: attr(data-label);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: rgb(var(--on-surface-muted));
+  }
+
+  /* A cell with no label spans the full width — the delete action. */
+  .stacked-table td[data-label=""]::before {
+    content: none;
+  }
+  .stacked-table td[data-label=""] {
+    grid-template-columns: 1fr;
+    justify-items: end;
+  }
+}
+
+/*
+ * Roster emphasis. Singer, Bhajan and Confirmed pitch are what the singer, the
+ * harmonium player and the tabla player read at a glance mid-session;
+ * Recommended and Tabla are reference material. The hierarchy says so.
+ */
+.stacked-table td[data-key="1"]::before {
+  color: rgb(var(--on-surface));
+}
+
+.stacked-table td[data-key="1"] {
+  font-weight: 500;
+}
+
+@media (max-width: 767px) {
+  .stacked-table td:not([data-key="1"]) {
+    padding-top: 0.15rem;
+    padding-bottom: 0.15rem;
+    font-size: 12px;
+  }
+}
+
+/* Table head: the three that matter, stated plainly. */
+.stacked-table thead th:nth-child(-n + 3) {
+  color: rgb(var(--on-surface));
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Yantra } from "@/components/Yantra";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
@@ -15,25 +16,28 @@ const STORAGE_KEY = "naimisha_nav_expanded";
 
 const ITEMS: NavItem[] = [
   { href: "/", label: "Dashboard", short: "D" },
+  { href: "/build", label: "Build", short: "+" },
   { href: "/roster", label: "Roster", short: "R" },
   { href: "/bhajans", label: "Bhajans", short: "B" },
+  { href: "/explore", label: "Explore", short: "?" },
+  { href: "/my-list", label: "My list", short: "♪" },
   { href: "/singers", label: "Singers", short: "S" },
-  { href: "/instruments", label: "Instruments", short: "I" },
-  { href: "/festival", label: "Festival", short: "F" },
+  { href: "/fairness", label: "Fairness", short: "≡" },
+  { href: "/admin", label: "Admin", short: "⚙" },
 ];
 
 function Hamburger({ open }: { open: boolean }) {
   return (
-    <div className="flex h-9 w-9 items-center justify-center rounded-xl border bg-white hover:bg-gray-50">
+    <div className="flex h-11 w-11 items-center justify-center rounded-key border border-rule bg-ground-raised text-on-ground hover:bg-white/[0.08]">
       <span className="text-lg leading-none">{open ? "×" : "≡"}</span>
     </div>
   );
 }
 
-export function Nav() {
+export function Nav({ role = "viewer" }: { role?: string }) {
   const pathname = usePathname();
 
-  const [expanded, setExpanded] = useState<boolean>(false);
+  const [expanded, setExpanded] = useState<boolean>(true);
   const [mobileOpen, setMobileOpen] = useState<boolean>(false);
 
   useEffect(() => {
@@ -62,9 +66,17 @@ export function Nav() {
     return parent?.href ?? "/";
   }, [pathname]);
 
+  // Members and viewers see only the reading surface. The list is filtered on
+  // the server, so a hidden page is not merely un-clicked — the page itself
+  // also checks.
+  const visible =
+    role === "editor"
+      ? ITEMS
+      : ITEMS.filter((i) => ["/", "/roster", "/bhajans", "/singers", "/explore", "/my-list"].includes(i.href));
+
   const NavLinks = ({ collapsed }: { collapsed: boolean }) => (
     <nav className="grid gap-1">
-      {ITEMS.map((item) => {
+      {visible.map((item) => {
         const active = item.href === activeHref;
         return (
           <Link
@@ -73,14 +85,16 @@ export function Nav() {
             title={collapsed ? item.label : undefined}
             className={clsx(
               "group flex items-center gap-3 rounded-xl px-3 py-2 text-sm",
-              active ? "bg-slate-900 text-white" : "text-slate-800 hover:bg-slate-100"
+              active
+                ? "bg-brass/15 text-on-ground ring-1 ring-brass/40"
+                : "text-on-ground-muted hover:bg-panel-hover hover:text-on-ground"
             )}
             onClick={() => setMobileOpen(false)}
           >
             <div
               className={clsx(
                 "flex h-8 w-8 items-center justify-center rounded-lg border text-sm font-semibold",
-                active ? "border-white/20 bg-white/10" : "border-slate-200 bg-white"
+                active ? "border-brass/50 bg-brass/20 text-on-ground" : "border-rule bg-panel"
               )}
             >
               {item.short}
@@ -98,13 +112,14 @@ export function Nav() {
       {/* Desktop sidebar */}
       <aside
         className={clsx(
-          "hidden md:flex md:sticky md:top-0 md:h-screen md:flex-col md:border-r md:bg-white md:p-3",
-          expanded ? "md:w-64" : "md:w-20"
+          "no-print hidden lg:flex lg:sticky lg:top-0 lg:h-screen lg:flex-col lg:border-r lg:border-rule lg:bg-ground-raised lg:p-3",
+          expanded ? "lg:w-64" : "lg:w-20"
         )}
       >
         <div className="flex items-center justify-between gap-2 px-1 pb-3">
-          <div className={clsx("text-sm font-semibold", expanded ? "opacity-100" : "opacity-0 pointer-events-none")}>
-            Naimisha Roster
+          <div className={clsx("flex items-center gap-2 font-display text-sm font-semibold text-on-ground", expanded ? "opacity-100" : "opacity-0 pointer-events-none")}>
+            <Yantra size={22} className="text-brass" />
+            Naimiṣa Roster
           </div>
 
           <button
@@ -119,13 +134,13 @@ export function Nav() {
 
         <NavLinks collapsed={!expanded} />
 
-        <div className={clsx("mt-auto pt-3 text-xs text-gray-500", expanded ? "opacity-100" : "opacity-0")}>
+        <div className={clsx("mt-auto pt-3 text-xs text-on-ground-muted", expanded ? "opacity-100" : "opacity-0")}>
           Tip: use the editable link to enable editing.
         </div>
       </aside>
 
       {/* Mobile top-left trigger */}
-      <div className="md:hidden fixed left-3 top-3 z-50">
+      <div className="no-print lg:hidden fixed left-3 top-3 z-50">
         <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open navigation">
           <Hamburger open={false} />
         </button>
@@ -133,11 +148,11 @@ export function Nav() {
 
       {/* Mobile drawer */}
       {mobileOpen ? (
-        <div className="md:hidden fixed inset-0 z-50">
-          <div className="absolute inset-0 bg-black/30" onClick={() => setMobileOpen(false)} />
-          <div className="absolute left-0 top-0 h-full w-[82%] max-w-[320px] bg-white border-r p-3">
+        <div className="lg:hidden fixed inset-0 z-50">
+          <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
+          <div className="absolute left-0 top-0 h-full w-[82%] max-w-[320px] bg-ground-raised border-r border-rule p-3">
             <div className="flex items-center justify-between px-1 pb-3">
-              <div className="text-sm font-semibold">Naimisha Roster</div>
+              <div className="flex items-center gap-2 font-display text-sm font-semibold text-on-ground"><Yantra size={22} className="text-brass" />Naimiṣa Roster</div>
               <button type="button" onClick={() => setMobileOpen(false)} aria-label="Close navigation">
                 <Hamburger open={true} />
               </button>

@@ -40,14 +40,14 @@ function monthKey(d: Date) {
 }
 
 function buildDaySummary(
-  singers: Array<{ singer: { name: string }; bhajanTitle: string | null }>
+  slots: Array<{ singer: { name: string } | null; bhajanTitle: string | null }>
 ) {
-  const parts = singers
+  const parts = slots
     .slice(0, 3)
-    .map((x) => `${x.singer.name}${x.bhajanTitle ? ` — ${x.bhajanTitle}` : ""}`)
+    .map((x) => `${x.singer?.name ?? "Unassigned"}${x.bhajanTitle ? ` — ${x.bhajanTitle}` : ""}`)
     .filter(Boolean);
   if (!parts.length) return null;
-  const suffix = singers.length > 3 ? " …" : "";
+  const suffix = slots.length > 3 ? " …" : "";
   return parts.join(" · ") + suffix;
 }
 
@@ -87,11 +87,10 @@ export default async function RosterPage({
     select: {
       id: true,
       date: true,
-      _count: { select: { singers: true } },
-      singers: {
+      _count: { select: { slots: true } },
+      slots: {
         select: { bhajanTitle: true, singer: { select: { name: true } } },
-        orderBy: [{ slot: "asc" }, { createdAt: "asc" }],
-        take: 3,
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
       },
     },
     orderBy: { date: "asc" },
@@ -101,9 +100,9 @@ export default async function RosterPage({
   for (const s of monthSessions) {
     const value = {
       sessionId: s.id,
-      entries: s._count.singers ?? 0,
+      entries: s._count.slots ?? 0,
       hasSession: true,
-      summary: buildDaySummary(s.singers),
+      summary: buildDaySummary(s.slots),
     };
 
     const utcKey = toISODateUTC(s.date);
@@ -118,7 +117,7 @@ export default async function RosterPage({
         id: string;
         date: Date;
         notes: string | null;
-        singers: { singer: { name: string }; bhajanTitle: string | null }[];
+        slots: { singer: { name: string } | null; bhajanTitle: string | null }[];
       }>
     | null = null;
 
@@ -132,8 +131,8 @@ export default async function RosterPage({
           ? {
               OR: [
                 { notes: { contains: q } },
-                { singers: { some: { singer: { name: { contains: q } } } } },
-                { singers: { some: { bhajanTitle: { contains: q } } } },
+                { slots: { some: { singer: { name: { contains: q } } } } },
+                { slots: { some: { bhajanTitle: { contains: q } } } },
               ],
             }
           : {}),
@@ -148,7 +147,7 @@ export default async function RosterPage({
       },
       orderBy: { date: "desc" },
       take: 200,
-      include: { singers: { include: { singer: true } } },
+      include: { slots: { include: { singer: true } } },
     });
   }
 
@@ -159,7 +158,7 @@ export default async function RosterPage({
           <div className="flex items-start justify-between gap-3">
             <div>
               <CardTitle>Roster</CardTitle>
-              <div className="mt-1 text-sm text-gray-600">
+              <div className="mt-1 text-sm text-on-surface-muted">
                 {view === "calendar"
                   ? "Tap a day to open the session (edit mode will create if missing)."
                   : "List view. Search + date range available."}
@@ -168,7 +167,7 @@ export default async function RosterPage({
 
             <div className="flex items-center gap-2">
               <Link
-                className="rounded-xl border px-3 py-2 text-sm hover:bg-gray-50"
+                className="rounded-[12px] border px-3 py-2 text-sm hover:bg-panel-hover"
                 href={`/roster?view=${view === "calendar" ? "list" : "calendar"}`}
               >
                 {view === "calendar" ? "List view" : "Calendar view"}
@@ -177,15 +176,15 @@ export default async function RosterPage({
           </div>
 
           {canEdit ? (
-            <div className="rounded-2xl border bg-green-50 px-3 py-2 text-sm">
+            <div className="rounded-[12px] border bg-green-50 px-3 py-2 text-sm">
               <span className="font-medium">Edit mode ON</span>
-              <span className="text-gray-700"> — this browser can edit.</span>
+              <span className="text-on-surface-muted"> — this browser can edit.</span>
             </div>
           ) : (
-            <div className="rounded-2xl border bg-amber-50 px-3 py-2 text-sm grid gap-2">
+            <div className="rounded-[12px] border bg-amber-50 px-3 py-2 text-sm grid gap-2">
               <div>
                 <span className="font-medium">Read-only</span>
-                <span className="text-gray-700"> — enter your edit key here to enable editing in this browser.</span>
+                <span className="text-on-surface-muted"> — enter your edit key here to enable editing in this browser.</span>
               </div>
               <EnableEditForm returnTo={`/roster?view=${view}`} />
             </div>
@@ -212,26 +211,56 @@ export default async function RosterPage({
 
               <div className="grid gap-2">
                 {(listSessions ?? []).map((s) => (
+                  /*
+                    One slot per line, not a run-on sentence. The old version
+                    joined every singer and bhajan with a middle dot, so a
+                    Sunday of ten slots wrapped into an unreadable paragraph
+                    and an empty session was an unexplained blank card.
+                  */
                   <Link
                     key={s.id}
                     href={`/roster/${s.id}`}
-                    className="rounded-2xl border bg-white p-3 hover:bg-gray-50"
+                    className="group rounded-[12px] border border-rule-surface bg-panel p-3 transition-colors hover:border-brass/40 hover:bg-panel-hover"
                   >
-                    <div className="text-sm font-medium">
-                      {new Date(s.date).toLocaleDateString(undefined, {
-                        weekday: "short",
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })}
+                    <div className="flex items-baseline justify-between gap-3">
+                      <span className="font-display text-[15px]">
+                        {new Date(s.date).toLocaleDateString("en-AU", {
+                          weekday: "short",
+                          day: "numeric",
+                          month: "short",
+                          year: "numeric",
+                          timeZone: "UTC",
+                        })}
+                      </span>
+                      <span className="shrink-0 text-[11px] text-on-surface-muted">
+                        {s.slots.length === 0
+                          ? "nothing rostered"
+                          : `${s.slots.length} slot${s.slots.length === 1 ? "" : "s"}`}
+                      </span>
                     </div>
-                    <div className="mt-1 text-sm text-gray-700">
-                      {s.singers
-                        .slice(0, 8)
-                        .map((x) => `${x.singer.name}${x.bhajanTitle ? ` — ${x.bhajanTitle}` : ""}`)
-                        .join(" · ")}
-                      {s.singers.length > 8 ? " …" : ""}
-                    </div>
+
+                    {s.slots.length > 0 ? (
+                      <ul className="mt-2 grid gap-0.5">
+                        {s.slots.slice(0, 5).map((x, i) => (
+                          <li
+                            key={i}
+                            className="grid grid-cols-[7rem_1fr] items-baseline gap-2 text-[13px]"
+                          >
+                            <span className="truncate font-medium">
+                              {x.singer?.name ?? "Unassigned"}
+                            </span>
+                            <span className="truncate text-on-surface-muted">
+                              {x.bhajanTitle ?? "—"}
+                            </span>
+                          </li>
+                        ))}
+                        {s.slots.length > 5 ? (
+                          <li className="mt-0.5 text-[11px] text-on-surface-muted">
+                            + {s.slots.length - 5} more
+                          </li>
+                        ) : null}
+                      </ul>
+                    ) : null}
                   </Link>
                 ))}
               </div>
