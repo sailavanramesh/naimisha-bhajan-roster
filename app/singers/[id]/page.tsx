@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { ShrutiLadder } from "@/components/ShrutiLadder";
+import { SungBhajanSearch, type SungBhajan } from "./SungBhajanSearch";
 import { getPitchLabels, getSingerProfile } from "@/lib/pitchQueries";
 import { referenceFor, offsetFor, MIN_RAGA_SAMPLES } from "@/lib/singerProfile";
 import { isConfident, MIN_CONFIDENT_SAMPLES } from "@/lib/pitch";
@@ -32,9 +33,39 @@ export default async function SingerPage({
   const history = await prisma.sessionSlot.findMany({
     where: { singerId: singer.id },
     orderBy: { session: { date: "desc" } },
-    take: 50,
-    include: { session: true, bhajan: true },
+    include: { session: true, bhajan: { select: { id: true, title: true } } },
   });
+
+  /*
+   * Fold the history into one row per bhajan for the search below. Done here
+   * rather than in SQL because the title can come from three different columns
+   * — a masterlist link, a free-text title kept from the sheet, or a festival
+   * title — and a GROUP BY would have to pick one and lose the others.
+   */
+  const byBhajan = new Map<string, SungBhajan>();
+  for (const h of history) {
+    const title = h.bhajan?.title ?? h.bhajanTitle ?? h.festivalBhajanTitle;
+    if (!title) continue;
+    const key = (h.bhajan?.id ?? title.toLowerCase()).trim();
+    const entry = byBhajan.get(key) ?? {
+      title,
+      bhajanId: h.bhajan?.id ?? null,
+      times: 0,
+      dates: [],
+      pitches: [],
+    };
+    entry.times += 1;
+    entry.dates.push(h.session.date.toISOString().slice(0, 10));
+    if (h.confirmedPitch && !entry.pitches.includes(h.confirmedPitch)) {
+      entry.pitches.push(h.confirmedPitch);
+    }
+    byBhajan.set(key, entry);
+  }
+  const sungBhajans = [...byBhajan.values()].sort(
+    (a, b) => b.times - a.times || a.title.localeCompare(b.title),
+  );
+
+  const recent = history.slice(0, 50);
 
   const confident = isConfident(profile.overall);
   // The most recent row that produced a usable offset — the ladder needs a
@@ -55,11 +86,59 @@ export default async function SingerPage({
             {profile.overall.n === 1 ? "record" : "records"} with a usable pitch
           </div>
         </CardHeader>
+        <CardContent>
+          {/* What people come to this page for: what they have sung. */}
+          <SungBhajanSearch singerName={singer.name} sung={sungBhajans} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent history</CardTitle>
+          <div className="mt-2 text-sm text-on-surface-muted">Latest 50.</div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-2">
+            {recent.map((h) => (
+              <Link
+                key={h.id}
+                href={`/roster/${h.sessionId}`}
+                className="rounded-[12px] border border-rule-surface bg-panel p-3 hover:bg-panel-hover focus-visible:ring-2 focus-visible:ring-black/20"
+              >
+                <div className="text-sm font-medium">
+                  {new Date(h.session.date).toLocaleDateString(undefined, {
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                  })}
+                </div>
+                <div className="mt-1 text-sm text-on-surface-muted">
+                  {h.bhajanTitle ?? h.festivalBhajanTitle ?? "—"}
+                </div>
+                {h.confirmedPitch ? (
+                  <div className="mt-1 font-mono text-xs tabular-nums text-on-surface-muted">
+                    {h.confirmedPitch}
+                  </div>
+                ) : null}
+              </Link>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/*
+        The pitch analysis sits below the history now. It is the cleverer part
+        of the page but the rarer question — you look up what someone sang far
+        more often than you interrogate their median offset.
+      */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Pitch profile</CardTitle>
+        </CardHeader>
 
         <CardContent className="grid gap-6">
           {/* Offset profile */}
           <section className="grid gap-2">
-            <h2 className="text-sm font-semibold">Pitch offset</h2>
             {profile.overall.n === 0 ? (
               <p className="text-sm text-on-surface-muted">
                 No confirmed pitches recorded yet, so there is nothing to learn from.
@@ -160,39 +239,6 @@ export default async function SingerPage({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent history</CardTitle>
-          <div className="mt-2 text-sm text-on-surface-muted">Latest 50.</div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-2">
-            {history.map((h) => (
-              <Link
-                key={h.id}
-                href={`/roster/${h.sessionId}`}
-                className="rounded-[12px] border border-rule-surface bg-panel p-3 hover:bg-panel-hover focus-visible:ring-2 focus-visible:ring-black/20"
-              >
-                <div className="text-sm font-medium">
-                  {new Date(h.session.date).toLocaleDateString(undefined, {
-                    year: "numeric",
-                    month: "short",
-                    day: "numeric",
-                  })}
-                </div>
-                <div className="mt-1 text-sm text-on-surface-muted">
-                  {h.bhajanTitle ?? h.festivalBhajanTitle ?? "—"}
-                </div>
-                {h.confirmedPitch ? (
-                  <div className="mt-1 font-mono text-xs tabular-nums text-on-surface-muted">
-                    {h.confirmedPitch}
-                  </div>
-                ) : null}
-              </Link>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
