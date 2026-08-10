@@ -6,6 +6,7 @@ import Link from "next/link";
 import { DeitySymbols } from "@/components/DeitySymbol";
 import { Button } from "@/components/ui";
 import { deleteSingerRow, upsertSessionSingerRows, type SingerRowInput } from "./actions";
+import { useMicCushions, MicCushionDots } from "@/components/MicCushions";
 
 type SingerLite = { id: string; name: string; gender: string | null };
 
@@ -48,6 +49,7 @@ function pickRecommendedPitch(singerGender: string | null | undefined, b?: Bhaja
 type BhSearchState = { q: string; items: { id: string; title: string }[]; open: boolean; loading: boolean };
 
 export function SessionSingersGrid(props: {
+  canSetMicCushion: boolean;
   canEdit: boolean;
   /** May move singers between slots. Members may not. */
   canAssign: boolean;
@@ -76,6 +78,13 @@ export function SessionSingersGrid(props: {
   const [isPending, startTransition] = useTransition();
   const [saveError, setSaveError] = useState<string | null>(null);
   const singerById = useMemo(() => new Map(props.singers.map((s) => [s.id, s])), [props.singers]);
+
+  /*
+   * Mic cushions live alongside the singer, not the slot: one singer has one
+   * mic for the night, so a singer with two bhajans shows the same cushion on
+   * both rows and setting it on either sets both.
+   */
+  const cushions = useMicCushions(props.sessionId);
 
   const [rows, setRows] = useState<RowState[]>(
     props.initialRows.map((r) => ({
@@ -409,6 +418,13 @@ export function SessionSingersGrid(props: {
                       <div className="text-[14px] font-semibold">{r.singerName ?? "—"}</div>
                     )}
                     <div className="mt-1 text-xs text-on-surface-muted">{r.singerGender ?? "—"}</div>
+                    {r.singerId ? (
+                      <MicCushionDots
+                        singerId={r.singerId}
+                        controller={cushions}
+                        canSet={props.canSetMicCushion}
+                      />
+                    ) : null}
                   </td>
 
                   {/* Bhajan */}

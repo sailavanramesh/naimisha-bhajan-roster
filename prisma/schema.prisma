@@ -92,6 +92,7 @@ model Singer {
   slots        SessionSlot[]
   repertoire   SingerRepertoire[]
   availability SingerAvailability[]
+  micCushions MicCushion[]
 }
 
 model Bhajan {
@@ -206,6 +207,7 @@ model Session {
 
   @@index([templateId])
   @@index([date])
+  micCushions MicCushion[]
 }
 
 /// One ordered slot in a session: a singer, a bhajan, and the pitch they sang.
@@ -381,4 +383,57 @@ model InstrumentPerson {
   updatedAt DateTime @updatedAt
 
   @@unique([instrument, person], name: "instrument_person")
+}
+
+/// Mic cushion colours, as the physical cushions on the sound desk.
+enum MicColour {
+  blue
+  grey
+  orange
+  pink
+}
+
+/// Which colour mic cushion a singer is on for a session, for the sound desk.
+///
+/// Keyed on (sessionId, singerId), not on the slot: a singer has one mic for
+/// the whole session, so if they sing twice the cushion follows them. Setting
+/// it against any of their slots sets it for all of them.
+///
+/// Deliberately its own table rather than a column on SessionSlot or Singer:
+///
+/// 1. SessionSlot.updatedAt drives the roster's optimistic-concurrency guard
+///    (app/roster/[id]/actions.ts). A cushion colour living on that row would
+///    bump updatedAt, so a sound person tapping a dot would make a
+///    coordinator's roster save fail as a "conflict" that is not one — during
+///    a live session, which is exactly when both happen at once.
+/// 2. Different authorisation: any signed-in user sets this, where the slot
+///    itself is editor-controlled.
+/// 3. It is per-session, so it cannot live on Singer either.
+/// 4. SessionSlot is the historical record. This is live operational state for
+///    setting up and EQing mics. It is timestamped, so the history comes for
+///    free, but nothing is allowed to depend on it.
+///
+/// The composite primary key makes every write a single-row upsert, so two
+/// people setting different singers can never clobber each other.
+model MicCushion {
+  sessionId String
+  singerId  String
+
+  /// Null is an explicit "cushion removed" state, not an absent row. Clearing
+  /// has to reach the other devices, and a deleted row carries no timestamp to
+  /// compare against, so removal would be indistinguishable from "not loaded
+  /// yet". Keeping the row means every change — including removal — has an
+  /// updatedAt, which is what the client merge orders by.
+  colour MicColour?
+
+  /// Who set it last. For visibility on the desk, never for authorisation.
+  setByName String?
+
+  updatedAt DateTime @updatedAt
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  singer  Singer  @relation(fields: [singerId], references: [id], onDelete: Cascade)
+
+  @@id([sessionId, singerId])
+  @@index([sessionId])
 }

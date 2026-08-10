@@ -8,6 +8,52 @@ open uncertainties.
 
 ---
 
+## Mic cushion colours (sound desk)
+
+Four cushion colours — blue, grey, orange, pink — on each rostered singer in a
+session, so the mic and sound people can see which cushion is on which mic and
+EQ accordingly. Settable by any signed-in user (Editor or Member).
+
+**Done:**
+- `MicCushion` model, keyed `(sessionId, singerId)`. Migrations
+  `20260810040000_mic_cushion` and `20260810041000_mic_cushion_nullable`, both
+  additive. The Phase 0 gate was re-run after each and still passes.
+- `lib/micCushion.ts` — pure palette + merge logic, 15 vitest tests.
+- `app/roster/[id]/micCushionActions.ts` — zod-validated Server Action.
+- `app/api/sessions/[id]/cushions/route.ts` — poll endpoint.
+- `components/MicCushions.tsx` — polling hook + the dots.
+- `scripts/verifyMicCushions.mjs` — two-browser live proof, all assertions pass.
+
+**Decisions and why:**
+- *Its own table, not a column on `SessionSlot`.* `SessionSlot.updatedAt` drives
+  the roster's optimistic-concurrency guard. A cushion colour on that row would
+  bump `updatedAt`, so a sound person tapping a dot would make a coordinator's
+  roster save fail as a conflict that is not one — during a live session, which
+  is exactly when both happen at once. It also has different authorisation, and
+  `SessionSlot` is the historical record whereas this is live operational state.
+- *Keyed on the singer, not the slot.* Sailavan: the cushion should follow the
+  singer within a session. One mic per singer per night; a singer with two
+  bhajans shows the same cushion on both rows.
+- *Last-writer-wins, deliberately.* Opposite of the roster grid. Each write is a
+  single-row upsert, so different singers can never clobber each other — the
+  failure that would actually hurt. Two people on the SAME singer: last tap
+  wins, silently. A conflict dialog aimed at a sound engineer mid-session would
+  be the wrong trade.
+- *`colour` is nullable.* "Cushion removed" is an explicit timestamped state. A
+  deleted row carries no `updatedAt`, so removal would be indistinguishable from
+  "not loaded yet" and a stale poll could resurrect a cleared cushion.
+- *Polling every 4s, not SSE/WebSockets.* One B1 instance behind the Azure front
+  end; a held-open connection per device is the fragile option. Polling pauses
+  on a hidden tab and polls immediately on return.
+- *Bigger touch targets on mobile* (28px vs 18px): tapped one-handed, standing
+  up, in a hall.
+
+**Known limits:**
+- Azure Postgres B1ms allows 50 connections total. Not a problem at one App
+  Service instance, but scaling out would need a pooler before it would be.
+- The cushion is not shown on the print sheet. Add it if the desk wants paper.
+
+
 ## Current state
 
 **Branch:** `v2`, branched from `main` @ `0788398` and **pushed** to
