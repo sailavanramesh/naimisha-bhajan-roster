@@ -27,6 +27,17 @@ const KEY_ROLES: Array<[string, string]> = [
   ["MEMBER_KEY", "member"],
 ];
 
+/**
+ * Server Components cannot read the pathname, and the root layout needs it to
+ * avoid putting the closed-testing wall over the sign-in page. Passing it as a
+ * request header is the supported way to get it there.
+ */
+function withPathname(req: NextRequest) {
+  const headers = new Headers(req.headers);
+  headers.set("x-pathname", req.nextUrl.pathname);
+  return NextResponse.next({ request: { headers } });
+}
+
 export function middleware(req: NextRequest) {
   const url = req.nextUrl;
 
@@ -39,13 +50,13 @@ export function middleware(req: NextRequest) {
   }
 
   const k = url.searchParams.get("k");
-  if (!k) return NextResponse.next();
+  if (!k) return withPathname(req);
 
   const match = KEY_ROLES.find(([envVar]) => {
     const expected = process.env[envVar];
     return expected && expected.length > 0 && k === expected;
   });
-  if (!match) return NextResponse.next();
+  if (!match) return withPathname(req);
 
   const [, role] = match;
   const nextUrl = stripParam(new URL(url.toString()), "k");

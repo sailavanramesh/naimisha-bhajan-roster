@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle, Button } from "@/components/ui";
-import { signIn } from "@/lib/authConfig";
 import { googleSignInConfigured } from "@/lib/authConfig";
+import { GoogleSignIn } from "@/components/GoogleSignIn";
 import { getSignedInSinger, getRole, ROLE_LABELS } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -44,14 +44,7 @@ export default async function SignInPage() {
           </>
         ) : (
           <>
-            <form
-              action={async () => {
-                "use server";
-                await signIn("google", { redirectTo: "/" });
-              }}
-            >
-              <Button type="submit" variant="primary">Continue with Google</Button>
-            </form>
+            <GoogleSignIn />
             <p className="text-sm text-on-surface-muted">
               You are currently <strong>{ROLE_LABELS[role]}</strong>. Signing in with an
               address the coordinator has not added to a singer will not change that —
