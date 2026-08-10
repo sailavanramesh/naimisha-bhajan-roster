@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle, Button } from "@/components/u
 import { getSingerContexts, getSlotContexts, RECENT_WINDOW_DAYS } from "@/lib/rosterQueries";
 import { assignRoster, DEFAULT_WEIGHTS, type Weights } from "@/lib/rosterScoring";
 import { applyAssignments, setAvailability } from "./actions";
+import { AddSingerPanel } from "./AddSingerPanel";
+import { buildSuggestions } from "./suggestions";
 
 export const dynamic = "force-dynamic";
 
@@ -65,6 +67,19 @@ export default async function AssignPage({
 
   const result = assignRoster(singers, slots, { pins, weights });
 
+  // Singer-first flow: ?add=<singerId> opens the suggestion panel for them.
+  const addId = one(sp, "add") ?? null;
+  const allSingers = await prisma.singer.findMany({ orderBy: { name: "asc" } });
+  const addSinger = addId ? allSingers.find((x) => x.id === addId) ?? null : null;
+  const suggestionGroups = addSinger
+    ? await buildSuggestions({
+        sessionId,
+        singerId: addSinger.id,
+        singerName: addSinger.name,
+        gender: addSinger.gender,
+      })
+    : [];
+
   const href = (changes: Record<string, string | undefined>) => {
     const p = new URLSearchParams();
     for (const [k, v] of Object.entries(sp)) {
@@ -85,6 +100,26 @@ export default async function AssignPage({
 
   return (
     <div className="grid gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Add a singer</CardTitle>
+          <p className="mt-2 max-w-2xl text-sm text-on-surface-muted">
+            Start from the person rather than the slot. Suggestions come from their own
+            list and from bhajans musically close to it — or add them with no bhajan and
+            let them choose.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <AddSingerPanel
+            sessionId={sessionId}
+            singers={allSingers.map((s) => ({ id: s.id, name: s.name, gender: s.gender }))}
+            selected={addSinger ? { id: addSinger.id, name: addSinger.name } : null}
+            groups={suggestionGroups}
+            basePath={`/roster/${sessionId}/assign`}
+          />
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>Assign singers — {dateKey}</CardTitle>

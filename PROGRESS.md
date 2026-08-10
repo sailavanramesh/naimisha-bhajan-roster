@@ -8,6 +8,44 @@ open uncertainties.
 
 ---
 
+## Singer-first assignment (assign page)
+
+Pick a person, then choose what they sing — the reverse of the fairness
+assigner, which fills existing slots.
+
+**Done:** `lib/bhajanSimilarity.ts` (15 tests), `lib/suggestedPitch.ts` (12),
+`pitchRank`/`lowestPitch` in `lib/pitch.ts` (9), `addSingerSlot` action,
+`AddSingerPanel`, `suggestions.ts`.
+
+**Decisions and why:**
+- *Similarity is categorical, not embeddings.* Deity, raga, tempo, beat,
+  language, level, tags, weighted-overlap scored. Text embeddings would mean a
+  third-party API outside the Azure sponsorship, and the resemblance that
+  matters is musical rather than semantic.
+- *A missing field is not a mismatch.* An unknown raga drops out of the average
+  instead of scoring zero. The masterlist has real gaps (565 no raga, 1,115 no
+  tempo), and scoring absence as dissimilarity would rank well-described
+  bhajans below sparse ones for no musical reason.
+- *"Lower pitch" means lower on the group's printed Pancham ladder* (C is rung
+  0, B rung 11). Sa is a pitch class with no octave, so the circle has to be
+  cut somewhere; this cuts it where the lookup table already cuts it. Two
+  labels tie exactly when they are the same Sa.
+- *Predictions are never written to `confirmedPitch`.* Only a pitch the singer
+  committed to — on their list, or previously sung — is saved. The offset
+  profiles are computed FROM that column, so writing a prediction into it would
+  let the model train on its own output and drag every singer towards their
+  current median. The page shows the prediction for a human to accept.
+
+**Known limits:**
+- `SingerRepertoire.preferredPitch` is NULL on all 485 rows — the source sheets
+  never had it. The "from their list" pitch source is built and tested but
+  dormant until someone records one on /my-list. "Sung before" does fire:
+  there are 154 list-and-sung pairs.
+- Similar-bhajan groups exclude anything the singer has already sung, so a
+  suggestion carrying a "sung before" pitch only ever appears under "On their
+  list".
+
+
 ## Mic cushion colours (sound desk)
 
 Four cushion colours — blue, grey, orange, pink — on each rostered singer in a

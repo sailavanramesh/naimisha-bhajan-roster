@@ -77,3 +77,74 @@ export async function setAvailability(formData: FormData): Promise<void> {
 
   revalidatePath(`/roster/${sessionId}/assign`);
 }
+
+const AddSlot = z.object({
+  sessionId: z.string().min(1),
+  singerId: z.string().min(1),
+  bhajanId: z.string().nullable(),
+  /** Only ever a pitch the singer has actually committed to. See below. */
+  confirmedPitch: z.string().nullable(),
+});
+
+/**
+ * Add a singer to a session, optionally with a bhajan.
+ *
+ * The singer-first counterpart to `applyAssignments`: that one fills existing
+ * slots, this one creates a slot for a person. `bhajanId` may be null — "just
+ * put them on, they will pick a song" is a real and common way to roster.
+ *
+ * ON THE PITCH. `confirmedPitch` is written only when it came from something
+ * the singer actually committed to: a pitch on their own list, or one they
+ * have sung this bhajan at before. A PREDICTION is never written here, even
+ * though the page shows one, because the offset profiles are computed FROM
+ * this column — writing a prediction into it would let the model train on its
+ * own output, inflating its confidence and dragging every singer towards their
+ * current median. The page offers the predicted number for a human to accept
+ * instead.
+ *
+ * The position is computed inside the transaction so two coordinators adding a
+ * singer at the same moment cannot land on the same one; the unique index on
+ * (sessionId, position) is the backstop if they do.
+ */
+export async function addSingerSlot(formData: FormData): Promise<void> {
+  await requireCapability("assignSingers");
+
+  const parsed = AddSlot.safeParse({
+    sessionId: String(formData.get("sessionId") ?? ""),
+    singerId: String(formData.get("singerId") ?? ""),
+    bhajanId: (formData.get("bhajanId") as string) || null,
+    confirmedPitch: (formData.get("confirmedPitch") as string) || null,
+  });
+  if (!parsed.success) {
+    throw new Error(`Could not add the singer: ${parsed.error.issues[0]?.message ?? "invalid input"}`);
+  }
+  const { sessionId, singerId, bhajanId, confirmedPitch } = parsed.data;
+
+  await prisma.$transaction(async (tx) => {
+    const last = await tx.sessionSlot.findFirst({
+      where: { sessionId },
+      orderBy: { position: "desc" },
+      select: { position: true },
+    });
+
+    const bhajan = bhajanId
+      ? await tx.bhajan.findUnique({ where: { id: bhajanId }, select: { title: true } })
+      : null;
+
+    await tx.sessionSlot.create({
+      data: {
+        sessionId,
+        singerId,
+        bhajanId: bhajanId ?? null,
+        // Kept in step with how the rest of the app reads a slot's title.
+        bhajanTitle: bhajan?.title ?? null,
+        position: (last?.position ?? 0) + 1,
+        confirmedPitch: confirmedPitch ?? null,
+      },
+    });
+  });
+
+  revalidatePath(`/roster/${sessionId}`);
+  revalidatePath(`/roster/${sessionId}/assign`);
+  redirect(`/roster/${sessionId}`);
+}
