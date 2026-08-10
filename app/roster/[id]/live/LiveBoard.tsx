@@ -12,6 +12,7 @@ export type LiveSlot = {
   bhajanTitle: string;
   bhajanId: string | null;
   deities: string[];
+  raga: string | null;
   confirmedPitch: string | null;
   tablaPitch: string | null;
 };
@@ -97,6 +98,14 @@ export function LiveBoard({
 
                     <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 pl-1">
                       <span className="text-lg font-medium sm:text-xl">{s.singerName}</span>
+                      {/* Raga sits with the cushion rather than with the title:
+                          both are things you glance at, where the title and the
+                          pitch are things you read. */}
+                      {s.raga ? (
+                        <span className="text-sm italic text-on-surface-muted" title={`Raga ${s.raga}`}>
+                          {s.raga}
+                        </span>
+                      ) : null}
                       {dot ? (
                         <span
                           className="inline-flex items-center gap-1.5 text-xs text-on-surface-muted"
