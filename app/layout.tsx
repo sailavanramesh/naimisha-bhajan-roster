@@ -3,6 +3,8 @@ import { Faustina, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { Nav } from "@/components/Nav";
 import { YantraFull } from "@/components/Yantra";
 import Link from "next/link";
+import { headers } from "next/headers";
+import { GoogleSignIn } from "@/components/GoogleSignIn";
 import { getRole, getSignedInSinger, ROLE_LABELS, requireSignIn } from "@/lib/auth";
 
 /**
@@ -51,14 +53,14 @@ function SignInWall() {
         This is in testing with a small group. Sign in with the Google account the
         coordinator added for you.
       </p>
-      <p className="mt-4">
-        <Link
-          href="/signin"
-          className="inline-flex h-11 items-center rounded-[10px] border border-brass-ink/80 bg-brass-ink px-4 text-sm font-semibold text-ivory"
-        >
-          Continue with Google
-        </Link>
-      </p>
+      {/*
+        This must be the real sign-in control, not a link to /signin. The wall
+        wraps every page, so a link to /signin rendered this same wall again and
+        the button appeared to do nothing. See components/GoogleSignIn.tsx.
+      */}
+      <div className="mt-4">
+        <GoogleSignIn />
+      </div>
     </div>
   );
 }
@@ -66,6 +68,15 @@ function SignInWall() {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const role = await getRole();
   const signedIn = await getSignedInSinger();
+
+  /*
+   * The wall must never cover the sign-in page itself, or signing in becomes
+   * unreachable. A layout cannot see the pathname, so middleware.ts stamps it
+   * onto a request header for exactly this check.
+   */
+  const pathname = (await headers()).get("x-pathname") ?? "";
+  const isAuthRoute = pathname === "/signin" || pathname.startsWith("/api/auth");
+  const walled = requireSignIn && role === "viewer" && !isAuthRoute;
   return (
     <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
       <body className="min-h-screen font-sans antialiased">
@@ -108,7 +119,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                   layout so it covers every page at once — a per-page check
                   would eventually miss one.
                 */}
-                {requireSignIn && role === "viewer" ? <SignInWall /> : children}
+                {walled ? <SignInWall /> : children}
               </main>
             </div>
           </div>
