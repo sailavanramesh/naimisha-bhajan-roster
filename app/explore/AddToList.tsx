@@ -23,12 +23,12 @@ export function AddToList({
   const [done, setDone] = useState(false);
 
   if (done) {
-    return <span className="shrink-0 text-xs text-brass-ink">Added to the list ✓</span>;
+    return <span className="self-start text-xs text-brass-ink">Added to the list ✓</span>;
   }
 
   if (!open) {
     return (
-      <Button type="button" className="h-9 shrink-0 text-xs" onClick={() => setOpen(true)}>
+      <Button type="button" className="h-9 shrink-0 self-start text-xs" onClick={() => setOpen(true)}>
         Add to a list
       </Button>
     );
@@ -40,7 +40,7 @@ export function AddToList({
         await upsertLearning(fd);
         setDone(true);
       }}
-      className="grid shrink-0 gap-1.5"
+      className="grid w-full shrink-0 gap-1.5 sm:w-auto"
     >
       <input type="hidden" name="title" value={bhajanTitle} />
       {/* Empty when signed in: the server decides whose list this is, so a
