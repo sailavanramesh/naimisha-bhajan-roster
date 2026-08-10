@@ -37,10 +37,34 @@ const mono = IBM_Plex_Mono({
 export const metadata = {
   title: "Naimiṣa Bhajan Roster",
   description: "Bhajan suggestions, rostering and pitch for the Naimisha Sai Centre",
+  applicationName: "Naimiṣa Roster",
+  /*
+   * iOS needs this as well as the manifest. Without `capable`, an
+   * "Add to Home Screen" icon opens in Safari with the URL bar, back/forward
+   * and share buttons still showing — which is exactly what it was doing.
+   * `title` is what appears under the icon; the full name is too long there.
+   */
+  appleWebApp: {
+    capable: true,
+    title: "Naimiṣa Roster",
+    statusBarStyle: "default" as const,
+  },
+  icons: {
+    icon: [
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/icons/apple-touch-icon.png",
+  },
 };
 
 export const viewport = {
-  themeColor: "#12141C",
+  /*
+   * Was #12141C, left over from the dark theme this app no longer uses. On an
+   * installed iPhone app that is the colour of the status bar area, so it read
+   * as a black band above a paper-coloured page. Now --ground.
+   */
+  themeColor: "#F7F3ED",
   width: "device-width",
   initialScale: 1,
 };
@@ -79,6 +103,17 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const walled = requireSignIn && role === "viewer" && !isAuthRoute;
   return (
     <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
+      <head>
+        {/*
+          Written by hand because Next 15 emits only the standardised
+          `mobile-web-app-capable` for metadata.appleWebApp.capable, and iOS has
+          historically acted on the apple- prefixed name alone. Without it an
+          "Add to Home Screen" icon opens inside Safari, complete with URL bar,
+          back/forward and share buttons. Cheap insurance against a difference
+          that is invisible until someone installs it on a phone.
+        */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+      </head>
       <body className="min-h-screen font-sans antialiased">
         {/* Keyboard users land here first. The old build had no skip link. */}
         <a
