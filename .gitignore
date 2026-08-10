@@ -31,3 +31,6 @@ pnpm-debug.log*
 
 # typescript incremental build cache
 *.tsbuildinfo
+
+# next standalone build output
+.next/standalone

@@ -47,16 +47,22 @@ jobs:
           DIRECT_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder?sslmode=require
         run: npm run build
 
-      - name: Prune to production dependencies
-        # Keeps the generated Prisma client (node_modules/.prisma) while
-        # dropping devDependencies from the deployed artifact.
-        run: npm prune --omit=dev
+      - name: Assemble the standalone server
+        # `output: "standalone"` emits .next/standalone with its own server.js
+        # and only the traced dependencies. Static assets and public/ are not
+        # traced, so they are copied in — this is the documented layout.
+        #
+        # The Prisma client is copied explicitly: its query-engine binary is
+        # loaded at runtime by path, which file tracing does not always follow.
+        run: |
+          cp -r .next/static .next/standalone/.next/static
+          if [ -d public ]; then cp -r public .next/standalone/public; fi
+          mkdir -p .next/standalone/node_modules
+          cp -r node_modules/.prisma .next/standalone/node_modules/.prisma
+          cp -r node_modules/@prisma .next/standalone/node_modules/@prisma
 
       - name: Package artifact
-        run: |
-          zip -r deploy.zip . \
-            -x '.git/*' '.github/*' 'data/*' '*.env' '.env*' \
-            > /dev/null
+        run: cd .next/standalone && zip -r ../../deploy.zip . > /dev/null
 
       - uses: actions/upload-artifact@v4
         with:
