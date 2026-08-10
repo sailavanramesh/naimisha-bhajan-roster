@@ -49,18 +49,22 @@ export function LiveBoard({
   return (
     <div className="fixed inset-0 z-[100] overflow-auto bg-ground text-on-ground">
       <div className="mx-auto max-w-6xl px-4 py-5 sm:px-8 sm:py-8">
-        <header className="mb-5 flex flex-wrap items-baseline justify-between gap-3 border-b border-rule pb-4">
-          <div>
-            <h1 className="font-display text-3xl font-semibold tracking-tight sm:text-4xl">
-              {heading}
-            </h1>
-            <p className="mt-1 text-sm text-on-ground-muted">{subheading}</p>
+        {/*
+          Deliberately quiet. On this screen the bhajan and the pitch are the
+          content; the date is orientation you read once. It stays full
+          contrast and unabbreviated so it is never ambiguous which session is
+          on screen — small, not faint.
+        */}
+        <header className="mb-4 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-rule pb-2.5">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-0.5">
+            <h1 className="text-[15px] font-semibold tracking-tight sm:text-base">{heading}</h1>
+            <p className="text-xs text-on-ground-muted">{subheading}</p>
           </div>
           <Link
             href={`/roster/${sessionId}`}
-            className="inline-flex h-10 shrink-0 items-center rounded-[10px] border border-rule bg-surface px-4 text-sm font-semibold hover:border-brass/50"
+            className="inline-flex h-7 shrink-0 items-center rounded-full border border-rule bg-surface px-3 text-xs font-medium text-on-surface-muted hover:border-brass/50 hover:text-on-surface"
           >
-            Exit live view
+            Exit
           </Link>
         </header>
 
