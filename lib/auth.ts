@@ -45,6 +45,7 @@ export type Capability =
   | "addBhajan"
   | "exploreBhajans" // browse a randomised slice of the masterlist
   | "manageOwnLearning" // keep a personal learning list
+  | "setMicCushion" // mark which colour mic cushion a singer is on
   | "viewAllPages";
 
 const MATRIX: Record<Role, ReadonlySet<Capability>> = {
@@ -58,6 +59,7 @@ const MATRIX: Record<Role, ReadonlySet<Capability>> = {
     "addBhajan",
     "exploreBhajans",
     "manageOwnLearning",
+    "setMicCushion",
     "viewAllPages",
   ]),
   member: new Set<Capability>([
@@ -67,6 +69,9 @@ const MATRIX: Record<Role, ReadonlySet<Capability>> = {
     "editSlotBhajan",
     "exploreBhajans",
     "manageOwnLearning",
+    // Sailavan: any user sets this. It is live sound-desk state, not the
+    // historical record, so it sits outside the editor-only allocation rules.
+    "setMicCushion",
   ]),
   viewer: new Set<Capability>(),
 };

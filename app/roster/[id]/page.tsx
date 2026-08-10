@@ -22,6 +22,8 @@ export default async function RosterSessionPage({
   const role = await getRole();
   const canEdit = can(role, "editSlotBhajan");
   const canAssign = can(role, "assignSingers");
+  // Any signed-in user, editor or member: this is live sound-desk state.
+  const canSetMicCushion = can(role, "setMicCushion");
 
   const session = await prisma.session.findUnique({
     where: { id: sessionId },
@@ -137,6 +139,7 @@ export default async function RosterSessionPage({
           {/* Main roster grid */}
           <SessionSingersGrid
             canEdit={canEdit}
+            canSetMicCushion={canSetMicCushion}
             sessionId={sessionId}
             singers={allSingers}
             canAssign={canAssign}
