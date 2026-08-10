@@ -129,6 +129,16 @@ export default async function RosterSessionPage({
               >
                 Print sheet
               </Link>
+
+              {/* The performance view. Given its own emphasis because it is
+                  what gets opened while standing at the desk, not while
+                  editing. */}
+              <Link
+                href={`/roster/${sessionId}/live`}
+                className="inline-flex h-7 items-center gap-1.5 rounded-full border border-brass/45 bg-brass/10 px-3 text-[12px] font-semibold text-brass-ink hover:border-brass/70"
+              >
+                <span aria-hidden>▶</span> Live view
+              </Link>
             </div>
 
             {!canEdit ? <EnableEditForm returnTo={`/roster/${sessionId}`} compact /> : null}

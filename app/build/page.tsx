@@ -10,6 +10,7 @@ import {
   type TemplateSpec,
 } from "@/lib/sessionBuilder";
 import { saveDraftSession } from "./actions";
+import { nextThursday } from "@/lib/dates";
 import { DeitySymbols } from "@/components/DeitySymbol";
 
 import { getRole, can } from "@/lib/auth";
@@ -95,7 +96,12 @@ export default async function BuildPage({
 
   const sp = await searchParams;
 
-  const date = one(sp, "date") ?? melbourneToday();
+  /*
+   * Default to the coming Thursday — the group's usual weekday session — rather
+   * than to today, which was almost never the date being planned. The date
+   * field above stays a free date picker, so any other day is one click away.
+   */
+  const date = one(sp, "date") ?? nextThursday(melbourneToday());
   const seed = one(sp, "seed") ?? `${date}#1`;
   const freshnessDays = Number(one(sp, "fresh") ?? DEFAULT_FRESHNESS_DAYS) || DEFAULT_FRESHNESS_DAYS;
   /**

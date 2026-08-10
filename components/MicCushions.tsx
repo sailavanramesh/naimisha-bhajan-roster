@@ -219,6 +219,20 @@ export function MicCushionDots({
           </button>
         );
       })}
+      {/* Tapping the active dot already clears it, but that is not something
+          anyone discovers. An explicit control makes "no cushion" reachable,
+          and it only occupies space once there is something to clear. */}
+      {selected ? (
+        <button
+          type="button"
+          aria-label="No mic cushion"
+          title="Clear the mic cushion"
+          onClick={() => controller.set(singerId, null)}
+          className="inline-flex h-7 w-7 items-center justify-center rounded-full text-[15px] leading-none text-on-surface-muted transition hover:bg-rule-surface hover:text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-brass sm:h-[18px] sm:w-[18px] sm:text-[13px]"
+        >
+          <span aria-hidden>×</span>
+        </button>
+      ) : null}
       {errored ? (
         <span className="text-[11px] font-semibold text-warn" role="status">
           not saved
