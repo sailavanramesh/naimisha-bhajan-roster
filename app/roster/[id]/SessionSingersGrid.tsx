@@ -539,6 +539,7 @@ export function SessionSingersGrid(props: {
                   <td data-label="Confirmed" data-key="1" className="px-2 py-1.5">
                     {props.canEdit ? (
                       <div className="relative">
+                        <div className="relative w-fit">
                         <input
                           type="text"
                           value={pu.q}
@@ -555,8 +556,29 @@ export function SessionSingersGrid(props: {
                               nudgePitch(r._localId, e.key === "ArrowUp" ? 1 : -1);
                             }
                           }}
-                          className="w-[15ch] rounded-[10px] border-2 border-brass/45 bg-field px-2 py-1.5 text-[14px] font-semibold leading-5"
+                          /* 20ch fits the longest label, "1.5 Madhyam / F#", with room for the
+   clear button. At 15ch it was clipped even before the button existed —
+   the harmonium player reads this field, so a cut-off "#" is a real
+   misread waiting to happen. */
+                          className={`w-[20ch] rounded-[10px] border-2 border-brass/45 bg-field py-1.5 pl-2 text-[14px] font-semibold leading-5 ${pu.q ? "pr-7" : "pr-2"}`}
                         />
+                        {/* Clear sits inside the field, the way a search box
+                            clears. onMouseDown is prevented so the input does
+                            not blur and close the dropdown before the click
+                            lands. */}
+                        {pu.q ? (
+                          <button
+                            type="button"
+                            aria-label="Clear the confirmed pitch"
+                            title="Clear the confirmed pitch"
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => pickPitch(r._localId, "")}
+                            className="absolute right-1 top-1/2 inline-flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-full text-[13px] leading-none text-on-surface-muted transition hover:bg-rule-surface hover:text-on-surface focus:outline-none focus-visible:ring-2 focus-visible:ring-brass"
+                          >
+                            <span aria-hidden>×</span>
+                          </button>
+                        ) : null}
+                        </div>
                         {pu.open && pitchOptions.length > 0 ? (
                           <div className="absolute z-[60] mt-1 w-full max-h-64 overflow-auto rounded-[12px] border border-rule-surface bg-panel shadow">
                             {pitchOptions.map((p) => (

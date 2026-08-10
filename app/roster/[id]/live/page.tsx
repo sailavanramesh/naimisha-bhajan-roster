@@ -1,0 +1,93 @@
+import { prisma } from "@/lib/db";
+import { getRole, can } from "@/lib/auth";
+import { LiveBoard, type LiveSlot } from "./LiveBoard";
+
+export const dynamic = "force-dynamic";
+
+/**
+ * The live/performance view of one session.
+ *
+ * A separate route rather than a client-side toggle so it is linkable — the
+ * person running the desk can open it straight on their own phone — and so the
+ * heavy editing grid is never even sent to the browser.
+ */
+export default async function LiveSessionPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id: sessionId } = await params;
+  const role = await getRole();
+
+  // Same gate as the session page itself.
+  if (!can(role, "setMicCushion")) {
+    return (
+      <div className="rounded-[14px] border border-card-edge bg-surface p-6">
+        <h1 className="font-display text-2xl font-semibold">Live view</h1>
+        <p className="mt-2 text-sm text-on-surface-muted">
+          You need to be signed in as a member or an editor to see this.
+        </p>
+      </div>
+    );
+  }
+
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    include: {
+      slots: {
+        include: {
+          singer: true,
+          bhajan: { include: { deities: { include: { deity: true } } } },
+        },
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+      },
+      instruments: { orderBy: { createdAt: "asc" } },
+    },
+  });
+
+  if (!session) {
+    return (
+      <div className="rounded-[14px] border border-card-edge bg-surface p-6">
+        <h1 className="font-display text-2xl font-semibold">Not found</h1>
+      </div>
+    );
+  }
+
+  const slots: LiveSlot[] = session.slots.map((s) => ({
+    position: s.position,
+    singerId: s.singerId,
+    singerName: s.singer?.name ?? "Unassigned",
+    bhajanTitle:
+      s.bhajan?.title ?? s.bhajanTitle ?? s.festivalBhajanTitle ?? s.inputOnlyCustomBhajan ?? "—",
+    bhajanId: s.bhajanId,
+    deities: s.bhajan?.deities.map((d) => d.deity.name) ?? [],
+    confirmedPitch: s.confirmedPitch,
+    tablaPitch: s.alternativeTablaPitch,
+  }));
+
+  const heading = new Intl.DateTimeFormat("en-AU", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(session.date);
+
+  const sung = slots.filter((s) => s.confirmedPitch).length;
+  const subheading = `${slots.length} bhajan${slots.length === 1 ? "" : "s"}` +
+    (sung ? ` · ${sung} with a confirmed pitch` : "") +
+    " · mic cushions update live";
+
+  return (
+    <LiveBoard
+      sessionId={session.id}
+      heading={heading}
+      subheading={subheading}
+      slots={slots}
+      instruments={session.instruments.map((i) => ({
+        instrument: i.instrument,
+        person: i.person,
+      }))}
+    />
+  );
+}
