@@ -15,6 +15,8 @@ import {
   transposeLabel,
   predictPitch,
   MIN_CONFIDENT_SAMPLES,
+  seriesLadder,
+  stepWithinSeries,
 } from './pitch';
 
 /**
@@ -279,5 +281,100 @@ describe('note tables', () => {
     for (const [note, pc] of Object.entries(PITCH_CLASS)) {
       expect(NOTE_NAMES[pc]).toBe(note);
     }
+  });
+});
+
+/*
+ * Ladder helpers, exercised against ALL_LABELS above — the group's real 24
+ * labels, not an invented set.
+ */
+describe('seriesLadder', () => {
+  it('gives twelve rungs per series', () => {
+    expect(seriesLadder(ALL_LABELS, 'Madhyam')).toHaveLength(12);
+    expect(seriesLadder(ALL_LABELS, 'Pancham')).toHaveLength(12);
+  });
+
+  it('orders Madhyam F through E', () => {
+    expect(seriesLadder(ALL_LABELS, 'Madhyam')).toEqual([
+      '1 Madhyam / F', '1.5 Madhyam / F#', '2 Madhyam / G', '2.5 Madhyam / G#',
+      '3 Madhyam / A', '4 Madhyam / A#', '4.5 Madhyam / B', '5 Madhyam / C',
+      '5.5 Madhyam / C#', '6 Madhyam / D', '6.5 Madhyam / D#', '7 Madhyam / E',
+    ]);
+  });
+
+  it('every rung is exactly one semitone above the last, in both series', () => {
+    for (const series of ['Madhyam', 'Pancham'] as const) {
+      const ladder = seriesLadder(ALL_LABELS, series);
+      for (let i = 1; i < ladder.length; i++) {
+        const a = saOf(ladder[i - 1])!;
+        const b = saOf(ladder[i])!;
+        expect(((b - a) % 12 + 12) % 12, `${ladder[i - 1]} -> ${ladder[i]}`).toBe(1);
+      }
+    }
+  });
+
+  it('excludes the other series entirely', () => {
+    expect(seriesLadder(ALL_LABELS, 'Pancham').every((l) => l.includes('Pancham'))).toBe(true);
+  });
+
+  it('drops duplicate rungs rather than producing a longer ladder', () => {
+    expect(seriesLadder([...ALL_LABELS, '1 Madhyam / F'], 'Madhyam')).toHaveLength(12);
+  });
+});
+
+describe('stepWithinSeries', () => {
+  it('goes up one semitone', () => {
+    expect(stepWithinSeries('2 Pancham / D', 1, ALL_LABELS)).toBe('2.5 Pancham / D#');
+  });
+
+  it('goes down one semitone', () => {
+    expect(stepWithinSeries('2 Pancham / D', -1, ALL_LABELS)).toBe('1.5 Pancham / C#');
+  });
+
+  it('WRAPS at the top — E to F really is one semitone up', () => {
+    expect(stepWithinSeries('7 Madhyam / E', 1, ALL_LABELS)).toBe('1 Madhyam / F');
+  });
+
+  it('wraps at the bottom', () => {
+    expect(stepWithinSeries('1 Madhyam / F', -1, ALL_LABELS)).toBe('7 Madhyam / E');
+  });
+
+  it('NEVER crosses between series — Madhyam stays Madhyam', () => {
+    let label: string | null = '1 Madhyam / F';
+    for (let i = 0; i < 24; i++) {
+      label = stepWithinSeries(label, 1, ALL_LABELS);
+      expect(label, `after ${i + 1} steps`).toContain('Madhyam');
+    }
+  });
+
+  it('returns to where it started after twelve steps', () => {
+    let label: string | null = '3 Pancham / E';
+    for (let i = 0; i < 12; i++) label = stepWithinSeries(label, 1, ALL_LABELS);
+    expect(label).toBe('3 Pancham / E');
+  });
+
+  it('up then down is a no-op', () => {
+    for (const start of ALL_LABELS) {
+      const up = stepWithinSeries(start, 1, ALL_LABELS);
+      expect(stepWithinSeries(up, -1, ALL_LABELS), start).toBe(start);
+    }
+  });
+
+  it('falls back to the recommendation when nothing is confirmed yet', () => {
+    expect(stepWithinSeries(null, 1, ALL_LABELS, '2 Pancham / D')).toBe('2.5 Pancham / D#');
+    expect(stepWithinSeries('', -1, ALL_LABELS, '2 Pancham / D')).toBe('1.5 Pancham / C#');
+  });
+
+  it('prefers the current value over the fallback', () => {
+    expect(stepWithinSeries('5 Madhyam / C', 1, ALL_LABELS, '2 Pancham / D')).toBe('5.5 Madhyam / C#');
+  });
+
+  it('returns null when there is nothing to step from', () => {
+    expect(stepWithinSeries(null, 1, ALL_LABELS, null)).toBeNull();
+    expect(stepWithinSeries('not a pitch', 1, ALL_LABELS)).toBeNull();
+  });
+
+  it('steps a label whose step number is written oddly, by matching semitone', () => {
+    expect(stepWithinSeries('3.5 Madhyam / A#', 1, ALL_LABELS)).toBe('4.5 Madhyam / B');
   });
 });

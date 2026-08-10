@@ -6,7 +6,8 @@ import Link from "next/link";
 import { DeitySymbols } from "@/components/DeitySymbol";
 import { Button } from "@/components/ui";
 import { deleteSingerRow, upsertSessionSingerRows, type SingerRowInput } from "./actions";
-import { useMicCushions, MicCushionDots } from "@/components/MicCushions";
+import { useMicCushions, MicCushionDots, cushionTint } from "@/components/MicCushions";
+import { stepWithinSeries } from "@/lib/pitch";
 
 type SingerLite = { id: string; name: string; gender: string | null };
 
@@ -261,6 +262,34 @@ export function SessionSingersGrid(props: {
     onConfirmedPitchChange(localId, value);
   }
 
+  /**
+   * Move the confirmed pitch one rung up or down its own shruti series.
+   *
+   * When nothing is confirmed yet this steps from the RECOMMENDED pitch, so
+   * the first press lands one semitone off the recommendation. Taking the
+   * recommendation unchanged is what the "= rec" button is for — keeping the
+   * two actions distinct rather than one being a slower route to the other.
+   */
+  function nudgePitch(localId: string, direction: 1 | -1) {
+    if (!props.canEdit) return;
+    const row = rows.find((x) => x._localId === localId);
+    if (!row) return;
+    const next = stepWithinSeries(
+      row.confirmedPitch,
+      direction,
+      props.suggestions.pitches,
+      row.recommendedPitch,
+    );
+    if (next) pickPitch(localId, next);
+  }
+
+  function copyRecommended(localId: string) {
+    if (!props.canEdit) return;
+    const row = rows.find((x) => x._localId === localId);
+    if (!row?.recommendedPitch) return;
+    pickPitch(localId, row.recommendedPitch);
+  }
+
   function closePitch(localId: string) {
     setPitchUI((prev) => ({ ...prev, [localId]: { ...(prev[localId] || { q: "" }), open: false } }));
   }
@@ -397,10 +426,32 @@ export function SessionSingersGrid(props: {
               const pu = pitchUI[r._localId] || { q: r.confirmedPitch ?? "", open: false };
               const pitchOptions = filteredPitchOptions(r._localId);
 
+              /*
+               * Tint the whole row with the singer's mic cushion colour, so the
+               * sound desk can match a row to a physical cushion at a glance
+               * without reading the dots. Kept very light: this sits behind
+               * body text that has to stay comfortably readable, and the dots
+               * remain the precise signal.
+               */
+              const tint = cushionTint(cushions.get(r.singerId ?? "")?.colour ?? null);
+
               return (
-                <tr key={r._localId} className="border-b align-top">
+                <tr
+                  key={r._localId}
+                  className="border-b align-top"
+                  style={tint ? { background: tint.row } : undefined}
+                >
                   {/* Singer */}
-                  <td data-label="Singer" data-key="1" className="sticky left-0 z-30 whitespace-nowrap bg-surface px-2 py-1.5 border-r border-rule-surface shadow-sm">
+                  <td
+                    data-label="Singer"
+                    data-key="1"
+                    className="sticky left-0 z-30 whitespace-nowrap bg-surface px-2 py-1.5 border-r border-rule-surface shadow-sm"
+                    style={
+                      tint
+                        ? { background: tint.row, boxShadow: `inset 3px 0 0 0 ${tint.edge}` }
+                        : undefined
+                    }
+                  >
                     {props.canAssign ? (
                       <select
                         value={r.singerId || ""}
@@ -496,6 +547,14 @@ export function SessionSingersGrid(props: {
                           onChange={(e) => setPitchQuery(r._localId, e.target.value)}
                           onFocus={() => setPitchUI((prev) => ({ ...prev, [r._localId]: { q: pu.q, open: true } }))}
                           onBlur={() => setTimeout(() => closePitch(r._localId), 120)}
+                          onKeyDown={(e) => {
+                            // Arrow keys step the ladder. Cheap to add and it
+                            // is what a keyboard user reaches for first.
+                            if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                              e.preventDefault();
+                              nudgePitch(r._localId, e.key === "ArrowUp" ? 1 : -1);
+                            }
+                          }}
                           className="w-[15ch] rounded-[10px] border-2 border-brass/45 bg-field px-2 py-1.5 text-[14px] font-semibold leading-5"
                         />
                         {pu.open && pitchOptions.length > 0 ? (
@@ -513,6 +572,40 @@ export function SessionSingersGrid(props: {
                             ))}
                           </div>
                         ) : null}
+
+                        {/* Step the ladder without opening the dropdown. The
+                            dropdown is still the only way to cross between
+                            Madhyam and Pancham, which is deliberate. */}
+                        <div className="mt-1 flex items-center gap-1">
+                          <button
+                            type="button"
+                            aria-label="Shruti down one semitone"
+                            title="Down one semitone (or press ↓ in the field)"
+                            onClick={() => nudgePitch(r._localId, -1)}
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-[8px] border border-rule-surface bg-field text-[13px] leading-none hover:border-brass/50"
+                          >
+                            −
+                          </button>
+                          <button
+                            type="button"
+                            aria-label="Shruti up one semitone"
+                            title="Up one semitone (or press ↑ in the field)"
+                            onClick={() => nudgePitch(r._localId, 1)}
+                            className="inline-flex h-6 w-6 items-center justify-center rounded-[8px] border border-rule-surface bg-field text-[13px] leading-none hover:border-brass/50"
+                          >
+                            +
+                          </button>
+                          {r.recommendedPitch && r.confirmedPitch !== r.recommendedPitch ? (
+                            <button
+                              type="button"
+                              onClick={() => copyRecommended(r._localId)}
+                              title={`Use the recommended pitch (${r.recommendedPitch})`}
+                              className="inline-flex h-6 items-center rounded-[8px] border border-rule-surface bg-field px-1.5 text-[11px] leading-none text-on-surface-muted hover:border-brass/50 hover:text-on-surface"
+                            >
+                              = rec
+                            </button>
+                          ) : null}
+                        </div>
                       </div>
                     ) : (
                       <div className="whitespace-nowrap text-[14px] font-semibold">{r.confirmedPitch ?? "—"}</div>
