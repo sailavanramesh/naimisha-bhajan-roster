@@ -294,3 +294,58 @@ export function stepWithinSeries(
 
   return ladder[(index + direction + ladder.length) % ladder.length];
 }
+
+/**
+ * Where a shruti sits on the group's own ladder, low to high.
+ *
+ * Sa is a pitch class with no octave (rule 1), so "is B lower than C" has no
+ * answer in the abstract — the notes form a circle and any ordering has to cut
+ * it somewhere. This cuts it where the group already cuts it: the Pancham
+ * ladder as printed in the lookup table runs
+ *
+ *   1 Pancham / C, 1.5 / C#, 2 / D … 7 Pancham / B
+ *
+ * so C is rung 0 and B is rung 11. That is not an arbitrary choice on my part;
+ * it is the order the sheet is written in.
+ *
+ * Madhyam labels are ranked by the same note, because the two series are one
+ * pitch under two names (rule 2) — "1 Madhyam / F" and "4 Pancham / F" are both
+ * F and both rank 5. Ties therefore mean "the same Sa", which is the point
+ * rather than a defect.
+ *
+ * The one place this stays genuinely ambiguous is a comparison spanning the
+ * wrap, B against C, where "lower" has no honest answer. Callers that care
+ * should treat a near-octave gap as a disagreement to resolve by hand; in the
+ * seeded history every singer's pitches sit well inside the ladder.
+ *
+ * Returns null for anything unparseable.
+ */
+export function pitchRank(label: string | null | undefined): number | null {
+  return saOf(label);
+}
+
+/**
+ * The most conservative of several candidate pitches — the lowest.
+ *
+ * Used when a singer's own list and their sung history disagree about a bhajan.
+ * Lower is the safe side of a disagreement: a singer asked to sing below their
+ * usual is comfortable, one asked to sing above it may not reach.
+ *
+ * Nulls and unrecognised labels are skipped rather than treated as zero, so a
+ * missing preference cannot silently win by looking like the bottom rung.
+ */
+export function lowestPitch(
+  candidates: ReadonlyArray<string | null | undefined>,
+): string | null {
+  let best: string | null = null;
+  let bestRank = Number.POSITIVE_INFINITY;
+  for (const c of candidates) {
+    const rank = pitchRank(c);
+    if (rank === null) continue;
+    if (rank < bestRank) {
+      bestRank = rank;
+      best = (c ?? '').trim();
+    }
+  }
+  return best;
+}

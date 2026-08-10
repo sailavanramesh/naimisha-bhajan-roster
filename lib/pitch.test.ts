@@ -17,6 +17,8 @@ import {
   MIN_CONFIDENT_SAMPLES,
   seriesLadder,
   stepWithinSeries,
+  pitchRank,
+  lowestPitch,
 } from './pitch';
 
 /**
@@ -376,5 +378,62 @@ describe('stepWithinSeries', () => {
 
   it('steps a label whose step number is written oddly, by matching semitone', () => {
     expect(stepWithinSeries('3.5 Madhyam / A#', 1, ALL_LABELS)).toBe('4.5 Madhyam / B');
+  });
+});
+
+
+describe('pitchRank / lowestPitch', () => {
+  it('ranks by the printed Pancham ladder — C is the floor, B the top', () => {
+    expect(pitchRank('1 Pancham / C')).toBe(0);
+    expect(pitchRank('7 Pancham / B')).toBe(11);
+  });
+
+  it('ranks a Madhyam label by the same note as its Pancham twin', () => {
+    // Both are F, and both are C, under two naming conventions (rule 2).
+    expect(pitchRank('1 Madhyam / F')).toBe(pitchRank('4 Pancham / F'));
+    expect(pitchRank('5 Madhyam / C')).toBe(pitchRank('1 Pancham / C'));
+  });
+
+  it('agrees with real pitch where the printed step numbers would not', () => {
+    // "1 Madhyam / F" has the SMALLER step number, but F is above D.
+    expect(pitchRank('2 Pancham / D')!).toBeLessThan(pitchRank('1 Madhyam / F')!);
+    expect(lowestPitch(['1 Madhyam / F', '2 Pancham / D'])).toBe('2 Pancham / D');
+  });
+
+  it('ties EXACTLY when two labels are the same Sa, and never otherwise', () => {
+    for (const a of ALL_LABELS) {
+      for (const b of ALL_LABELS) {
+        expect(pitchRank(a) === pitchRank(b), `${a} vs ${b}`).toBe(saOf(a) === saOf(b));
+      }
+    }
+  });
+
+  it('covers all twelve pitch classes with twelve distinct ranks', () => {
+    expect(new Set(ALL_LABELS.map((l) => pitchRank(l))).size).toBe(12);
+  });
+
+  it('moves one rung per semitone along a series, wrapping at the ladder ends', () => {
+    for (const series of ['Madhyam', 'Pancham'] as const) {
+      const ladder = seriesLadder(ALL_LABELS, series);
+      for (let i = 1; i < ladder.length; i++) {
+        const dr = ((pitchRank(ladder[i])! - pitchRank(ladder[i - 1])!) % 12 + 12) % 12;
+        expect(dr, `${ladder[i - 1]} -> ${ladder[i]}`).toBe(1);
+      }
+    }
+  });
+
+  it('picks the lower of two pitches, whichever order they arrive in', () => {
+    expect(lowestPitch(['5 Pancham / G', '2 Pancham / D'])).toBe('2 Pancham / D');
+    expect(lowestPitch(['2 Pancham / D', '5 Pancham / G'])).toBe('2 Pancham / D');
+  });
+
+  it('skips nulls and rubbish rather than letting them win', () => {
+    expect(lowestPitch([null, '5 Pancham / G', undefined, 'nonsense'])).toBe('5 Pancham / G');
+    expect(lowestPitch([null, undefined])).toBeNull();
+    expect(lowestPitch([])).toBeNull();
+  });
+
+  it('returns the single candidate when there is no conflict', () => {
+    expect(lowestPitch(['3 Pancham / E'])).toBe('3 Pancham / E');
   });
 });
