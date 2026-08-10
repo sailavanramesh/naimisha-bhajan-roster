@@ -7,6 +7,8 @@ import { DeitySymbols } from "@/components/DeitySymbol";
 import { getPitchLabels, getAllProfiles, getSungRowsForBhajan } from "@/lib/pitchQueries";
 import { predictForSinger } from "@/lib/singerProfile";
 import { semitoneDelta } from "@/lib/pitch";
+import { AddToList } from "@/components/AddToList";
+import { getRole, can, getSignedInSinger } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
@@ -101,12 +103,22 @@ export default async function BhajanPage({
     );
   }
 
-  const [sungRows, profiles, rungs, singers] = await Promise.all([
+  const [sungRows, profiles, rungs, singers, role, signedIn] = await Promise.all([
     getSungRowsForBhajan(bhajan.id),
     getAllProfiles(),
     getPitchLabels(),
     prisma.singer.findMany({ orderBy: { name: "asc" } }),
+    getRole(),
+    getSignedInSinger(),
   ]);
+
+  /*
+   * Same rule as Explore: the picker only appears when the app cannot tell who
+   * is asking, or when a coordinator is legitimately adding to someone else's
+   * list. Signed in as yourself, the server already knows whose list it is.
+   */
+  const canAddToList = can(role, "manageOwnLearning");
+  const pickSinger = !signedIn || can(role, "assignSingers");
   const labelStrings = rungs.map((r) => r.label);
 
   const referenceFor = (gender: Gender | null) =>
@@ -169,9 +181,20 @@ export default async function BhajanPage({
               </div>
             </div>
 
-            <Link href="/bhajans">
-              <Button>Back</Button>
-            </Link>
+            <div className="flex shrink-0 flex-col items-end gap-2">
+              <Link href="/bhajans">
+                <Button>Back</Button>
+              </Link>
+              {/* Reaching a bhajan from the roster or a search is at least as
+                  common as browsing Explore, and wanting to learn it is the
+                  same impulse in both places. */}
+              {canAddToList ? (
+                <AddToList
+                  bhajanTitle={bhajan.title}
+                  singers={pickSinger ? singers : []}
+                />
+              ) : null}
+            </div>
           </div>
         </CardHeader>
 

@@ -6,7 +6,7 @@ import { getCandidatePool, getFacetOptions, UNSPECIFIED } from "@/lib/candidateQ
 import { sampleBhajans, DEFAULT_FRESHNESS_DAYS } from "@/lib/sessionBuilder";
 import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
-import { AddToList } from "./AddToList";
+import { AddToList } from "@/components/AddToList";
 
 export const dynamic = "force-dynamic";
 
