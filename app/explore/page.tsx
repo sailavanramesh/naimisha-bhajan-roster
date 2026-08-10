@@ -177,7 +177,18 @@ export default async function ExplorePage({ searchParams }: { searchParams: Prom
                   key={c.id}
                   className="rounded-[12px] border border-rule-surface bg-panel p-3"
                 >
-                  <div className="flex flex-wrap items-start justify-between gap-3">
+                  {/*
+                    Stacked on a phone, side by side from sm up.
+
+                    This was `flex flex-wrap justify-between`, which made the
+                    position content-dependent: the control sat on the right
+                    when the title and metadata line happened to leave room and
+                    dropped below when they did not, so it moved around from
+                    tile to tile in portrait. Landscape only looked uniform
+                    because every tile cleared the wrap threshold. Choosing the
+                    direction by breakpoint makes it uniform at every width.
+                  */}
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
                     <div className="min-w-0">
                       <Link
                         href={`/bhajans/${c.id}`}
