@@ -231,3 +231,66 @@ export function predictPitch(
     n: profile.n,
   };
 }
+
+/**
+ * The rungs of one shruti series, ascending.
+ *
+ * Each series is the same twelve pitches under a different convention name, so
+ * a ladder is always twelve long and each rung is exactly one semitone above
+ * the last: Madhyam runs F, F#, G … E, Pancham runs C, C#, D … B.
+ */
+export function seriesLadder(labels: readonly string[], series: Series): string[] {
+  const seen = new Set<number>();
+  return labels
+    .map((l) => parsePitchLabel(l))
+    .filter((p): p is PitchLabel => p !== null && p.series === series)
+    .filter((p) => {
+      if (seen.has(p.semitone)) return false;
+      seen.add(p.semitone);
+      return true;
+    })
+    .sort((a, b) => a.step - b.step)
+    .map((p) => p.raw);
+}
+
+/**
+ * Move one rung up or down the shruti ladder, staying in the same series.
+ *
+ * Two decisions worth knowing:
+ *
+ * 1. IT WRAPS, and that is musically right rather than a convenience. Within a
+ *    series each rung is +1 semitone and the ends join up — `7 Madhyam / E` to
+ *    `1 Madhyam / F` IS one semitone. Sa is a pitch class with no octave
+ *    (CLAUDE.md rule 1), so there is no "top" to fall off.
+ *
+ * 2. THE SERIES NEVER CHANGES. Madhyam and Pancham are the same pitches under
+ *    different names (CLAUDE.md rule 2), so crossing between them mid-step
+ *    would silently rewrite the convention label the source sheet recorded
+ *    without changing the sound. Crossing over stays a deliberate act via the
+ *    dropdown.
+ *
+ * `fallback` is used when nothing is set yet — the caller passes the
+ * recommended pitch, so the first press lands one rung off the recommendation
+ * rather than doing nothing.
+ *
+ * Rungs are matched by semitone, not by step number: semitone uniquely
+ * identifies a rung within a series, so a label whose step is written oddly
+ * still finds its place.
+ */
+export function stepWithinSeries(
+  current: string | null | undefined,
+  direction: 1 | -1,
+  labels: readonly string[],
+  fallback?: string | null,
+): string | null {
+  const base = parsePitchLabel(current) ?? parsePitchLabel(fallback);
+  if (!base) return null;
+
+  const ladder = seriesLadder(labels, base.series);
+  if (ladder.length === 0) return null;
+
+  const index = ladder.findIndex((l) => parsePitchLabel(l)?.semitone === base.semitone);
+  if (index < 0) return null;
+
+  return ladder[(index + direction + ladder.length) % ladder.length];
+}

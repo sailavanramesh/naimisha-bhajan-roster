@@ -227,3 +227,25 @@ export function MicCushionDots({
     </div>
   );
 }
+
+/**
+ * The row tint for a cushion colour, or null when there is none.
+ *
+ * `color-mix` produces an OPAQUE colour rather than a translucent wash. That
+ * matters because the singer column is sticky: a translucent background would
+ * let the rest of the row scroll visibly underneath it. Browsers without
+ * color-mix simply ignore the declaration and fall back to the plain surface,
+ * which is a safe way to degrade — the dots still carry the information.
+ *
+ * The mix is deliberately weak. This sits behind body text that has to stay
+ * readable, and the tint is a glanceable hint, not the signal itself.
+ */
+export function cushionTint(colour: MicColourValue | null): { row: string; edge: string } | null {
+  if (!colour) return null;
+  const dot = MIC_COLOURS.find((c) => c.value === colour)?.dot;
+  if (!dot) return null;
+  return {
+    row: `color-mix(in srgb, ${dot} 13%, rgb(var(--surface)))`,
+    edge: dot,
+  };
+}
