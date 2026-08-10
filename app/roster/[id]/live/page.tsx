@@ -73,10 +73,13 @@ export default async function LiveSessionPage({
     timeZone: "UTC",
   }).format(session.date);
 
-  const sung = slots.filter((s) => s.confirmedPitch).length;
-  const subheading = `${slots.length} bhajan${slots.length === 1 ? "" : "s"}` +
-    (sung ? ` · ${sung} with a confirmed pitch` : "") +
-    " · mic cushions update live";
+  /*
+   * Kept to one short fact. The confirmed-pitch tally and the note about
+   * cushions updating were both true and both noise on a screen whose whole
+   * job is to show the bhajan and the pitch — the pitches are right there to
+   * be read, and the cushions visibly change on their own.
+   */
+  const subheading = `${slots.length} bhajan${slots.length === 1 ? "" : "s"}`;
 
   return (
     <LiveBoard
