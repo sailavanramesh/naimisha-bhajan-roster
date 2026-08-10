@@ -61,6 +61,7 @@ export default async function LiveSessionPage({
       s.bhajan?.title ?? s.bhajanTitle ?? s.festivalBhajanTitle ?? s.inputOnlyCustomBhajan ?? "—",
     bhajanId: s.bhajanId,
     deities: s.bhajan?.deities.map((d) => d.deity.name) ?? [],
+    raga: s.bhajan?.raga?.trim() || null,
     confirmedPitch: s.confirmedPitch,
     tablaPitch: s.alternativeTablaPitch,
   }));
