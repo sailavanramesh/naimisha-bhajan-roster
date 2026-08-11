@@ -10,6 +10,8 @@ import { EnableEditForm } from "@/components/EnableEditForm";
 import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { planTablas } from "@/lib/tablaPlan";
 import { TablaPanel } from "./TablaPanel";
+import { CopyRowsPanel } from "./CopyRowsPanel";
+import { melbourneTodayISO } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 export default async function RosterSessionPage({
@@ -278,6 +280,21 @@ export default async function RosterSessionPage({
             initialRows={initialRows}
             suggestions={suggestions}
           />
+
+          {canEdit ? (
+            <CopyRowsPanel
+              sessionId={sessionId}
+              todayISO={melbourneTodayISO()}
+              rows={session.slots.map((x) => ({
+                id: x.id,
+                position: x.position,
+                singerName: x.singer?.name ?? "Unassigned",
+                bhajanTitle:
+                  x.bhajan?.title ?? x.bhajanTitle ?? x.festivalBhajanTitle ?? "no bhajan",
+                confirmedPitch: x.confirmedPitch,
+              }))}
+            />
+          ) : null}
 
           {/* Collapsible: Instruments */}
           <details className="rounded-[12px] border border-rule-surface bg-panel">
