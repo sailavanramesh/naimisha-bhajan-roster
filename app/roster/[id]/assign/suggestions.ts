@@ -4,7 +4,9 @@ import { similarBhajans, type BhajanFeatures } from "@/lib/bhajanSimilarity";
 import { suggestPitch } from "@/lib/suggestedPitch";
 import { getPitchLabels, getSingerProfile } from "@/lib/pitchQueries";
 import { getBhajanPool } from "@/lib/bhajanPool";
+import { melbourneTodayISO } from "@/lib/dates";
 import { predictForSinger } from "@/lib/singerProfile";
+import { balancedRepertoireOrder } from "@/lib/repertoireOrder";
 import type { Suggestion, SuggestionGroup } from "./AddSingerPanel";
 
 /**
@@ -33,7 +35,7 @@ export async function buildSuggestions(opts: {
     }),
     prisma.sessionSlot.findMany({
       where: { singerId, bhajanId: { not: null } },
-      select: { bhajanId: true, confirmedPitch: true },
+      select: { bhajanId: true, confirmedPitch: true, session: { select: { date: true } } },
     }),
     prisma.sessionSlot.findMany({
       where: { sessionId },
@@ -80,6 +82,16 @@ export async function buildSuggestions(opts: {
     sungPitches.set(s.bhajanId, list);
   }
 
+  /** How long ago this singer last sang each bhajan. Null means never. */
+  const daysSince = new Map<string, number>();
+  const todayMs = Date.parse(`${melbourneTodayISO()}T00:00:00.000Z`);
+  for (const s of sung) {
+    if (!s.bhajanId) continue;
+    const days = Math.round((todayMs - s.session.date.getTime()) / 86_400_000);
+    const best = daysSince.get(s.bhajanId);
+    if (best === undefined || days < best) daysSince.set(s.bhajanId, days);
+  }
+
   const listPitches = new Map<string, string | null>();
   for (const r of repertoire) {
     if (r.bhajanId) listPitches.set(r.bhajanId, r.preferredPitch);
@@ -121,12 +133,26 @@ export async function buildSuggestions(opts: {
     wantToLearn: "wants to learn",
   };
 
-  const fromList: Suggestion[] = repertoire
-    .filter((r) => r.bhajanId && !alreadyHere.has(r.bhajanId))
-    // A bhajan they already know is readier than one they are still learning.
-    .sort((a, b) => rank(a.kind) - rank(b.kind))
-    .slice(0, 12)
-    .map((r) => toSuggestion(r.bhajanId!, [KIND_LABEL[r.kind]]))
+  /*
+   * Their whole list, in a useful order — not the first twelve alphabetically.
+   *
+   * All of it is sent: the largest repertoire here is 93 rows of four short
+   * fields, which is nothing next to the 3,600-row pool already being loaded,
+   * and it is what lets the panel search the lot without another round trip.
+   * The panel shows a dozen and reveals the rest on demand.
+   */
+  const fromList: Suggestion[] = balancedRepertoireOrder(
+    repertoire
+      .filter((r) => r.bhajanId && !alreadyHere.has(r.bhajanId))
+      .map((r) => ({
+        id: r.bhajanId!,
+        kindRank: rank(r.kind),
+        daysSinceSung: daysSince.get(r.bhajanId!) ?? null,
+        deity: features.get(r.bhajanId!)?.deities[0] ?? null,
+        kind: r.kind,
+      })),
+  )
+    .map((r) => toSuggestion(r.id, [KIND_LABEL[r.kind]]))
     .filter((x): x is Suggestion => x !== null);
 
   // Anchors for "more like what they know": their list plus what they have sung.
@@ -156,7 +182,9 @@ export async function buildSuggestions(opts: {
     {
       key: "list",
       heading: "On their list",
-      blurb: "What they have told us they know, are learning, or want to learn.",
+      blurb:
+        "What they have told us they know, are learning, or want to learn — what they have " +
+        "not sung for the longest first.",
       items: fromList,
     },
     {

@@ -55,11 +55,19 @@ export async function notifyRemovals(
 
     const res = await pushToSingers(removed, removedNotification({ sessionId, dateISO }));
 
-    // Forget that they were ever told about this session. If they are put back
-    // on later, that is news again, and the "once per person per session" rule
-    // in notifyAboutSession would otherwise swallow it.
+    /*
+     * Forget that they were ever told about this session. If they are put back
+     * on later, that is news again, and the "once per person per session" rule
+     * in notifyAboutSession would otherwise swallow it.
+     *
+     * And when the LAST singer comes off, forget the whole session — including
+     * the silent "the roster is up" that went to everybody else. Sailavan,
+     * 2026-08-12: a day that is cleared out and then rebuilt should ping
+     * everyone again, quietly, and the people newly on it properly. A cleared
+     * session is a new roster, not an edit to the old one.
+     */
     await prisma.sessionNotice.deleteMany({
-      where: { sessionId, singerId: { in: removed } },
+      where: after.size === 0 ? { sessionId } : { sessionId, singerId: { in: removed } },
     });
 
     return { told: res.sent };
