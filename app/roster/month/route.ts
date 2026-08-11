@@ -66,6 +66,16 @@ export async function GET(req: NextRequest) {
 
   const dayInfo: Record<string, { sessionId: string; entries: number; summary?: string | null }> = {};
   for (const s of sessions) {
+    /*
+     * A session record can outlive its contents: build one, empty it, and the
+     * row stays behind. Those were drawing a small white dot on the calendar,
+     * which read as "something is on" when nothing is. Sailavan: treat them as
+     * a day with no session at all.
+     *
+     * The record is left alone — tapping the day still finds it rather than
+     * creating a second one — it simply stops being advertised.
+     */
+    if ((s._count.slots ?? 0) === 0) continue;
     const value = { sessionId: s.id, entries: s._count.slots ?? 0, summary: buildDaySummary(s.slots) };
     const utcKey = isoDateUTC(s.date);
     const localKey = isoDateLocal(s.date);
