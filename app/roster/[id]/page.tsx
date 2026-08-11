@@ -65,6 +65,35 @@ export default async function RosterSessionPage({
 
   // The grid recomputes a row's tabla in the browser as the pitch is edited,
   // so it needs the overrides rather than a pre-computed answer.
+  /*
+   * The sessions either side, by date. Rostering runs in sequence — you look at
+   * last Thursday to see what was sung, then at next Thursday to plan — and
+   * going back to the calendar between each was the only way to move.
+   *
+   * Adjacent by DATE, not by id: ids are cuids and carry no order, and a
+   * session created later can sit earlier in the calendar.
+   */
+  const [previousSession, nextSession] = await Promise.all([
+    prisma.session.findFirst({
+      where: { date: { lt: session.date } },
+      orderBy: { date: "desc" },
+      select: { id: true, date: true },
+    }),
+    prisma.session.findFirst({
+      where: { date: { gt: session.date } },
+      orderBy: { date: "asc" },
+      select: { id: true, date: true },
+    }),
+  ]);
+
+  const shortDate = (d: Date) =>
+    new Intl.DateTimeFormat("en-AU", {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    }).format(d);
+
   const tablaOverrides = Object.fromEntries(
     (await prisma.tablaOverride.findMany({ select: { raga: true, sa: true, note: true } })).map(
       (o) => [`${o.raga}|${o.sa}`, o.note],
@@ -174,6 +203,26 @@ export default async function RosterSessionPage({
               >
                 Assign singers
               </Link>
+
+              {/* Step through the sessions in date order. */}
+              {previousSession ? (
+                <Link
+                  href={`/roster/${previousSession.id}`}
+                  className="inline-flex h-7 items-center rounded-full border border-rule-surface px-2.5 text-[12px] hover:border-brass/50"
+                  title={`Previous session — ${shortDate(previousSession.date)}`}
+                >
+                  ← {shortDate(previousSession.date)}
+                </Link>
+              ) : null}
+              {nextSession ? (
+                <Link
+                  href={`/roster/${nextSession.id}`}
+                  className="inline-flex h-7 items-center rounded-full border border-rule-surface px-2.5 text-[12px] hover:border-brass/50"
+                  title={`Next session — ${shortDate(nextSession.date)}`}
+                >
+                  {shortDate(nextSession.date)} →
+                </Link>
+              ) : null}
 
               <Link
                 href={`/roster/${sessionId}/print`}
