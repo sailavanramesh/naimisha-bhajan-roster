@@ -8,6 +8,29 @@ open uncertainties.
 
 ---
 
+## Removed copy — kept verbatim in case it is wanted back
+
+Sailavan asked for these to go on 2026-08-11 and said to remember them. They
+were removed, not reworded; if any is asked for again, restore exactly this.
+
+**1. Site strapline** (`app/layout.tsx`, under the title):
+
+> Suggest a set, roster it fairly, remember the pitch.
+
+**2. Build a session — under the repertoire filter** (`app/build/page.tsx`):
+
+> Only about 600 of the 3,607 bhajans have ever been sung here, so "anything"
+> will often suggest songs nobody knows yet. That is deliberate — it is how the
+> group learns new material — but pick **only bhajans the group has sung** when
+> you need a set that will work this week.
+
+**3. Build a session — beside "Save as draft session"** (`app/build/page.tsx`):
+
+> Saves the bhajans, not the seed — the generator's weights change as history
+> grows, so the same seed will not reproduce this set later. Singers are
+> assigned in the roster.
+
+
 ## Auto-add by fairness (assign page)
 
 A second way to fill a session, alongside picking by hand — which stays the

@@ -72,7 +72,10 @@ export function Nav({ role = "viewer" }: { role?: string }) {
   const visible =
     role === "editor"
       ? ITEMS
-      : ITEMS.filter((i) => ["/", "/roster", "/bhajans", "/singers", "/explore", "/my-list"].includes(i.href));
+      : // No Dashboard for a member: it is a coordinator's overview — session
+        // counts, fairness loads, what needs building — and none of it is a
+        // member's to act on. They start at the roster.
+        ITEMS.filter((i) => ["/roster", "/bhajans", "/singers", "/explore", "/my-list"].includes(i.href));
 
   const NavLinks = ({ collapsed }: { collapsed: boolean }) => (
     <nav className="grid gap-1">

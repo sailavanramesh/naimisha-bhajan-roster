@@ -135,11 +135,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                     <h1 className="font-display text-2xl font-semibold tracking-tight text-on-ground sm:text-3xl">
                       Naimiṣa Bhajan Roster
                     </h1>
+                    {/* Strapline removed at Sailavan's request, 2026-08-11. The
+                        wording is kept verbatim in PROGRESS.md under "Removed
+                        copy" so it can come back unchanged. */}
                     <p className="mt-1 text-sm text-on-ground-muted">
-                      Suggest a set, roster it fairly, remember the pitch.
                       <Link
                         href="/signin"
-                        className="ml-2 rounded-full border border-rule px-2 py-0.5 text-[11px] hover:border-brass/50"
+                        className="rounded-full border border-rule px-2 py-0.5 text-[11px] hover:border-brass/50"
                       >
                         {signedIn ? `${signedIn.name} · ${ROLE_LABELS[role]}` : ROLE_LABELS[role]}
                       </Link>

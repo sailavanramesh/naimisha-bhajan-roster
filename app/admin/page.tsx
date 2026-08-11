@@ -18,6 +18,7 @@ import { getRole, can } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
 import { AddPersonForm } from "./AddPersonForm";
 import { TablaDecisions } from "./TablaDecisions";
+import { RemovePersonButton } from "./RemovePersonButton";
 
 export const dynamic = "force-dynamic";
 
@@ -173,6 +174,7 @@ export default async function AdminPage({
                 {canEdit ? (
                   <Button type="submit" className="h-10 text-xs">Save</Button>
                 ) : null}
+                {canEdit ? <RemovePersonButton singerId={s.id} name={s.name} /> : null}
                 {/* States what is actually stored, so a stale form control can
                     never misrepresent the database again. */}
                 <span className="whitespace-nowrap text-[11px] text-on-surface-muted">
