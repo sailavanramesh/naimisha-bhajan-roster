@@ -141,7 +141,15 @@ export default async function AdminPage({
             <form
               key={s.id}
               action={setSingerAccess}
-              className="grid items-center gap-2 rounded-[12px] border border-rule-surface bg-panel p-2 sm:grid-cols-[8rem_1fr_9rem_auto]"
+              /*
+                The last track is a FIXED width, not auto. Each row is its own
+                grid, so an auto track sized itself to that row's status text —
+                "saved: Editor" is wider than "no access" — which changed how
+                much space the 1fr email column got and shifted every control
+                left or right by a few pixels per row. Nothing lined up down
+                the page.
+              */
+              className="grid items-center gap-2 rounded-[12px] border border-rule-surface bg-panel p-2 sm:grid-cols-[8rem_1fr_9rem_15.5rem]"
             >
               <input type="hidden" name="singerId" value={s.id} />
               <span className="text-sm font-medium">{s.name}</span>
@@ -172,12 +180,13 @@ export default async function AdminPage({
               </select>
               <div className="flex items-center gap-2">
                 {canEdit ? (
-                  <Button type="submit" className="h-10 text-xs">Save</Button>
+                  <Button type="submit" className="h-10 w-[4.5rem] shrink-0 text-xs">Save</Button>
                 ) : null}
                 {canEdit ? <RemovePersonButton singerId={s.id} name={s.name} /> : null}
                 {/* States what is actually stored, so a stale form control can
-                    never misrepresent the database again. */}
-                <span className="whitespace-nowrap text-[11px] text-on-surface-muted">
+                    never misrepresent the database again. Fixed width so the
+                    longer "saved: Editor" cannot push the buttons around. */}
+                <span className="ml-auto w-[5.5rem] shrink-0 text-right text-[11px] leading-tight text-on-surface-muted">
                   {s.email
                     ? `saved: ${s.role === "coordinator" ? "Editor" : "Member"}`
                     : "no access"}
@@ -208,15 +217,25 @@ export default async function AdminPage({
                 className="rounded-[12px] border border-rule-surface bg-panel p-3"
               >
                 <input type="hidden" name="instrument" value={instrument} />
+                {/*
+                  Fixed widths for the count and the button. The button used to
+                  read "Save Cymbals (Female)" or "Save Tabla", so its width
+                  changed per card and pushed the count chip to a different x on
+                  every row. The card is already headed with the instrument, so
+                  the button does not need to name it again — and once it is
+                  just "Save", both columns line up down the page.
+                */}
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <SectionTitle>{instrument}</SectionTitle>
-                  <div className="flex items-center gap-2">
-                    <Badge tone={listed.size ? "brass" : "warn"}>
-                      {listed.size ? `${listed.size} listed` : "nobody listed"}
-                    </Badge>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span className="w-[6.5rem] text-right">
+                      <Badge tone={listed.size ? "brass" : "warn"}>
+                        {listed.size ? `${listed.size} listed` : "none"}
+                      </Badge>
+                    </span>
                     {canEdit ? (
-                      <Button type="submit" className="h-9 text-xs">
-                        Save {instrument}
+                      <Button type="submit" className="h-9 w-[4.5rem] text-xs">
+                        Save
                       </Button>
                     ) : null}
                   </div>
