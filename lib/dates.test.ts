@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nextThursday, nextWeekday, THURSDAY } from './dates';
+import { nextThursday, nextWeekday, THURSDAY, historyCutoff, melbourneTodayISO } from './dates';
 
 describe('nextThursday', () => {
   // 2026-08-10 is a Monday. The week that follows it:
@@ -59,5 +59,39 @@ describe('nextThursday', () => {
   it('works for other weekdays too', () => {
     expect(nextWeekday('2026-08-10', 0)).toBe('2026-08-16'); // Mon -> Sun
     expect(nextWeekday('2026-08-10', 1)).toBe('2026-08-10'); // Mon -> Mon (today)
+  });
+});
+
+describe('historyCutoff', () => {
+  it('is midnight UTC of the Melbourne date, so it lines up with stored session dates', () => {
+    // Session dates are stored at UTC midnight of the Melbourne calendar day.
+    const at = new Date('2026-08-11T04:00:00.000Z'); // 2pm Melbourne
+    expect(historyCutoff(at).toISOString()).toBe('2026-08-11T00:00:00.000Z');
+  });
+
+  it('uses the MELBOURNE day, not the UTC one', () => {
+    // 11 Aug 22:00 UTC is already 12 Aug in Melbourne (UTC+10).
+    const at = new Date('2026-08-11T22:00:00.000Z');
+    expect(melbourneTodayISO(at)).toBe('2026-08-12');
+    expect(historyCutoff(at).toISOString().slice(0, 10)).toBe('2026-08-12');
+  });
+
+  it("counts today's session as history, and tomorrow's not", () => {
+    const now = new Date('2026-08-11T04:00:00.000Z');
+    const cutoff = historyCutoff(now);
+    const todaysSession = new Date('2026-08-11T00:00:00.000Z');
+    const tomorrowsSession = new Date('2026-08-12T00:00:00.000Z');
+    expect(todaysSession <= cutoff).toBe(true);
+    expect(tomorrowsSession <= cutoff).toBe(false);
+  });
+
+  it('still counts today all day, whatever the hour in Melbourne', () => {
+    for (const hour of ['14:00', '22:00', '02:00']) {
+      // 11 Aug in Melbourne spans 10 Aug 14:00 UTC to 11 Aug 14:00 UTC.
+      const at = new Date(`2026-08-10T${hour}:00.000Z`);
+      const cutoff = historyCutoff(at);
+      const sameDay = new Date(`${melbourneTodayISO(at)}T00:00:00.000Z`);
+      expect(sameDay <= cutoff).toBe(true);
+    }
   });
 });

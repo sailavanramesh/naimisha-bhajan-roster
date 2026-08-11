@@ -9,6 +9,13 @@ import { prisma } from '@/lib/db';
 import { Gender } from '@prisma/client';
 import type { SungRow } from '@/lib/singerProfile';
 import { buildAllProfiles, buildSingerProfile, type SingerProfile } from '@/lib/singerProfile';
+import { historyCutoff } from '@/lib/dates';
+
+/*
+ * Offsets are learned from what has been SUNG. A confirmed pitch on a session
+ * that has not happened yet is a plan, not evidence — see historyCutoff.
+ */
+const SUNG_SESSION = () => ({ date: { lte: historyCutoff() } });
 
 type PitchLabelRow = {
   label: string;
@@ -116,7 +123,7 @@ function toSungRow(slot: RawSlot): SungRow {
 /** Every slot with a confirmed pitch, as profile input. */
 export async function getAllSungRows(): Promise<SungRow[]> {
   const slots = await prisma.sessionSlot.findMany({
-    where: { confirmedPitch: { not: null } },
+    where: { confirmedPitch: { not: null }, session: SUNG_SESSION() },
     select: SUNG_SLOT_SELECT,
     orderBy: { session: { date: 'desc' } },
   });
@@ -125,7 +132,7 @@ export async function getAllSungRows(): Promise<SungRow[]> {
 
 export async function getSungRowsForSinger(singerId: string): Promise<SungRow[]> {
   const slots = await prisma.sessionSlot.findMany({
-    where: { singerId, confirmedPitch: { not: null } },
+    where: { singerId, confirmedPitch: { not: null }, session: SUNG_SESSION() },
     select: SUNG_SLOT_SELECT,
     orderBy: { session: { date: 'desc' } },
   });
@@ -134,7 +141,7 @@ export async function getSungRowsForSinger(singerId: string): Promise<SungRow[]>
 
 export async function getSungRowsForBhajan(bhajanId: string): Promise<SungRow[]> {
   const slots = await prisma.sessionSlot.findMany({
-    where: { bhajanId, confirmedPitch: { not: null } },
+    where: { bhajanId, confirmedPitch: { not: null }, session: SUNG_SESSION() },
     select: SUNG_SLOT_SELECT,
     orderBy: { session: { date: 'desc' } },
   });
