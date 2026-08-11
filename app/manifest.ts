@@ -18,8 +18,8 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: "Naimiṣa Bhajan Roster",
     short_name: "Naimiṣa",
-    description:
-      "Bhajan suggestions, rostering and pitch for the Naimisha Sai Centre",
+    // Same line as metadata.description in app/layout.tsx.
+    description: "Bhajan suggestions, rostering and pitch for Naimisha",
     start_url: "/",
     scope: "/",
     display: "standalone",

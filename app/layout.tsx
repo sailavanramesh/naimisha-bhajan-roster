@@ -36,7 +36,12 @@ const mono = IBM_Plex_Mono({
 
 export const metadata = {
   title: "Naimiṣa Bhajan Roster",
-  description: "Bhajan suggestions, rostering and pitch for the Naimisha Sai Centre",
+  /*
+    This is what a shared link previews as — WhatsApp and the rest read it from
+    <meta name="description">, which Next renders from here. Kept in step with
+    app/manifest.ts, which carries the same line for the installed app.
+  */
+  description: "Bhajan suggestions, rostering and pitch for Naimisha",
   applicationName: "Naimiṣa Roster",
   /*
    * iOS needs this as well as the manifest. Without `capable`, an
