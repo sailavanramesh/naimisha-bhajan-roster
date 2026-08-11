@@ -36,7 +36,7 @@ export function RemovePersonButton({ singerId, name }: { singerId: string; name:
     });
 
   return (
-    <span className="inline-flex flex-col items-end gap-1">
+    <span className="relative inline-flex shrink-0 flex-col items-end gap-1">
       {armed ? (
         <span className="inline-flex items-center gap-1">
           <button
@@ -63,14 +63,17 @@ export function RemovePersonButton({ singerId, name }: { singerId: string; name:
             setArmed(true);
           }}
           title={`Remove ${name} from the list entirely`}
-          className="h-8 rounded-[10px] border border-rule-surface px-2 text-xs text-on-surface-muted hover:border-warn/50 hover:text-on-surface"
+          className="h-8 w-[4.75rem] shrink-0 rounded-[10px] border border-rule-surface px-2 text-xs text-on-surface-muted hover:border-warn/50 hover:text-on-surface"
         >
           Remove
         </button>
       )}
 
       {error ? (
-        <span role="alert" className="max-w-[22rem] text-right text-[11px] leading-snug text-warn">
+        <span
+          role="alert"
+          className="absolute right-0 top-full z-10 mt-1 w-[22rem] rounded-[8px] border border-warn/40 bg-warn/[0.10] px-2 py-1 text-right text-[11px] leading-snug text-warn"
+        >
           {error}
         </span>
       ) : null}
