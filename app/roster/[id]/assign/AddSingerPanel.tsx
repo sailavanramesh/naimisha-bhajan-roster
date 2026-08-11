@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useOptimistic, useState, useTransition } from "react";
 import { Button } from "@/components/ui";
 import { DeitySymbols } from "@/components/DeitySymbol";
 import { addSingerSlot, removeSingerSlot, goToSessionForDate } from "./actions";
@@ -71,6 +71,31 @@ export function AddSingerPanel({
 }) {
   const router = useRouter();
   const [, startTransition] = useTransition();
+
+  /*
+   * The chip appears the moment you click, before the server has heard about
+   * it. Adding somebody is a near-certain success — the only refusal is a
+   * capability check that already passed to render this panel — so waiting for
+   * the round trip to draw it was making a decision feel slower than it is.
+   * React reconciles against the server list when the transition settles, so a
+   * genuine failure corrects itself rather than leaving a phantom name.
+   */
+  const [shown, applyOptimistic] = useOptimistic(
+    lineup,
+    (current: LineupEntry[], change: { type: "add"; name: string } | { type: "remove"; slotId: string }) =>
+      change.type === "add"
+        ? [
+            ...current,
+            {
+              slotId: `pending-${change.name}-${current.length}`,
+              position: current.length + 1,
+              singerName: change.name,
+              bhajanTitle: null,
+              hasConfirmedPitch: false,
+            },
+          ]
+        : current.filter((l) => l.slotId !== change.slotId),
+  );
   /** Which control is mid-flight, so only that one shows a spinner. */
   const [busy, setBusy] = useState<string | null>(null);
   const [justAdded, setJustAdded] = useState<string | null>(null);
@@ -92,23 +117,44 @@ export function AddSingerPanel({
 
   const add = (singerId: string, name: string, bhajanId?: string, confirmedPitch?: string) =>
     run(`add:${singerId}:${bhajanId ?? ""}`, async () => {
-      await addSingerSlot({ sessionId, singerId, bhajanId: bhajanId ?? null, confirmedPitch: confirmedPitch ?? null });
+      applyOptimistic({ type: "add", name });
       setJustAdded(name);
       setNotice(null);
+      await addSingerSlot({
+        sessionId,
+        singerId,
+        bhajanId: bhajanId ?? null,
+        confirmedPitch: confirmedPitch ?? null,
+      });
     });
 
-  const remove = (slotId: string) =>
+  const remove = (slotId: string) => {
+    const entry = lineup.find((l) => l.slotId === slotId);
+    /*
+     * Refuse client-side first. The lineup already carries hasConfirmedPitch,
+     * so asking the server only to be told no was a round trip spent on a
+     * question we could already answer. The server still enforces it — this is
+     * the fast path, not the rule.
+     */
+    if (entry?.hasConfirmedPitch) {
+      setNotice(
+        `${entry.singerName} has a confirmed pitch recorded, so removing them here would destroy what they actually sang. Remove them on the roster instead, where the pitch is visible.`,
+      );
+      return;
+    }
+
     run(`rm:${slotId}`, async () => {
+      applyOptimistic({ type: "remove", slotId });
+      setNotice(null);
+      if (entry && justAdded === entry.singerName) setJustAdded(null);
       const res = await removeSingerSlot({ sessionId, slotId });
       if (!res.ok) {
         setNotice(
           `${res.name} has a confirmed pitch recorded, so removing them here would destroy what they actually sang. Remove them on the roster instead, where the pitch is visible.`,
         );
-      } else {
-        setNotice(null);
-        if (justAdded === res.name) setJustAdded(null);
       }
     });
+  };
 
   return (
     <div className="grid gap-4">
@@ -153,7 +199,7 @@ export function AddSingerPanel({
         <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
           <span className="text-sm">
             <strong>
-              {lineup.length} {lineup.length === 1 ? "singer" : "singers"}
+              {shown.length} {shown.length === 1 ? "singer" : "singers"}
             </strong>{" "}
             on {sessionDate}
           </span>
@@ -165,13 +211,13 @@ export function AddSingerPanel({
           </Link>
         </div>
 
-        {lineup.length === 0 ? (
+        {shown.length === 0 ? (
           <span className="text-sm text-on-surface-muted">
             Nobody yet — add somebody with + below.
           </span>
         ) : (
           <ul className="flex flex-wrap gap-1.5">
-            {lineup.map((l) => {
+            {shown.map((l) => {
               const isNew = justAdded !== null && l.singerName === justAdded;
               return (
                 <li

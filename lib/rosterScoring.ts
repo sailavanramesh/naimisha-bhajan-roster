@@ -421,3 +421,51 @@ function improve(
     return { ...a, score, reasons };
   });
 }
+
+/**
+ * What each weight means, in the group's own terms.
+ *
+ * The weights panel used to show the raw key names — "loadBalance", "variety",
+ * "genderClump" — beside a number box, which told a coordinator nothing about
+ * what would happen if they changed one, or even which direction it pushed.
+ * Kept here next to the scoring so the wording cannot drift from the maths.
+ */
+export const WEIGHT_GUIDE: Record<
+  keyof Weights,
+  { label: string; effect: string; detail: string; penalty?: boolean }
+> = {
+  loadBalance: {
+    label: "Share the singing",
+    effect: "Favours whoever has sung least lately",
+    detail:
+      "Compares each singer's recent count against the group average. Someone on twice the average scores 0; someone who has not sung scores 1. Raise it to spread the roster wider, lower it to let the regulars carry more.",
+  },
+  overdue: {
+    label: "Time since they last sang",
+    effect: "Favours whoever has waited longest",
+    detail: `Counts up to ${OVERDUE_SATURATION_DAYS} days, after which everyone is equally overdue — a year away is no more overdue than four months. Somebody who has never sung counts as fully overdue.`,
+  },
+  repertoire: {
+    label: "Do they know the bhajan",
+    effect: "Favours singers who already know this song",
+    detail:
+      "Full marks if they have sung this bhajan before, 0.8 if it is on their list, 0 otherwise. A slot with no bhajan chosen scores neutral. Raise it for a festival where nobody should be sight-reading; lower it to push people onto new material.",
+  },
+  pitchFit: {
+    label: "Sits in their range",
+    effect: "Favours bhajans near where the singer usually sits",
+    detail:
+      "Takes the bhajan's reference pitch, shifts it by that singer's median offset, and measures the distance from their comfort centre. Neutral when there is not enough history to judge — absence of data is not evidence of a bad fit.",
+  },
+  variety: {
+    label: "Not the same song again",
+    effect: "Discourages repeating a bhajan a singer sang recently",
+    detail: `Scores 0 the day they sang it and rises to full marks after ${VARIETY_WINDOW_DAYS} days. Sailavan: repeating within the window is a flag, not a hard stop, which is why this is a weight and not a rule.`,
+  },
+  genderClump: {
+    label: "Avoid long same-voice runs",
+    effect: "PENALTY — subtracted when it would make a run of three",
+    detail: `Applies only when placing this singer would extend a run of ${GENDER_CLUMP_RUN} of the same voice in a row. Raise it to alternate Gents and Ladies more strictly, set it to 0 to ignore the pattern entirely.`,
+    penalty: true,
+  },
+};
