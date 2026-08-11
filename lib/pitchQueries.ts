@@ -10,12 +10,43 @@ import { Gender } from '@prisma/client';
 import type { SungRow } from '@/lib/singerProfile';
 import { buildAllProfiles, buildSingerProfile, type SingerProfile } from '@/lib/singerProfile';
 
-/** Every pitch label, ordered up the ladder. Cheap enough to fetch per request. */
-export async function getPitchLabels() {
-  return prisma.pitchLabel.findMany({
-    orderBy: [{ step: 'asc' }, { series: 'asc' }],
-    select: { label: true, step: true, series: true, note: true, semitone: true },
-  });
+type PitchLabelRow = {
+  label: string;
+  step: number;
+  series: string;
+  note: string;
+  semitone: number;
+};
+
+/*
+ * The 24 pitch labels are a fixed lookup table — the shruti box has the
+ * settings it has. Re-reading them cost ~350ms per request against Azure
+ * Postgres, which was pure waste on a page that reads them to render a ladder.
+ * Held for the life of the process; if they ever do change, a deploy restarts
+ * it anyway.
+ */
+let pitchLabelCache: PitchLabelRow[] | null = null;
+let pitchLabelInFlight: Promise<PitchLabelRow[]> | null = null;
+
+/** Every pitch label, ordered up the ladder. */
+export async function getPitchLabels(): Promise<PitchLabelRow[]> {
+  if (pitchLabelCache) return pitchLabelCache;
+  if (pitchLabelInFlight) return pitchLabelInFlight;
+
+  pitchLabelInFlight = prisma.pitchLabel
+    .findMany({
+      orderBy: [{ step: 'asc' }, { series: 'asc' }],
+      select: { label: true, step: true, series: true, note: true, semitone: true },
+    })
+    .then((rows) => {
+      pitchLabelCache = rows;
+      return rows;
+    })
+    .finally(() => {
+      pitchLabelInFlight = null;
+    });
+
+  return pitchLabelInFlight;
 }
 
 export async function getPitchLabelStrings(): Promise<string[]> {

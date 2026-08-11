@@ -2,7 +2,8 @@ import { prisma } from "@/lib/db";
 import { RepertoireKind, Gender } from "@prisma/client";
 import { similarBhajans, type BhajanFeatures } from "@/lib/bhajanSimilarity";
 import { suggestPitch } from "@/lib/suggestedPitch";
-import { getPitchLabels, getAllProfiles } from "@/lib/pitchQueries";
+import { getPitchLabels, getSingerProfile } from "@/lib/pitchQueries";
+import { getBhajanPool } from "@/lib/bhajanPool";
 import { predictForSinger } from "@/lib/singerProfile";
 import type { Suggestion, SuggestionGroup } from "./AddSingerPanel";
 
@@ -38,26 +39,16 @@ export async function buildSuggestions(opts: {
       where: { sessionId },
       include: { bhajan: { include: { deities: { include: { deity: true } } } } },
     }),
-    prisma.bhajan.findMany({
-      select: {
-        id: true,
-        title: true,
-        raga: true,
-        tempo: true,
-        beat: true,
-        language: true,
-        level: true,
-        referenceGentsPitch: true,
-        referenceLadiesPitch: true,
-        deities: { select: { deity: { select: { name: true } } } },
-      },
-    }),
+    // Cached in process: the masterlist changes a few times a month and this
+    // read was ~1.5s of the ~1.7s it took to open a singer's suggestions.
+    getBhajanPool(),
     getPitchLabels(),
-    getAllProfiles(),
+    // One singer's profile, not all of them. The page only needs this person.
+    getSingerProfile(singerId, opts.singerName),
   ]);
 
   const labels = rungs.map((r) => r.label);
-  const profile = profiles.get(opts.singerName);
+  const profile = profiles.profile;
 
   const features = new Map<string, BhajanFeatures>();
   const referenceOf = new Map<string, string | null>();
@@ -66,7 +57,7 @@ export async function buildSuggestions(opts: {
     features.set(b.id, {
       id: b.id,
       title: b.title,
-      deities: b.deities.map((d) => d.deity.name),
+      deities: b.deities,
       raga: b.raga,
       tempo: b.tempo,
       beat: b.beat,
