@@ -15,11 +15,24 @@ const publicKey = process.env.VAPID_PUBLIC_KEY ?? "";
 const privateKey = process.env.VAPID_PRIVATE_KEY ?? "";
 const subject = process.env.VAPID_SUBJECT ?? "mailto:swamilavan@gmail.com";
 
-export const pushConfigured = Boolean(publicKey && privateKey);
-
-if (pushConfigured) {
-  webpush.setVapidDetails(subject, publicKey, privateKey);
+/*
+ * Guarded, because setVapidDetails THROWS on a malformed key — and it runs at
+ * module load, so the throw takes down every page that imports this, not just
+ * the notifications one. A mistyped setting should degrade to "notifications
+ * are not configured", never to a 500 on the roster.
+ */
+function configure(): boolean {
+  if (!publicKey || !privateKey) return false;
+  try {
+    webpush.setVapidDetails(subject, publicKey, privateKey);
+    return true;
+  } catch (e) {
+    console.error("VAPID keys are set but not valid; push disabled.", e);
+    return false;
+  }
 }
+
+export const pushConfigured = configure();
 
 /** The browser needs this to subscribe. Safe to expose — it is the public half. */
 export function vapidPublicKey(): string {

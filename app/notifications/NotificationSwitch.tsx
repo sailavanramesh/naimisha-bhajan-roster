@@ -42,21 +42,30 @@ export function NotificationSwitch({ vapidKey, signedIn }: { vapidKey: string; s
 
   useEffect(() => {
     (async () => {
-      const supported =
-        typeof window !== "undefined" &&
-        "serviceWorker" in navigator &&
-        "PushManager" in window &&
-        "Notification" in window;
+      /*
+       * Order matters here, and getting it wrong is what made this misleading.
+       *
+       * iOS reports Notification.permission as "denied" for a site opened in a
+       * Safari TAB, because web push is only available once the site has been
+       * added to the Home Screen. Checking "denied" first therefore told people
+       * their notifications were blocked and sent them to site settings, where
+       * there is nothing to change — the fix is to install the app.
+       *
+       * So: decide whether this is an iOS tab BEFORE looking at permission.
+       */
+      const iOS =
+        /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        // iPadOS reports itself as a Mac; touch points give it away.
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      const standalone =
+        window.matchMedia("(display-mode: standalone)").matches ||
+        (window.navigator as { standalone?: boolean }).standalone === true;
 
-      if (!supported) {
-        // On iOS this is the tab-versus-installed distinction, not an old browser.
-        const iOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-        const standalone =
-          window.matchMedia("(display-mode: standalone)").matches ||
-          (window.navigator as { standalone?: boolean }).standalone === true;
-        setState(iOS && !standalone ? "needs-install" : "unsupported");
-        return;
-      }
+      if (iOS && !standalone) return setState("needs-install");
+
+      const supported =
+        "serviceWorker" in navigator && "PushManager" in window && "Notification" in window;
+      if (!supported) return setState("unsupported");
 
       if (Notification.permission === "denied") return setState("blocked");
 
@@ -133,10 +142,19 @@ export function NotificationSwitch({ vapidKey, signedIn }: { vapidKey: string; s
       <div className="grid gap-2 rounded-[10px] border border-warn/40 bg-warn/[0.08] px-3 py-2 text-sm">
         <strong>Add this to your Home Screen first.</strong>
         <span className="text-on-surface-muted">
-          On an iPhone, notifications only work once the app is installed — Safari gives a tab
-          no way to receive them. Tap Share, then <strong>Add to Home Screen</strong>, open it
-          from there and come back to this page.
+          You are in a Safari tab. On an iPhone, notifications only work once the app is
+          installed — a tab has no way to receive them, whatever the settings say.
         </span>
+        <ol className="ml-4 list-decimal text-on-surface-muted">
+          <li>
+            Tap <strong>Share</strong> — the square with the arrow, at the bottom
+          </li>
+          <li>
+            Choose <strong>Add to Home Screen</strong>
+          </li>
+          <li>Open the app from your Home Screen, not from Safari</li>
+          <li>Come back to this page and turn them on</li>
+        </ol>
       </div>
     );
   }
