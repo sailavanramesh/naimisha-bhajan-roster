@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
+import { getRole, can } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle, Input, Button } from "@/components/ui";
 import RosterCalendarClient from "./RosterCalendarClient";
@@ -70,8 +70,15 @@ export default async function RosterPage({
   }>;
 }) {
   const sp = await searchParams;
-  const cookieStore = await cookies();
-  const canEdit = cookieStore.get("edit")?.value === "1";
+  /*
+   * Editability comes from the capability system, not from the raw `edit`
+   * cookie. Reading the cookie directly predated Google sign-in and did not
+   * know about it, so a signed-in Editor was shown "Read-only — enter your
+   * edit key" while the header next to it said "Editor". `getRole` already
+   * honours the old link key, so shared links keep working.
+   */
+  const role = await getRole();
+  const canEdit = can(role, "buildSessions");
 
   const view = sp.view === "list" ? "list" : "calendar";
   const q = (sp.q ?? "").trim();
@@ -180,13 +187,27 @@ export default async function RosterPage({
               <span className="font-medium">Edit mode ON</span>
               <span className="text-on-surface-muted"> — this browser can edit.</span>
             </div>
-          ) : (
+          ) : role === "viewer" ? (
             <div className="rounded-[12px] border bg-amber-50 px-3 py-2 text-sm grid gap-2">
               <div>
                 <span className="font-medium">Read-only</span>
                 <span className="text-on-surface-muted"> — enter your edit key here to enable editing in this browser.</span>
               </div>
               <EnableEditForm returnTo={`/roster?view=${view}`} />
+            </div>
+          ) : (
+            /*
+             * Somebody signed in who is not an editor. Offering them the edit
+             * key box would be telling them to go and find a key that is not
+             * theirs to have — their access is real, it just does not extend
+             * to creating sessions. Say that instead.
+             */
+            <div className="rounded-[12px] border bg-amber-50 px-3 py-2 text-sm">
+              <span className="font-medium">Read-only here</span>
+              <span className="text-on-surface-muted">
+                {" "}— your access covers editing the bhajan on a session, not creating
+                sessions. Open a day to see it.
+              </span>
             </div>
           )}
         </CardHeader>

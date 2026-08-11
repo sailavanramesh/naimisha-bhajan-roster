@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import {
   Card, CardContent, CardHeader, CardTitle, Button, Input, Textarea, SectionTitle,
@@ -25,8 +24,7 @@ export default async function NewBhajanPage() {
   const role = await getRole();
   if (!can(role, "addBhajan")) return <NoAccess what="Adding a bhajan" role={role} />;
 
-  const cookieStore = await cookies();
-  const canEdit = cookieStore.get("edit")?.value === "1";
+  const canEdit = can(role, "addBhajan");
 
   const [deities, languages, levels, beats, labels] = await Promise.all([
     prisma.deity.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
