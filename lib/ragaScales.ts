@@ -59,7 +59,8 @@ export const RAGA_SCALES: Readonly<Record<string, RagaScale>> = {
   "shubha pantuvarali": [S, r, g, M, P, d, N],
   "miyan ki todi": [S, r, g, M, P, d, N],
   vachaspati: [S, R, G, M, P, D, n],
-  "kalyana vasantham": [S, R, g, M, P, D, N],
+  // Confirmed by Sailavan, 2026-08-11: natural fourth (M1), not tivra.
+  "kalyana vasantham": [S, R, g, m, P, D, N],
 
   // ---- Pentatonic and hexatonic -----------------------------------------
   mohanam: [S, R, G, P, D], // no Ma
