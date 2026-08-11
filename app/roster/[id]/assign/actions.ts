@@ -155,3 +155,54 @@ export async function addSingerSlot(formData: FormData): Promise<void> {
    */
   redirect(`/roster/${sessionId}/assign?added=${encodeURIComponent(singerId)}`);
 }
+
+const RemoveSlot = z.object({
+  sessionId: z.string().min(1),
+  slotId: z.string().min(1),
+});
+
+/**
+ * Take a singer back off a session from the assign page.
+ *
+ * The counterpart to `addSingerSlot`, for the obvious mistake of adding the
+ * wrong person. Deliberately narrower than the roster grid's delete:
+ *
+ * A slot carrying a `confirmedPitch` is REFUSED. That column is what somebody
+ * actually sang (CLAUDE.md rule 6) and exists nowhere else, so it must not be
+ * destroyed by a stray click on a quick-add panel. Removing real history stays
+ * a deliberate act on the roster page, where the row and its pitch are visible.
+ *
+ * Slots added from a "sung before" suggestion do carry a pitch, so this will
+ * refuse those — the message says where to go instead rather than failing
+ * silently.
+ */
+export async function removeSingerSlot(formData: FormData): Promise<void> {
+  await requireCapability("assignSingers");
+
+  const parsed = RemoveSlot.safeParse({
+    sessionId: String(formData.get("sessionId") ?? ""),
+    slotId: String(formData.get("slotId") ?? ""),
+  });
+  if (!parsed.success) throw new Error("Could not remove that singer.");
+  const { sessionId, slotId } = parsed.data;
+
+  const slot = await prisma.sessionSlot.findUnique({
+    where: { id: slotId },
+    select: { id: true, sessionId: true, confirmedPitch: true, singer: { select: { name: true } } },
+  });
+  if (!slot || slot.sessionId !== sessionId) {
+    redirect(`/roster/${sessionId}/assign`);
+  }
+
+  if (slot.confirmedPitch) {
+    redirect(
+      `/roster/${sessionId}/assign?blocked=${encodeURIComponent(slot.singer?.name ?? "that singer")}`,
+    );
+  }
+
+  await prisma.sessionSlot.delete({ where: { id: slotId } });
+
+  revalidatePath(`/roster/${sessionId}`);
+  revalidatePath(`/roster/${sessionId}/assign`);
+  redirect(`/roster/${sessionId}/assign?removed=${encodeURIComponent(slot.singer?.name ?? "")}`);
+}

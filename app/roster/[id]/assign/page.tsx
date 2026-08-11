@@ -80,8 +80,10 @@ export default async function AssignPage({
       where: { sessionId },
       orderBy: [{ position: "asc" }],
       select: {
+        id: true,
         position: true,
         bhajanTitle: true,
+        confirmedPitch: true,
         bhajan: { select: { title: true } },
         singer: { select: { name: true } },
       },
@@ -89,9 +91,11 @@ export default async function AssignPage({
   )
     .filter((x) => x.singer)
     .map((x) => ({
+      slotId: x.id,
       position: x.position,
       singerName: x.singer!.name,
       bhajanTitle: x.bhajan?.title ?? x.bhajanTitle ?? null,
+      hasConfirmedPitch: Boolean(x.confirmedPitch),
     }));
 
   const suggestionGroups = addSinger
@@ -141,6 +145,8 @@ export default async function AssignPage({
             basePath={`/roster/${sessionId}/assign`}
             lineup={lineup}
             justAdded={justAdded}
+            justRemoved={one(sp, "removed") ?? null}
+            blocked={one(sp, "blocked") ?? null}
           />
         </CardContent>
       </Card>

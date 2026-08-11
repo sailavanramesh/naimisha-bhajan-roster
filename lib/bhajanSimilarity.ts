@@ -55,24 +55,6 @@ function norm(value: string | null | undefined): string | null {
 }
 
 /**
- * Overlap between two sets, 0..1, or null when either side is empty.
- *
- * Null rather than 0 is the important part: an unknown raga is not evidence of
- * dissimilarity, so it must drop out of the average instead of dragging the
- * score down. Scoring a missing field as zero would rank fully-described
- * bhajans below sparse ones for no musical reason.
- */
-function overlap(a: readonly string[], b: readonly string[]): number | null {
-  const setA = new Set(a.map(norm).filter((x): x is string => x !== null));
-  const setB = new Set(b.map(norm).filter((x): x is string => x !== null));
-  if (setA.size === 0 || setB.size === 0) return null;
-  let shared = 0;
-  for (const x of setA) if (setB.has(x)) shared++;
-  const union = setA.size + setB.size - shared;
-  return union === 0 ? null : shared / union;
-}
-
-/**
  * A raga name is often dual, "Kalyani / Yaman". Comparing the whole string
  * would call those two different from a bhajan listed as plain "Yaman", so
  * split and compare the parts.
@@ -87,36 +69,87 @@ function ragaParts(raga: string | null): string[] {
 
 export type Similarity = { score: number; reasons: string[] };
 
-/** Score two bhajans, 0..1, with the fields that drove it. */
-export function similarity(a: BhajanFeatures, b: BhajanFeatures): Similarity {
-  const parts: Array<{ key: keyof typeof WEIGHTS; value: number | null; label: string }> = [
-    { key: "raga", value: overlap(ragaParts(a.raga), ragaParts(b.raga)), label: "same raga" },
-    { key: "deity", value: overlap(a.deities, b.deities), label: "same deity" },
-    { key: "tempo", value: overlap(a.tempo ? [a.tempo] : [], b.tempo ? [b.tempo] : []), label: "same tempo" },
-    { key: "beat", value: overlap(a.beat ? [a.beat] : [], b.beat ? [b.beat] : []), label: "same beat" },
-    { key: "tags", value: overlap(a.tags ?? [], b.tags ?? []), label: "shared tags" },
-    { key: "level", value: overlap(a.level ? [a.level] : [], b.level ? [b.level] : []), label: "same level" },
-    {
-      key: "language",
-      value: overlap(a.language ? [a.language] : [], b.language ? [b.language] : []),
-      label: "same language",
-    },
-  ];
+const FIELDS = [
+  { key: "raga", label: "same raga" },
+  { key: "deity", label: "same deity" },
+  { key: "tempo", label: "same tempo" },
+  { key: "beat", label: "same beat" },
+  { key: "tags", label: "shared tags" },
+  { key: "level", label: "same level" },
+  { key: "language", label: "same language" },
+] as const satisfies ReadonlyArray<{ key: keyof typeof WEIGHTS; label: string }>;
 
+/**
+ * A bhajan with its fields already normalised into sets.
+ *
+ * Comparing every bhajan against every anchor rebuilt these sets on both sides
+ * of each comparison — for one singer that was about half a million
+ * comparisons and seven million Set allocations, and it dominated the time to
+ * open a singer's suggestions. Preparing each bhajan once turns that into
+ * (anchors + pool) allocations instead of (anchors x pool).
+ */
+export type PreparedBhajan = {
+  features: BhajanFeatures;
+  sets: ReadonlyArray<ReadonlySet<string>>;
+};
+
+function toSet(values: readonly (string | null | undefined)[]): Set<string> {
+  const out = new Set<string>();
+  for (const v of values) {
+    const n = norm(v ?? null);
+    if (n !== null) out.add(n);
+  }
+  return out;
+}
+
+export function prepare(f: BhajanFeatures): PreparedBhajan {
+  return {
+    features: f,
+    sets: [
+      toSet(ragaParts(f.raga)),
+      toSet(f.deities),
+      toSet([f.tempo]),
+      toSet([f.beat]),
+      toSet(f.tags ?? []),
+      toSet([f.level]),
+      toSet([f.language]),
+    ],
+  };
+}
+
+/** Jaccard over two prepared sets, or null when either side is unknown. */
+function setOverlap(a: ReadonlySet<string>, b: ReadonlySet<string>): number | null {
+  if (a.size === 0 || b.size === 0) return null;
+  let shared = 0;
+  // Iterate the smaller side.
+  const [small, large] = a.size <= b.size ? [a, b] : [b, a];
+  for (const x of small) if (large.has(x)) shared++;
+  const union = a.size + b.size - shared;
+  return union === 0 ? null : shared / union;
+}
+
+/** Score two already-prepared bhajans. */
+export function scorePrepared(a: PreparedBhajan, b: PreparedBhajan): Similarity {
   let weighted = 0;
   let total = 0;
   const reasons: string[] = [];
 
-  for (const part of parts) {
-    if (part.value === null) continue; // unknown on one side — no evidence either way
-    const w = WEIGHTS[part.key];
-    weighted += part.value * w;
+  for (let i = 0; i < FIELDS.length; i++) {
+    const value = setOverlap(a.sets[i], b.sets[i]);
+    if (value === null) continue; // unknown on one side — no evidence either way
+    const w = WEIGHTS[FIELDS[i].key];
+    weighted += value * w;
     total += w;
-    if (part.value > 0) reasons.push(part.label);
+    if (value > 0) reasons.push(FIELDS[i].label);
   }
 
   if (total === 0) return { score: 0, reasons: [] };
   return { score: weighted / total, reasons };
+}
+
+/** Score two bhajans, 0..1, with the fields that drove it. */
+export function similarity(a: BhajanFeatures, b: BhajanFeatures): Similarity {
+  return scorePrepared(prepare(a), prepare(b));
 }
 
 export type SimilarBhajan = BhajanFeatures & Similarity;
@@ -142,13 +175,16 @@ export function similarBhajans(
   if (anchors.length === 0) return [];
   const anchorIds = new Set(anchors.map((a) => a.id));
 
+  const preparedAnchors = anchors.map(prepare);
+
   const scored: SimilarBhajan[] = [];
   for (const candidate of pool) {
     if (anchorIds.has(candidate.id) || exclude.has(candidate.id)) continue;
 
+    const prepared = prepare(candidate);
     let best: Similarity = { score: 0, reasons: [] };
-    for (const anchor of anchors) {
-      const s = similarity(anchor, candidate);
+    for (const anchor of preparedAnchors) {
+      const s = scorePrepared(anchor, prepared);
       if (s.score > best.score) best = s;
     }
     if (best.score < minScore) continue;
