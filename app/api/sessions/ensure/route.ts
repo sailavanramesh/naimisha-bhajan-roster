@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { cookies } from "next/headers";
+import { getRole, can } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
 function parseISODate(s: string): Date | null {
@@ -17,10 +17,13 @@ function addDaysUTC(d: Date, n: number) {
 
 export async function POST(req: Request) {
   try {
-    const cookieStore = await cookies();
-    const canEdit = cookieStore.get("edit")?.value === "1";
-
-    if (!canEdit) {
+    /*
+     * Capability, not the raw cookie. This endpoint creates a session, so a
+     * signed-in Editor being refused here was a genuine authorisation bug and
+     * not merely a misleading banner.
+     */
+    const role = await getRole();
+    if (!can(role, "buildSessions")) {
       return NextResponse.json({ error: "Read-only" }, { status: 403 });
     }
 

@@ -1,5 +1,4 @@
 import Link from "next/link";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/db";
 import { RepertoireKind } from "@prisma/client";
 import {
@@ -36,8 +35,9 @@ export default async function AdminPage({
   if (!can(role, "manageAllocations")) return <NoAccess what="The admin section" role={role} />;
 
   const sp = await searchParams;
-  const cookieStore = await cookies();
-  const canEdit = cookieStore.get("edit")?.value === "1";
+  // Reaching here already required manageAllocations; the sub-forms follow it
+  // rather than re-deriving permission from the legacy cookie.
+  const canEdit = can(role, "manageAllocations");
 
   const [singers, eligibility, instrumentPeople] = await Promise.all([
     prisma.singer.findMany({ orderBy: { name: "asc" } }),
