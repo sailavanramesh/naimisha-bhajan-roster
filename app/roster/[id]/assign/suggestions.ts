@@ -6,7 +6,7 @@ import { getPitchLabels, getSingerProfile } from "@/lib/pitchQueries";
 import { getBhajanPool } from "@/lib/bhajanPool";
 import { melbourneTodayISO } from "@/lib/dates";
 import { predictForSinger } from "@/lib/singerProfile";
-import { balancedRepertoireOrder } from "@/lib/repertoireOrder";
+import { balancedRepertoireOrder, historyPhrase } from "@/lib/repertoireOrder";
 import type { Suggestion, SuggestionGroup } from "./AddSingerPanel";
 
 /**
@@ -127,6 +127,8 @@ export async function buildSuggestions(opts: {
   };
 
   const KIND_LABEL: Record<RepertoireKind, string> = {
+    // "On their list" and "has sung it" are different claims — see
+    // historyPhrase. Every row in this group carries both.
     known: "knows it",
     festival: "festival",
     learning: "learning",
@@ -152,7 +154,7 @@ export async function buildSuggestions(opts: {
         kind: r.kind,
       })),
   )
-    .map((r) => toSuggestion(r.id, [KIND_LABEL[r.kind]]))
+    .map((r) => toSuggestion(r.id, [KIND_LABEL[r.kind], historyPhrase(r.daysSinceSung)]))
     .filter((x): x is Suggestion => x !== null);
 
   // Anchors for "more like what they know": their list plus what they have sung.

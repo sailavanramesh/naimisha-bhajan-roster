@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { balancedRepertoireOrder, type OrderableBhajan } from "@/lib/repertoireOrder";
+import {
+  balancedRepertoireOrder,
+  historyPhrase,
+  type OrderableBhajan,
+} from "@/lib/repertoireOrder";
 
 const b = (
   id: string,
@@ -106,5 +110,23 @@ describe("tie-breaking", () => {
   it("still ranks freshness above the scramble", () => {
     const out = balancedRepertoireOrder([b("z", 0, null, "Sai"), b("a", 0, 5, "Sai")]);
     expect(out[0].id).toBe("z");
+  });
+});
+
+describe("historyPhrase", () => {
+  it("separates never-sung from sung, which is the whole point", () => {
+    // "Knows it" is what the singer said once; "sung it here" is what the
+    // roster recorded, with a pitch attached. They must not read alike.
+    expect(historyPhrase(null)).toBe("never sung here");
+    expect(historyPhrase(3)).toBe("sung 3 days ago");
+  });
+
+  it("scales the unit to the distance", () => {
+    expect(historyPhrase(0)).toBe("sung today");
+    expect(historyPhrase(1)).toBe("sung 1 day ago");
+    expect(historyPhrase(21)).toBe("sung 3 weeks ago");
+    expect(historyPhrase(90)).toBe("sung 3 months ago");
+    expect(historyPhrase(380)).toBe("sung about a year ago");
+    expect(historyPhrase(760)).toBe("sung 2 years ago");
   });
 });

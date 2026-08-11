@@ -126,3 +126,29 @@ export function balancedRepertoireOrder<T extends OrderableBhajan>(items: readon
     .sort((a, b) => a - b)
     .flatMap((rank) => dealByDeity([...byBand.get(rank)!].sort(byFreshness)));
 }
+
+/**
+ * How to describe a bhajan's history with this singer, in a few words.
+ *
+ * Sailavan, 2026-08-12: "clarify the difference between known and sung; known
+ * should come up in the suggestion pool but still should be clearly different
+ * from having sung previously."
+ *
+ * They are genuinely different claims and the panel was blurring them. "Knows
+ * it" is what the singer told us, once, possibly years ago; "sung it here" is
+ * something the roster actually recorded, with a pitch attached. The second is
+ * evidence and the first is a statement of intent, and a coordinator deciding
+ * what to put on tonight needs to see which one they are looking at.
+ *
+ * Returned as a phrase rather than a flag because it sits inline with the
+ * other reasons — "knows it · never sung here" reads as one thought.
+ */
+export function historyPhrase(daysSinceSung: number | null): string {
+  if (daysSinceSung === null) return "never sung here";
+  if (daysSinceSung <= 0) return "sung today";
+  if (daysSinceSung < 14) return `sung ${daysSinceSung} day${daysSinceSung === 1 ? "" : "s"} ago`;
+  if (daysSinceSung < 60) return `sung ${Math.round(daysSinceSung / 7)} weeks ago`;
+  if (daysSinceSung < 365) return `sung ${Math.round(daysSinceSung / 30)} months ago`;
+  const years = daysSinceSung / 365;
+  return years < 1.5 ? "sung about a year ago" : `sung ${Math.round(years)} years ago`;
+}
