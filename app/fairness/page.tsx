@@ -23,7 +23,13 @@ export default async function FairnessPage({
   const since = new Date(Date.now() - windowDays * DAY);
 
   const [singers, slots, allSlots] = await Promise.all([
-    prisma.singer.findMany({ orderBy: { name: "asc" } }),
+    /*
+     * Only people with a recorded voice. Somebody with none is not a singer
+     * (lib/rosterEligibility.ts), so including them here showed a permanent
+     * "never sung, most overdue" row and dragged the group average down,
+     * making everybody else look busier than they are.
+     */
+    prisma.singer.findMany({ where: { gender: { not: null } }, orderBy: { name: "asc" } }),
     prisma.sessionSlot.findMany({
       where: { session: { date: { gte: since } } },
       select: {

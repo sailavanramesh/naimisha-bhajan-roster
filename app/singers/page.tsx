@@ -14,7 +14,12 @@ export default async function SingersPage() {
             {singers.map((s) => (
               <Link key={s.id} href={`/singers/${s.id}`} className="rounded-[12px] border border-rule-surface bg-panel p-3 hover:bg-panel-hover">
                 <div className="text-sm font-medium">{s.name}</div>
-                <div className="text-xs text-on-surface-muted">{s.gender ?? "—"}</div>
+                {/* Kept in the list — they are a real person with access — but
+                    said plainly, because this page is called Singers and they
+                    cannot be rostered as one. */}
+                <div className="text-xs text-on-surface-muted">
+                  {s.gender ?? "no voice recorded · not rostered as a singer"}
+                </div>
               </Link>
             ))}
           </div>

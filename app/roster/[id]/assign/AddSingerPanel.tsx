@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useOptimistic, useState, useTransition } from "react";
 import { Button } from "@/components/ui";
 import { DeitySymbols } from "@/components/DeitySymbol";
-import { addSingerSlot, removeSingerSlot, goToSessionForDate } from "./actions";
+import { addSingerSlot, removeSingerSlot, goToSessionForDate, autoAddFairestSingers } from "./actions";
 import { SongsLink } from "./SongsLink";
 import { SOURCE_LABEL, type SuggestedPitch } from "@/lib/suggestedPitch";
 
@@ -146,6 +146,26 @@ export function AddSingerPanel({
       }
     });
 
+  /**
+   * Put the fairest few on in one go.
+   *
+   * An extra route, not a replacement for picking by hand — that stays the
+   * mainstay. Three because that is the group's usual session length
+   * (CLAUDE.md: 163 of 188 sessions are three or four).
+   */
+  const autoAdd = (count: number) =>
+    run(`auto:${count}`, async () => {
+      setNotice(null);
+      const res = await autoAddFairestSingers({ sessionId, count });
+      if (!res.ok) setNotice(res.error);
+      else {
+        setJustAdded(res.added[res.added.length - 1] ?? null);
+        setNotice(
+          `Added ${res.added.join(", ")} — the ${res.added.length} most owed a turn. Change any of them below.`,
+        );
+      }
+    });
+
   const remove = (slotId: string) => {
     const entry = lineup.find((l) => l.slotId === slotId);
     /*
@@ -268,6 +288,29 @@ export function AddSingerPanel({
             })}
           </ul>
         )}
+      </div>
+
+      {/*
+        Fairness in one press. Sits above the by-hand list and is deliberately
+        the smaller control of the two: it is the shortcut, not the method.
+      */}
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-[10px] border border-rule-surface bg-panel px-3 py-2">
+        <span className="text-xs text-on-surface-muted">Or fill it by fairness:</span>
+        {[3, 4].map((n) => (
+          <button
+            key={n}
+            type="button"
+            disabled={busy === `auto:${n}`}
+            onClick={() => autoAdd(n)}
+            className="inline-flex h-7 items-center rounded-full border border-brass/45 bg-brass/[0.08] px-3 text-xs font-semibold text-brass-ink hover:border-brass/70 disabled:opacity-60"
+          >
+            {busy === `auto:${n}` ? "adding…" : `Add ${n} fairest`}
+          </button>
+        ))}
+        <span className="w-full text-[11px] text-on-surface-muted sm:w-auto">
+          Whoever is most owed a turn, alternating voice. No bhajans — those are still yours to
+          choose.
+        </span>
       </div>
 
       {/*

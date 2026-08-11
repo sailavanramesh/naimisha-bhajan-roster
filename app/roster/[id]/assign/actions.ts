@@ -281,3 +281,86 @@ export async function goToSessionForDate(formData: FormData): Promise<void> {
   revalidatePath(`/roster/${session.id}/assign`);
   redirect(`/roster/${session.id}/assign`);
 }
+
+const AutoAdd = z.object({
+  sessionId: z.string().min(1),
+  count: z.number().int().min(1).max(12),
+});
+
+/**
+ * Put the fairest N singers on the session, bhajans left blank.
+ *
+ * An extra way in, NOT a replacement for the hand-picking above it. That stays
+ * the mainstay; this is for "just give me three who are owed a turn".
+ *
+ * Bhajans are deliberately left empty. Choosing who sings and choosing what
+ * they sing are separate decisions, and the fairness score has nothing to say
+ * about the second — pretending otherwise would put a bhajan on the roster that
+ * nobody chose.
+ *
+ * Anybody already on the session is skipped rather than doubled up, so pressing
+ * it twice tops up rather than duplicating.
+ */
+export async function autoAddFairestSingers(input: {
+  sessionId: string;
+  count: number;
+}): Promise<{ ok: true; added: string[] } | { ok: false; error: string }> {
+  await requireCapability("assignSingers");
+
+  const parsed = AutoAdd.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Could not do that." };
+  }
+  const { sessionId, count } = parsed.data;
+
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    select: { date: true },
+  });
+  if (!session) return { ok: false, error: "That session no longer exists." };
+
+  const { getSingerContexts } = await import("@/lib/rosterQueries");
+  const { fairestSingers } = await import("@/lib/rosterScoring");
+
+  const existing = await prisma.sessionSlot.findMany({
+    where: { sessionId },
+    orderBy: { position: "asc" },
+    select: { singerId: true, position: true, singer: { select: { gender: true } } },
+  });
+
+  const singers = await getSingerContexts(session.date);
+  const picks = fairestSingers(singers, {
+    count,
+    exclude: new Set(existing.map((e) => e.singerId).filter(Boolean) as string[]),
+    // Continue the voice pattern already on the session rather than starting
+    // afresh, so topping up does not create a run of three.
+    startingGenders: existing.map((e) => e.singer?.gender ?? null),
+  });
+
+  if (picks.length === 0) {
+    return {
+      ok: false,
+      error: "Nobody left to add — everybody available is already on this session.",
+    };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const last = await tx.sessionSlot.findFirst({
+      where: { sessionId },
+      orderBy: { position: "desc" },
+      select: { position: true },
+    });
+    let position = (last?.position ?? 0) + 1;
+    for (const pick of picks) {
+      await tx.sessionSlot.create({
+        data: { sessionId, singerId: pick.singer.id, position },
+      });
+      position++;
+    }
+  });
+
+  revalidatePath(`/roster/${sessionId}`);
+  revalidatePath(`/roster/${sessionId}/assign`);
+
+  return { ok: true, added: picks.map((p) => p.singer.name) };
+}
