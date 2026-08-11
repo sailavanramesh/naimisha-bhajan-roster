@@ -1,4 +1,8 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState, useTransition } from "react";
 import { Button } from "@/components/ui";
 import { DeitySymbols } from "@/components/DeitySymbol";
 import { addSingerSlot, removeSingerSlot, goToSessionForDate } from "./actions";
@@ -55,9 +59,6 @@ export function AddSingerPanel({
   groups,
   basePath,
   lineup,
-  justAdded,
-  justRemoved,
-  blocked,
   sessionDate,
 }: {
   sessionId: string;
@@ -66,11 +67,49 @@ export function AddSingerPanel({
   groups: SuggestionGroup[];
   basePath: string;
   lineup: LineupEntry[];
-  justAdded: string | null;
-  justRemoved: string | null;
-  blocked: string | null;
   sessionDate: string;
 }) {
+  const router = useRouter();
+  const [, startTransition] = useTransition();
+  /** Which control is mid-flight, so only that one shows a spinner. */
+  const [busy, setBusy] = useState<string | null>(null);
+  const [justAdded, setJustAdded] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  const run = (key: string, work: () => Promise<void>) => {
+    setBusy(key);
+    startTransition(async () => {
+      try {
+        await work();
+        // Pull the updated server render in the same transition, so the list
+        // and the spinner change together rather than in two steps.
+        router.refresh();
+      } finally {
+        setBusy(null);
+      }
+    });
+  };
+
+  const add = (singerId: string, name: string, bhajanId?: string, confirmedPitch?: string) =>
+    run(`add:${singerId}:${bhajanId ?? ""}`, async () => {
+      await addSingerSlot({ sessionId, singerId, bhajanId: bhajanId ?? null, confirmedPitch: confirmedPitch ?? null });
+      setJustAdded(name);
+      setNotice(null);
+    });
+
+  const remove = (slotId: string) =>
+    run(`rm:${slotId}`, async () => {
+      const res = await removeSingerSlot({ sessionId, slotId });
+      if (!res.ok) {
+        setNotice(
+          `${res.name} has a confirmed pitch recorded, so removing them here would destroy what they actually sang. Remove them on the roster instead, where the pitch is visible.`,
+        );
+      } else {
+        setNotice(null);
+        if (justAdded === res.name) setJustAdded(null);
+      }
+    });
+
   return (
     <div className="grid gap-4">
       {/*
@@ -97,70 +136,73 @@ export function AddSingerPanel({
         </span>
       </form>
 
-      {justAdded ? (
-        <p
-          role="status"
-          className="rounded-[10px] border border-brass/40 bg-brass/[0.08] px-3 py-2 text-sm"
-        >
-          Added <strong>{justAdded}</strong> — {lineup.length}{" "}
-          {lineup.length === 1 ? "singer is" : "singers are"} now on {sessionDate}. Pick the
-          next singer, or{" "}
-          <Link href={`/roster/${sessionId}`} className="underline underline-offset-2">
-            go to the roster
-          </Link>
-          .
-        </p>
-      ) : null}
-
-      {justRemoved ? (
-        <p role="status" className="rounded-[10px] border border-rule-surface bg-panel px-3 py-2 text-sm">
-          Removed <strong>{justRemoved}</strong>.
-        </p>
-      ) : null}
-
-      {blocked ? (
+      {notice ? (
         <p role="status" className="rounded-[10px] border border-warn/40 bg-warn/[0.08] px-3 py-2 text-sm">
-          <strong>{blocked}</strong> has a confirmed pitch recorded, so removing them here
-          would destroy what they actually sang. Remove them from the{" "}
-          <Link href={`/roster/${sessionId}`} className="underline underline-offset-2">
-            roster
-          </Link>{" "}
-          instead, where the pitch is visible.
+          {notice}
         </p>
       ) : null}
 
-      {/* Who is already on, so repeated adds are visible without leaving. */}
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
-        <span className="text-on-surface-muted">In this session:</span>
+      {/*
+        One place showing who is on, rather than a banner naming the last add
+        AND a separate list. Naming a single singer was the thing that confused:
+        after adding three people it still said "Added Ashwin", which is true,
+        useless, and looks broken next to three names. The count and the names
+        answer the question directly, and the one just added is marked.
+      */}
+      <div className="grid gap-1.5 rounded-[10px] border border-rule-surface bg-panel px-3 py-2">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+          <span className="text-sm">
+            <strong>
+              {lineup.length} {lineup.length === 1 ? "singer" : "singers"}
+            </strong>{" "}
+            on {sessionDate}
+          </span>
+          <Link
+            href={`/roster/${sessionId}`}
+            className="text-xs underline underline-offset-2"
+          >
+            Go to the roster
+          </Link>
+        </div>
+
         {lineup.length === 0 ? (
-          <span className="text-on-surface-muted">nobody yet</span>
+          <span className="text-sm text-on-surface-muted">
+            Nobody yet — add somebody with + below.
+          </span>
         ) : (
-          lineup.map((l) => (
-            <span
-              key={l.slotId}
-              className="inline-flex items-center gap-1 rounded-full border border-rule-surface bg-panel py-0.5 pl-2 pr-1 text-xs"
-              title={l.bhajanTitle ?? "no bhajan yet"}
-            >
-              {l.singerName}
-              {l.bhajanTitle ? "" : " · no bhajan"}
-              <form action={removeSingerSlot} className="contents">
-                <input type="hidden" name="sessionId" value={sessionId} />
-                <input type="hidden" name="slotId" value={l.slotId} />
-                <button
-                  type="submit"
-                  aria-label={`Remove ${l.singerName} from this session`}
-                  title={
-                    l.hasConfirmedPitch
-                      ? `${l.singerName} has a confirmed pitch — remove them on the roster instead`
-                      : `Remove ${l.singerName}`
-                  }
-                  className="inline-flex h-4 w-4 items-center justify-center rounded-full text-[12px] leading-none text-on-surface-muted hover:bg-rule-surface hover:text-on-surface"
+          <ul className="flex flex-wrap gap-1.5">
+            {lineup.map((l) => {
+              const isNew = justAdded !== null && l.singerName === justAdded;
+              return (
+                <li
+                  key={l.slotId}
+                  className={[
+                    "inline-flex items-center gap-1 rounded-full border py-0.5 pl-2 pr-1 text-xs",
+                    isNew ? "border-brass/60 bg-brass/[0.10] font-semibold" : "border-rule-surface bg-surface",
+                  ].join(" ")}
+                  title={l.bhajanTitle ?? "no bhajan yet"}
                 >
-                  <span aria-hidden>×</span>
-                </button>
-              </form>
-            </span>
-          ))
+                  {l.singerName}
+                  {l.bhajanTitle ? "" : " · no bhajan"}
+                  {isNew ? <span className="text-[10px] font-normal text-brass-ink">just added</span> : null}
+                  <button
+                      type="button"
+                      onClick={() => remove(l.slotId)}
+                      disabled={busy === `rm:${l.slotId}`}
+                      aria-label={`Remove ${l.singerName} from this session`}
+                      title={
+                        l.hasConfirmedPitch
+                          ? `${l.singerName} has a confirmed pitch — remove them on the roster instead`
+                          : `Remove ${l.singerName}`
+                      }
+                      className="inline-flex h-4 w-4 items-center justify-center rounded-full text-[12px] leading-none text-on-surface-muted hover:bg-rule-surface hover:text-on-surface"
+                    >
+                      <span aria-hidden>{busy === `rm:${l.slotId}` ? "·" : "×"}</span>
+                    </button>
+                </li>
+              );
+            })}
+          </ul>
         )}
       </div>
 
@@ -177,9 +219,10 @@ export function AddSingerPanel({
           </h4>
           <SingerChips
             singers={voice.singers}
-            sessionId={sessionId}
             basePath={basePath}
             openId={selected?.id ?? null}
+            onAdd={add}
+            busyKey={busy}
           />
         </div>
       ))}
@@ -238,28 +281,28 @@ export function AddSingerPanel({
 
                       <div className="flex items-center gap-2">
                         <PitchChip pitch={item.pitch} />
-                        <form action={addSingerSlot}>
-                          <input type="hidden" name="sessionId" value={sessionId} />
-                          <input type="hidden" name="singerId" value={selected.id} />
-                          <input type="hidden" name="bhajanId" value={item.bhajanId} />
-                          {/*
-                            Only a pitch they have actually committed to is
-                            carried into confirmedPitch. A prediction is shown
-                            but never written — see addSingerSlot.
-                          */}
-                          <input
-                            type="hidden"
-                            name="confirmedPitch"
-                            value={
+                        {/*
+                          Only a pitch they have actually committed to is
+                          carried into confirmedPitch. A prediction is shown
+                          but never written — see addSingerSlot.
+                        */}
+                        <Button
+                          type="button"
+                          className="h-8 text-xs"
+                          disabled={busy === `add:${selected.id}:${item.bhajanId}`}
+                          onClick={() =>
+                            add(
+                              selected.id,
+                              selected.name,
+                              item.bhajanId,
                               item.pitch.source === "list" || item.pitch.source === "sung"
-                                ? (item.pitch.pitch ?? "")
-                                : ""
-                            }
-                          />
-                          <Button type="submit" className="h-8 text-xs">
-                            Add
-                          </Button>
-                        </form>
+                                ? (item.pitch.pitch ?? undefined)
+                                : undefined,
+                            )
+                          }
+                        >
+                          {busy === `add:${selected.id}:${item.bhajanId}` ? "…" : "Add"}
+                        </Button>
                       </div>
                     </li>
                   ))}
@@ -325,14 +368,16 @@ function groupsByVoice(
 
 function SingerChips({
   singers,
-  sessionId,
   basePath,
   openId,
+  onAdd,
+  busyKey,
 }: {
   singers: Array<{ id: string; name: string; gender: string | null }>;
-  sessionId: string;
   basePath: string;
   openId: string | null;
+  onAdd: (singerId: string, name: string) => void;
+  busyKey: string | null;
 }) {
   return (
     <ul className="flex flex-wrap gap-1.5">
@@ -347,20 +392,18 @@ function SingerChips({
             ].join(" ")}
           >
             {/* Quick add — no expanding, no bhajan. */}
-            <form action={addSingerSlot} className="contents">
-              <input type="hidden" name="sessionId" value={sessionId} />
-              <input type="hidden" name="singerId" value={s.id} />
-              <input type="hidden" name="bhajanId" value="" />
-              <input type="hidden" name="confirmedPitch" value="" />
-              <button
-                type="submit"
-                title={`Add ${s.name} now, without choosing a bhajan`}
-                className="inline-flex h-8 items-center gap-1.5 pl-3 pr-2 text-sm hover:bg-panel-hover"
-              >
-                <span aria-hidden className="text-brass-ink">+</span>
-                {s.name}
-              </button>
-            </form>
+            <button
+              type="button"
+              onClick={() => onAdd(s.id, s.name)}
+              disabled={busyKey === `add:${s.id}:`}
+              title={`Add ${s.name} now, without choosing a bhajan`}
+              className="inline-flex h-8 items-center gap-1.5 pl-3 pr-2 text-sm hover:bg-panel-hover disabled:opacity-70"
+            >
+              <span aria-hidden className="text-brass-ink">
+                {busyKey === `add:${s.id}:` ? "…" : "+"}
+              </span>
+              {s.name}
+            </button>
 
             <SongsLink
               href={open ? basePath : `${basePath}?add=${s.id}`}
