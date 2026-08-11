@@ -44,3 +44,32 @@ export function nextWeekday(fromISO: string, weekday: number): string {
 export function nextThursday(fromISO: string): string {
   return nextWeekday(fromISO, THURSDAY);
 }
+
+/** Today in Australia/Melbourne as `YYYY-MM-DD`. Session dates are Melbourne dates. */
+export function melbourneTodayISO(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Australia/Melbourne",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now);
+}
+
+/**
+ * The latest session date that counts as history.
+ *
+ * Session dates are stored at UTC midnight, so comparing `<=` against today's
+ * midnight includes today and excludes tomorrow onwards.
+ *
+ * This exists because a pitch typed while PLANNING a future session is not
+ * evidence of anything: nobody has sung it yet. Counting it inflates a
+ * singer's sample and drags their median towards what was planned rather than
+ * what happened — and the plan is itself produced from that median, so the
+ * model would be learning from its own output.
+ *
+ * Today counts. A session is normally filled in during or just after the
+ * evening, and treating it as future until midnight would be its own surprise.
+ */
+export function historyCutoff(now: Date = new Date()): Date {
+  return new Date(`${melbourneTodayISO(now)}T00:00:00.000Z`);
+}
