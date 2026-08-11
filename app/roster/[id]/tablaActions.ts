@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db";
 import { requireCapability, getSignedInSinger } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { NOTE_NAMES } from "@/lib/pitch";
-import { overrideKey, ASHRAM_TABLAS } from "@/lib/tablaPlan";
+import { overrideKey, ASHRAM_TABLAS } from "@/lib/tabla";
 
 const SetOverride = z.object({
   sessionId: z.string().min(1),

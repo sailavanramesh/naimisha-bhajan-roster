@@ -7,7 +7,7 @@ import { getPitchSuggestions } from "@/lib/pitchSuggestions";
 import { computeRecommendedPitch } from "@/lib/computeRecommendedPitch";
 import { deleteInstrumentRow, updateSessionNotes } from "./actions";
 import { EnableEditForm } from "@/components/EnableEditForm";
-import { getRole, can } from "@/lib/auth";
+import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { planTablas } from "@/lib/tablaPlan";
 import { TablaPanel } from "./TablaPanel";
 
@@ -45,9 +45,31 @@ export default async function RosterSessionPage({
 
   const sid = session.id;
 
-  // Which drums to bring, above the entries — the first thing the tabla player
-  // needs and the last thing they could work out from a list of shrutis.
-  const tablaPlan = await planTablas(sessionId);
+  /*
+   * "Tablas to bring" is for the person who has to carry and tune them, so it
+   * is shown only to somebody listed as a tabla player on the instrument
+   * roster. Everyone else's page simply starts at the entries.
+   *
+   * This needs a NAME, so it depends on Google sign-in. Somebody using a
+   * shared access link is anonymous by construction and will not see it, which
+   * is correct rather than a gap: the panel is addressed to a person.
+   */
+  const me = await getSignedInSinger();
+  const isTablaPlayer = me
+    ? (await prisma.instrumentPerson.count({
+        where: { person: me.name, instrument: { contains: "abla", mode: "insensitive" } },
+      })) > 0
+    : false;
+
+  const tablaPlan = isTablaPlayer ? await planTablas(sessionId) : null;
+
+  // The grid recomputes a row's tabla in the browser as the pitch is edited,
+  // so it needs the overrides rather than a pre-computed answer.
+  const tablaOverrides = Object.fromEntries(
+    (await prisma.tablaOverride.findMany({ select: { raga: true, sa: true, note: true } })).map(
+      (o) => [`${o.raga}|${o.sa}`, o.note],
+    ),
+  );
 
   const allSingers = canAssign
     ? await prisma.singer.findMany({ where: { gender: { not: null } }, orderBy: { name: "asc" } })
@@ -106,7 +128,8 @@ export default async function RosterSessionPage({
 
   return (
     <div className="grid gap-4">
-      <TablaPanel
+      {tablaPlan ? (
+        <TablaPanel
         sessionId={sessionId}
         canEdit={can(role, "editConfirmedPitch")}
         calls={tablaPlan.calls.map((c) => ({
@@ -126,7 +149,8 @@ export default async function RosterSessionPage({
           overridden: sl.overridden,
           alternatives: sl.choice.alternativesIfNone,
         }))}
-      />
+        />
+      ) : null}
 
       <Card>
         <CardHeader>
@@ -178,6 +202,7 @@ export default async function RosterSessionPage({
           <SessionSingersGrid
             canEdit={canEdit}
             canSetMicCushion={canSetMicCushion}
+            tablaOverrides={tablaOverrides}
             sessionId={sessionId}
             singers={allSingers}
             canAssign={canAssign}

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setTablaOverride } from "./tablaActions";
-import { ASHRAM_TABLAS } from "@/lib/tablaPlan";
+import { ASHRAM_TABLAS } from "@/lib/tabla";
 
 export type PanelSlot = {
   position: number;
