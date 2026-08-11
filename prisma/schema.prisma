@@ -93,6 +93,8 @@ model Singer {
   repertoire   SingerRepertoire[]
   availability SingerAvailability[]
   micCushions MicCushion[]
+  pushSubscriptions PushSubscription[]
+  notices           SessionNotice[]
 }
 
 model Bhajan {
@@ -208,6 +210,7 @@ model Session {
   @@index([templateId])
   @@index([date])
   micCushions MicCushion[]
+  notices SessionNotice[]
 }
 
 /// One ordered slot in a session: a singer, a bhajan, and the pitch they sang.
@@ -473,4 +476,70 @@ model TablaOverride {
 
   @@unique([raga, sa])
   @@index([sa])
+}
+
+
+/// A browser's push endpoint, belonging to a person.
+///
+/// Keyed on the endpoint because that is what the push service issues and what
+/// identifies the device; one person may have several (phone, laptop). Tied to
+/// a Singer so a notification reaches a PERSON rather than a browser, which is
+/// what "notify whoever is rostered" requires.
+///
+/// Cascades on the singer: if somebody is removed from the list their devices
+/// should stop being pushed to immediately, not linger as orphans.
+model PushSubscription {
+  id String @id @default(cuid())
+
+  singerId String
+
+  /// The push service URL. Unique — re-subscribing the same browser must
+  /// update the existing row rather than accumulate duplicates.
+  endpoint String @unique
+  p256dh   String
+  auth     String
+
+  /// For working out which device this is when pruning. Not shown anywhere.
+  userAgent String?
+
+  /// Last time the push service accepted a message. A 404/410 deletes the row
+  /// instead — expired endpoints are the normal end of a subscription's life.
+  lastOkAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  singer Singer @relation(fields: [singerId], references: [id], onDelete: Cascade)
+
+  @@index([singerId])
+}
+
+/// What kind of notice somebody has already had about a session.
+enum NoticeKind {
+  /// "You are singing on Thursday" — alerts.
+  rostered
+  /// "The roster for Thursday is up" — silent.
+  published
+}
+
+/// One row per person per session per kind, so nobody is told twice.
+///
+/// Rostering happens in bursts: four rows added one after another must not
+/// produce four notifications. Recording what has been sent means a later
+/// addition notifies only the person newly added, and the quiet
+/// "roster is up" goes out once.
+model SessionNotice {
+  id String @id @default(cuid())
+
+  sessionId String
+  singerId  String
+  kind      NoticeKind
+
+  sentAt DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  singer  Singer  @relation(fields: [singerId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, singerId, kind])
+  @@index([sessionId])
 }

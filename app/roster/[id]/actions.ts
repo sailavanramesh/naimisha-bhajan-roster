@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { rosterBlockReason } from "@/lib/rosterEligibility";
+import { notifyAboutSession } from "@/lib/notifySession";
 import { requireCapability, can } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
@@ -241,6 +242,9 @@ export async function upsertSessionSingerRows(sessionId: string, rows: SingerRow
       await tx.sessionSlot.update({ where: { id: s.id }, data: { position: next } });
     }
   });
+
+  // Saving the grid can be the moment somebody is first rostered.
+  await notifyAboutSession(sessionId);
 
   revalidatePath(`/roster/${sessionId}`);
 }
