@@ -4,7 +4,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 export default async function SingersPage() {
-  const singers = await prisma.singer.findMany({ orderBy: { name: "asc" } });
+  /*
+   * Singers only. Somebody with no recorded voice is a user, not a singer —
+   * a mic operator, or an instrumentalist who does not sing — and listing them
+   * here made a page called Singers answer a different question. They are
+   * managed in Admin, which is where people live.
+   */
+  const singers = await prisma.singer.findMany({
+    where: { gender: { not: null } },
+    orderBy: { name: "asc" },
+  });
   return (
     <div className="grid gap-4">
       <Card>
@@ -14,12 +23,7 @@ export default async function SingersPage() {
             {singers.map((s) => (
               <Link key={s.id} href={`/singers/${s.id}`} className="rounded-[12px] border border-rule-surface bg-panel p-3 hover:bg-panel-hover">
                 <div className="text-sm font-medium">{s.name}</div>
-                {/* Kept in the list — they are a real person with access — but
-                    said plainly, because this page is called Singers and they
-                    cannot be rostered as one. */}
-                <div className="text-xs text-on-surface-muted">
-                  {s.gender ?? "no voice recorded · not rostered as a singer"}
-                </div>
+                <div className="text-xs text-on-surface-muted">{s.gender}</div>
               </Link>
             ))}
           </div>
