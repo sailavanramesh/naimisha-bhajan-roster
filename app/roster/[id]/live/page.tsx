@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { getRole, can } from "@/lib/auth";
 import { LiveBoard, type LiveSlot } from "./LiveBoard";
+import { planTablas } from "@/lib/tablaPlan";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +54,14 @@ export default async function LiveSessionPage({
     );
   }
 
+  /*
+   * The live view now says WHICH TABLA TO TUNE, not the fifth of the shruti.
+   * The fifth was only ever a second-best guess at the answer to this question,
+   * and it is still on the roster page for anyone who wants the working.
+   */
+  const plan = await planTablas(sessionId);
+  const tablaByPosition = new Map(plan.slots.map((p) => [p.position, p]));
+
   const slots: LiveSlot[] = session.slots.map((s) => ({
     position: s.position,
     singerId: s.singerId,
@@ -63,7 +72,8 @@ export default async function LiveSessionPage({
     deities: s.bhajan?.deities.map((d) => d.deity.name) ?? [],
     raga: s.bhajan?.raga?.trim() || null,
     confirmedPitch: s.confirmedPitch,
-    tablaPitch: s.alternativeTablaPitch,
+    tablaPitch: tablaByPosition.get(s.position)?.choice.note ?? null,
+    tablaWhy: tablaByPosition.get(s.position)?.choice.why ?? null,
   }));
 
   const heading = new Intl.DateTimeFormat("en-AU", {

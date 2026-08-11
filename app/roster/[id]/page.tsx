@@ -8,6 +8,8 @@ import { computeRecommendedPitch } from "@/lib/computeRecommendedPitch";
 import { deleteInstrumentRow, updateSessionNotes } from "./actions";
 import { EnableEditForm } from "@/components/EnableEditForm";
 import { getRole, can } from "@/lib/auth";
+import { planTablas } from "@/lib/tablaPlan";
+import { TablaPanel } from "./TablaPanel";
 
 export const dynamic = "force-dynamic";
 export default async function RosterSessionPage({
@@ -42,6 +44,10 @@ export default async function RosterSessionPage({
   if (!session) return <div>Not found</div>;
 
   const sid = session.id;
+
+  // Which drums to bring, above the entries — the first thing the tabla player
+  // needs and the last thing they could work out from a list of shrutis.
+  const tablaPlan = await planTablas(sessionId);
 
   const allSingers = canAssign
     ? await prisma.singer.findMany({ where: { gender: { not: null } }, orderBy: { name: "asc" } })
@@ -100,6 +106,28 @@ export default async function RosterSessionPage({
 
   return (
     <div className="grid gap-4">
+      <TablaPanel
+        sessionId={sessionId}
+        canEdit={can(role, "editConfirmedPitch")}
+        calls={tablaPlan.calls.map((c) => ({
+          note: c.note,
+          forBhajans: c.forBhajans,
+          anyAssumed: c.anyAssumed,
+        }))}
+        slots={tablaPlan.slots.map((sl) => ({
+          position: sl.position,
+          title: sl.title,
+          raga: sl.raga,
+          confirmedPitch: sl.confirmedPitch,
+          sa: sl.sa,
+          note: sl.choice.note,
+          why: sl.choice.why,
+          confidence: sl.choice.confidence,
+          overridden: sl.overridden,
+          alternatives: sl.choice.alternativesIfNone,
+        }))}
+      />
+
       <Card>
         <CardHeader>
           <CardTitle>{dateLabel}</CardTitle>

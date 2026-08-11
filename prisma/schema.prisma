@@ -437,3 +437,40 @@ model MicCushion {
   @@id([sessionId, singerId])
   @@index([sessionId])
 }
+
+
+/// A coordinator's decision about which tabla to tune, overriding the rule.
+///
+/// Keyed on (raga, Sa) because that is what the rule actually depends on: the
+/// degrees available come from the raga's notes, and which of them lands on an
+/// owned drum comes from Sa. Correcting it once therefore fixes every bhajan in
+/// that raga at that pitch, which is what Sailavan asked for — the override
+/// should stick and apply in future.
+///
+/// `raga` is "" for "any raga at this Sa". An empty string rather than NULL so
+/// the unique index actually constrains it; Postgres treats NULLs as distinct.
+///
+/// `note` NULL means "nothing fits, and that is the recorded answer" — a
+/// deliberate decision, distinct from never having been asked.
+model TablaOverride {
+  id String @id @default(cuid())
+
+  /// Lower-cased, "~" stripped, matching lib/ragaScales.ts. "" = any raga.
+  raga String @default("")
+  /// Pitch class of Sa, 0..11.
+  sa Int
+
+  /// Note name, e.g. "C#". Null records "no tabla fits" as a decision.
+  note String?
+
+  /// Why, in the coordinator's words. Shown next to the answer.
+  reason String?
+
+  setByName String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([raga, sa])
+  @@index([sa])
+}

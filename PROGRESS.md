@@ -8,6 +8,57 @@ open uncertainties.
 
 ---
 
+## Tabla tuning (which drum to bring)
+
+The ashram owns tablas in **C, C#, D, E**. The app now says which of them to
+bring and tune, rather than printing Sa + 7 and leaving the player to work out
+whether that drum exists.
+
+**Rule.** Walk the degrees in order, skipping any the raga does not contain,
+and take the first that lands on an owned drum:
+
+    Sa  ->  Pa (5th)  ->  Ma (4th)  ->  3rd (major or minor, as the raga uses it)
+        ->  6th  ->  flat 7th
+
+Sailavan: the fourth beats the third. Raga Desh is the case — its third is
+absent ascending and present descending, and tuning to it "doesn't sound
+right" where the fourth does. Degrees NOT offered at all: the 2nd, the 7th and
+the tritone, which beat against a drone.
+
+**Measured over the 639 sung records:** 96.6% resolve. Sa 49.9%, fifth 27.2%,
+fourth 10.6%, sixth 5.0%, third 2.8%, flat seventh 0.9%; 3.4% have no fit.
+82.5% rest on known raga notes, 14.1% on the assumption that the raga has Sa,
+Pa and Ma — shown as "assumed" on screen rather than passed off as fact.
+
+**Files:** `lib/tabla.ts` (rule, 21 tests), `lib/ragaScales.ts` (seeded note
+sets), `lib/tablaPlan.ts` (overrides + session plan),
+`app/roster/[id]/TablaPanel.tsx`, `tablaActions.ts`. Migration
+`20260811090000_tabla_override`, additive; the Phase 0 gate still passes.
+
+**Decisions and why:**
+- *Overrides are keyed on (raga, Sa), not on the bhajan.* Those two are exactly
+  what the rule consumes, so correcting an answer once corrects it everywhere
+  it would recur. Keying per song would ask a coordinator the same question
+  repeatedly and let the answers drift apart.
+- *Only four tonics ever get past Sa and the fifth:* G#, B, A#, D#. G# and B
+  take the fourth. A# is decided by WHICH third the raga uses — komal Ga gives
+  C#, shuddha Ga gives D, and the ashram owns both. D# is rescued only by the
+  sixth or the flat seventh.
+- *An unknown raga is not guessed at.* It falls back to Sa/Pa/Ma and is
+  labelled assumed. That is wrong for Malkauns (no Pa) and Kalyani (sharp
+  fourth), which is exactly why it says so.
+
+**Known limits — REVIEW THESE:**
+- `lib/ragaScales.ts` was seeded by Claude from standard melakarta/thaat theory,
+  NOT supplied by the centre. Kalyana Vasantham in particular looks doubtful.
+  Anything wrong there is correctable in place, and any single answer can be
+  overridden from the roster page.
+- Ragas still missing that appeared in the history: Khamas, Hamir Kalyani /
+  Kedar. Adding them would resolve 6 of the 22 remaining no-fit records.
+- The roster grid still shows the old Sa+7 "Tabla" column. It is the historical
+  record, so it stays; the panel above is the prescriptive answer.
+
+
 ## Singer-first assignment (assign page)
 
 Pick a person, then choose what they sing — the reverse of the fairness

@@ -15,6 +15,7 @@ export type LiveSlot = {
   raga: string | null;
   confirmedPitch: string | null;
   tablaPitch: string | null;
+  tablaWhy?: string | null;
 };
 
 export type LiveInstrument = { instrument: string; person: string | null };
@@ -203,8 +204,14 @@ export function LiveBoard({
                     className="w-full whitespace-nowrap rounded-[10px] border border-rule-surface bg-field/60 px-3 py-0.5 text-center leading-none text-on-surface-muted"
                     style={fill.tabla}
                   >
+                    {/* The drum to tune, not the fifth of the shruti. */}
                     <span className="text-[0.6em] uppercase tracking-wide">tabla</span>{" "}
                     <span className="font-mono text-on-surface">{s.tablaPitch ?? "—"}</span>
+                    {s.tablaPitch ? null : (
+                      <span className="ml-1 text-[0.55em] uppercase tracking-wide text-warn">
+                        none fits
+                      </span>
+                    )}
                   </div>
 
                   {/* Singer, bottom right. */}
