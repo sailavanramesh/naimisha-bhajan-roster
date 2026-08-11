@@ -240,9 +240,13 @@ export default async function RosterSessionPage({
                 Roster
               </Link>
 
-              <Link href={`/roster/${sessionId}/assign`} className={PILL}>
-                Assign
-              </Link>
+              {/* Editors only — members cannot assign singers, so the link
+                  would lead them to a refusal. */}
+              {canAssign ? (
+                <Link href={`/roster/${sessionId}/assign`} className={PILL}>
+                  Assign
+                </Link>
+              ) : null}
 
               {/* Step through the sessions in date order. */}
               {previousSession ? (
