@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { requireCapability } from "@/lib/auth";
+import { requireCapability, normaliseEmail } from "@/lib/auth";
 import { RepertoireKind } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -128,7 +128,8 @@ export async function setSingerAccess(formData: FormData): Promise<void> {
     role: String(formData.get("role") ?? "singer"),
   });
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Could not save access.");
-  const { singerId, email, role } = parsed.data;
+  const { singerId, role } = parsed.data;
+  const email = normaliseEmail(parsed.data.email);
 
   if (email) {
     const taken = await prisma.singer.findFirst({
@@ -142,7 +143,7 @@ export async function setSingerAccess(formData: FormData): Promise<void> {
 
   await prisma.singer.update({
     where: { id: singerId },
-    data: { email: email || null, role: role as "coordinator" | "singer" },
+    data: { email, role: role as "coordinator" | "singer" },
   });
 
   revalidatePath("/admin");
@@ -192,7 +193,8 @@ export async function addSinger(
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Could not add that person." };
   }
-  const { name, email, gender, role } = parsed.data;
+  const { name, gender, role } = parsed.data;
+  const email = normaliseEmail(parsed.data.email);
 
   const clash = await prisma.singer.findFirst({
     where: { OR: [{ name }, ...(email ? [{ email }] : [])] },
@@ -210,7 +212,7 @@ export async function addSinger(
   await prisma.singer.create({
     data: {
       name,
-      email: email || null,
+      email,
       gender: gender ? (gender as "Gents" | "Ladies") : null,
       role,
     },

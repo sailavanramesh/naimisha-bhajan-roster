@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { normaliseEmail } from "./email";
 import { prisma } from "@/lib/db";
 import { auth, googleSignInConfigured } from "@/lib/authConfig";
 
@@ -107,7 +108,7 @@ export async function getSignedInSinger(): Promise<{
 } | null> {
   if (!googleSignInConfigured) return null;
   const session = await auth().catch(() => null);
-  const email = session?.user?.email;
+  const email = normaliseEmail(session?.user?.email);
   if (!email) return null;
 
   const singer = await prisma.singer.findUnique({
@@ -153,3 +154,5 @@ export async function requireCapability(capability: Capability): Promise<Role> {
   }
   return role;
 }
+
+export { normaliseEmail };
