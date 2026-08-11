@@ -71,7 +71,7 @@ export function Nav({ role = "viewer" }: { role?: string }) {
   // the server, so a hidden page is not merely un-clicked — the page itself
   // also checks.
   const visible =
-    role === "editor"
+    role === "editor" || role === "owner"
       ? ITEMS
       : // No Dashboard for a member: it is a coordinator's overview — session
         // counts, fairness loads, what needs building — and none of it is a

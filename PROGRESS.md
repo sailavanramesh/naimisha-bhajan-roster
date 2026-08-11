@@ -783,6 +783,37 @@ as an App Service setting. Without them the workflow exits 0 doing nothing and
 the endpoint answers 503 — an unauthenticated route that can push to
 everyone's phone is not something to leave open by default.
 
+**The hours are configurable, and there is now an Owner.** Added 2026-08-12,
+after: *"in case there are sometimes morning sessions he can reconfigure the
+rules for certain days/sessions… the majority of sessions are PM, but sometimes
+they can be AM."*
+
+`Role` gained `owner` — an editor plus one capability, `manageNotificationRules`.
+Running the roster and deciding when a dozen phones buzz are different kinds of
+power, so it did not go to every editor. Sailavan holds it; nobody else does.
+Set it from Admin → the access dropdown.
+
+`NotificationRule` resolves most-specific-first: this session, then its weekday,
+then the default (3pm/5pm, unchanged). A scope that is present and DISABLED
+stops resolution rather than falling through — switching Sundays off has to mean
+off, which is why `enabled` is a column and not just the row's absence.
+Admin → Notifications, owner only.
+
+Watch out for two things that bit during this change:
+
+- `canSeePage` read `role === "editor"`, which locked owners out of every page
+  an editor can see. It is keyed off `viewAllPages` now. Same fix in Nav and
+  middleware. This is the failure that adding a role ABOVE editor invites, and
+  `tests/ownerRole.test.ts` pins it.
+- The capability matrix moved to `lib/capabilities.ts` because `lib/auth.ts`
+  imports next-auth at module load, which cannot run under vitest — the one
+  part of authorisation worth testing had no tests. `lib/auth.ts` re-exports
+  everything, so nothing else changed.
+
+Notification copy is time-aware now: "this morning" before 11, "today" before
+3pm, "tonight" after. A 7am reminder saying "tonight" is the kind of small
+wrongness that makes people stop reading them.
+
 **Not repeated.** `SessionNotice` already existed with a unique key on
 (session, singer, kind); the two new enum values reuse it, so the once-each
 guarantee came for free with no new table. A notice is written even when the

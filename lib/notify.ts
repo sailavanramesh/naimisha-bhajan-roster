@@ -157,25 +157,32 @@ export function nudgeNotification(input: {
   bhajanTitle?: string | null;
   confirmedPitch?: string | null;
   final?: boolean;
+  /**
+   * The hour the reminder is being sent at, so the message can say when the
+   * session is. Most are in the evening, but some are mornings, and "tonight"
+   * on a 7am reminder for a 9am session is simply wrong — see lib/nudgeRules.
+   */
+  atHour?: number;
 }): Notification {
   const wantsBhajan = input.missing.includes("bhajan");
   const wantsPitch = input.missing.includes("pitch");
+  const when = whenWord(input.atHour);
 
   let body: string;
   if (wantsBhajan && wantsPitch) {
-    body = "You are singing tonight. Choose your bhajan and confirm your pitch.";
+    body = `You are singing ${when}. Choose your bhajan and confirm your pitch.`;
   } else if (wantsPitch) {
     body = input.bhajanTitle
-      ? `You are singing ${input.bhajanTitle} tonight. Confirm the pitch so the tabla can be tuned.`
-      : "You are singing tonight. Confirm your pitch so the tabla can be tuned.";
+      ? `You are singing ${input.bhajanTitle} ${when}. Confirm the pitch so the tabla can be tuned.`
+      : `You are singing ${when}. Confirm your pitch so the tabla can be tuned.`;
   } else {
     body = input.confirmedPitch
-      ? `You are singing tonight at ${input.confirmedPitch}. Which bhajan?`
-      : "You are singing tonight. Which bhajan?";
+      ? `You are singing ${when} at ${input.confirmedPitch}. Which bhajan?`
+      : `You are singing ${when}. Which bhajan?`;
   }
 
   return {
-    title: input.final ? "Last reminder — tonight" : "Your bhajan for tonight",
+    title: input.final ? `Last reminder — ${when}` : `Your bhajan for ${when}`,
     body,
     url: `/roster/${input.sessionId}`,
     // Deliberately one tag for both, so the 5pm one REPLACES the 3pm one in
@@ -186,7 +193,21 @@ export function nudgeNotification(input: {
   };
 }
 
-/** 3pm, then 5pm. Melbourne hours. */
+/**
+ * "this morning", "today", "tonight" — from the hour the reminder goes out.
+ *
+ * A reminder sent at 7am is for a session later that morning; one sent at 3pm
+ * is for the evening. Anything in between is "today", which is true whichever
+ * it turns out to be.
+ */
+function whenWord(atHour?: number): string {
+  if (atHour === undefined) return "tonight";
+  if (atHour < 11) return "this morning";
+  if (atHour < 15) return "today";
+  return "tonight";
+}
+
+/** 3pm, then 5pm. Melbourne hours. The fallback — see lib/nudgeRules.ts. */
 export const NUDGE_HOUR = 15;
 export const NUDGE_FINAL_HOUR = 17;
 /**

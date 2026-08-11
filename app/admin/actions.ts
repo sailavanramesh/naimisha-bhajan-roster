@@ -109,7 +109,7 @@ const SingerAccess = z.object({
     .trim()
     .transform((v) => v.toLowerCase())
     .refine((v) => v === "" || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), "That is not an email address"),
-  role: z.enum(["coordinator", "singer"]),
+  role: z.enum(["owner", "coordinator", "singer"]),
 });
 
 /**
@@ -153,7 +153,7 @@ const NewSinger = z.object({
   name: z.string().trim().min(1, "a name is needed").max(80),
   email: z.string().trim().email("that is not an email address").or(z.literal("")),
   gender: z.enum(["Gents", "Ladies", ""]),
-  role: z.enum(["coordinator", "singer"]),
+  role: z.enum(["owner", "coordinator", "singer"]),
 });
 
 /**

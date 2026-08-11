@@ -115,7 +115,7 @@ export function middleware(req: NextRequest) {
 
   res.cookies.set("role", role, options);
   // Kept so anything still reading `edit` keeps working during the transition.
-  if (role === "editor") res.cookies.set("edit", "1", options);
+  if (role === "editor" || role === "owner") res.cookies.set("edit", "1", options);
   else res.cookies.set("edit", "", { ...options, maxAge: 0 });
 
   return res;
