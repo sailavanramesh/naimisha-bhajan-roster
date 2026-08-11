@@ -71,19 +71,27 @@ export function LiveBoard({
    */
   const fill = roomy
     ? {
-        title: { fontSize: "clamp(22px, 5.2vmin, 52px)" },
-        pitch: { fontSize: "clamp(22px, 5.4vmin, 54px)" },
-        singer: { fontSize: "clamp(15px, 2.6vmin, 28px)" },
-        // Deliberately well under the pitch: the tabla player needs to read it
-        // across a hall, but it must never be mistaken for the shruti at a
-        // glance. Roughly two thirds.
-        tabla: { fontSize: "clamp(14px, 3.4vmin, 34px)" },
-        raga: { fontSize: "clamp(13px, 2.4vmin, 26px)" },
+        title: { fontSize: "clamp(20px, 4.4vmin, 44px)" },
+        // A clear step down at each level, in reading order: pitch, raga,
+        // tabla. Sized so the widest label, "1.5 Madhyam / F#", still sits on
+        // one line in the full-width box — a wrapped shruti is a misread.
+        pitch: { fontSize: "clamp(20px, 4.8vmin, 48px)" },
+        raga: { fontSize: "clamp(15px, 3.4vmin, 34px)" },
+        tabla: { fontSize: "clamp(13px, 2.8vmin, 28px)" },
+        singer: { fontSize: "clamp(14px, 2.4vmin, 24px)" },
       }
     : { title: undefined, pitch: undefined, singer: undefined, tabla: undefined, raga: undefined };
 
   return (
-    <div className="fixed inset-0 z-[100] flex overflow-hidden bg-ground text-on-ground">
+    /*
+      h-[100dvh] as well as inset-0. On Chrome for Android the address bar
+      hides and shows as you scroll and the layout viewport changes underneath
+      a position:fixed element, so the board could sit misaligned against the
+      screen — Safari on iPhone happened not to show it. dvh tracks the visible
+      viewport, and overscroll-none stops the pull-to-refresh rubber band
+      dragging the whole board with it.
+    */
+    <div className="fixed inset-0 z-[100] flex h-[100dvh] overflow-hidden overscroll-none bg-ground text-on-ground">
       {/*
         The date as a vertical rail. It has to stay on screen — you need to
         know which session you are looking at — but horizontally it was
@@ -129,8 +137,17 @@ export function LiveBoard({
             return (
               <li
                 key={s.position}
-                className={`flex flex-col justify-center rounded-[14px] border border-card-edge bg-surface p-4 sm:p-5 ${
-                  roomy ? "min-h-[104px] flex-1" : ""
+                /*
+                  min-h-fit matters more than flex-1 does. A card may GROW to
+                  share the screen, but it must never shrink below its own
+                  content: stacked, a card is a title plus three boxes plus the
+                  singer, and three of those do not fit in a phone's 390px of
+                  landscape height. Without this the boxes were clipped rather
+                  than the list scrolling, which is the wrong failure — better
+                  to scroll than to hide the pitch.
+                */
+                className={`flex flex-col justify-center rounded-[14px] border border-card-edge bg-surface p-3 sm:p-4 ${
+                  roomy ? "min-h-fit flex-1" : ""
                 }`}
                 style={
                   tint ? { background: tint.row, boxShadow: `inset 5px 0 0 0 ${tint.edge}` } : undefined
@@ -138,88 +155,64 @@ export function LiveBoard({
                 title={dot ? `${dot.label} mic cushion` : undefined}
               >
                 {/*
-                  Row when the screen is landscape, stacked when it is portrait
-                  — orientation, not width.
-                  
-                  Width alone got this wrong in both directions. Side by side
-                  from a width breakpoint squeezed the title into a ~160px
-                  column on a portrait tablet, because the pitch box does not
-                  shrink; stacking below that breakpoint then broke a phone held
-                  sideways, where three cards share 390px of height and there is
-                  no room to put the pitch under the title. Stacking needs
-                  vertical room and a row needs horizontal room, which is what
-                  the aspect ratio actually tells us.
+                  One column, every screen. This used to switch between a row
+                  and a stack on the viewport's aspect ratio, which was where
+                  Chrome on Android disagreed with Safari on iPhone: the two
+                  report different viewport heights as the address bar hides
+                  and shows, so the same phone could land either side of the
+                  1/1 boundary and the card would rearrange under you. A single
+                  column cannot disagree with itself.
                 */}
-                <div className="flex flex-col gap-3 [@media(min-aspect-ratio:1/1)]:flex-row [@media(min-aspect-ratio:1/1)]:items-center [@media(min-aspect-ratio:1/1)]:justify-between [@media(min-aspect-ratio:1/1)]:gap-6">
-                  <div className="min-w-0 flex-1">
-                    {/* Bhajan — the biggest thing on the row, as asked. */}
-                    <div className="flex items-center gap-2.5">
-                      <span className="shrink-0 font-mono text-sm text-on-surface-muted">
-                        {s.position}
-                      </span>
-                      <DeitySymbols deities={s.deities} size={22} />
-                      <h2
-                        className="min-w-0 break-words font-display text-2xl font-semibold leading-tight sm:text-[28px]"
-                        style={fill.title}
-                      >
-                        {s.bhajanTitle}
-                      </h2>
-                    </div>
-
-                    <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 pl-1">
-                      <span className="text-lg font-medium sm:text-xl" style={fill.singer}>
-                        {s.singerName}
-                      </span>
-                      {/* Raga sits with the cushion rather than with the title:
-                          both are things you glance at, where the title and the
-                          pitch are things you read. */}
-                      {/*
-                        No "Blue mic" chip. The card is already washed in the
-                        cushion colour, which says the same thing without
-                        spending a line on it. Kept for anyone who cannot use
-                        the colour: the card carries it as a tooltip and as
-                        screen-reader text, so removing the visible label loses
-                        nothing but the clutter.
-                      */}
-                      {dot ? <span className="sr-only">{dot.label} mic cushion</span> : null}
-                    </div>
+                <div className="flex min-w-0 flex-col gap-1.5">
+                  {/* Bhajan — unchanged, still the headline. */}
+                  <div className="flex items-center gap-2.5">
+                    <span className="shrink-0 font-mono text-sm text-on-surface-muted">
+                      {s.position}
+                    </span>
+                    <DeitySymbols deities={s.deities} size={22} />
+                    <h2
+                      className="min-w-0 break-words font-display text-2xl font-semibold leading-tight sm:text-[28px]"
+                      style={fill.title}
+                    >
+                      {s.bhajanTitle}
+                    </h2>
                   </div>
 
-                  {/* Confirmed pitch — the other thing that has to read from a
-                      distance. Tabla sits under it, quietly. */}
-                  <div className="flex shrink-0 items-end gap-4 [@media(min-aspect-ratio:1/1)]:flex-col [@media(min-aspect-ratio:1/1)]:items-end [@media(min-aspect-ratio:1/1)]:gap-1">
-                    <div
-                      className="rounded-[12px] border-2 border-brass/45 bg-field px-3 py-1.5 font-mono text-2xl font-semibold leading-none sm:text-[30px]"
-                      style={fill.pitch}
-                    >
-                      {s.confirmedPitch ?? "—"}
-                    </div>
-                    <div className="flex flex-col items-end gap-0.5">
-                      {/*
-                        Raga belongs with the pitch, not with the singer:
-                        whoever is on harmonium reads them together.
+                  {/*
+                    Pitch, then raga, then tabla — each in its own box, each a
+                    step smaller, in the order they are read. Full width so the
+                    pitch never wraps: "1.5 Madhyam / F#" on two lines is a
+                    misread waiting to happen.
+                  */}
+                  <div
+                    className="w-full whitespace-nowrap rounded-[12px] border-2 border-brass/45 bg-field px-3 py-1 text-center font-mono text-2xl font-semibold leading-none sm:text-[30px]"
+                    style={fill.pitch}
+                  >
+                    {s.confirmedPitch ?? "—"}
+                  </div>
 
-                        Width-capped and wrapping on purpose. This column does
-                        not shrink, and raga names are often dual —
-                        "Shankarabharanam / Bilawal" — so an uncapped one would
-                        widen the column and squeeze the title back into a
-                        one-word-per-line stack, which is the failure this
-                        layout was just fixed for.
-                      */}
-                      {s.raga ? (
-                        <span
-                          className="max-w-[18ch] break-words text-right text-base italic leading-tight text-on-surface-muted"
-                          style={fill.raga}
-                          title={`Raga ${s.raga}`}
-                        >
-                          {s.raga}
-                        </span>
-                      ) : null}
-                      <div className="text-base text-on-surface-muted" style={fill.tabla}>
-                        <span className="text-[0.62em] uppercase tracking-wide">tabla</span>{" "}
-                        <span className="font-mono">{s.tablaPitch ?? "—"}</span>
-                      </div>
-                    </div>
+                  <div
+                    className="w-full truncate rounded-[10px] border border-rule-surface bg-field/60 px-3 py-0.5 text-center italic leading-tight text-on-surface"
+                    style={fill.raga}
+                    title={s.raga ? `Raga ${s.raga}` : undefined}
+                  >
+                    {s.raga ?? "raga not recorded"}
+                  </div>
+
+                  <div
+                    className="w-full whitespace-nowrap rounded-[10px] border border-rule-surface bg-field/60 px-3 py-0.5 text-center leading-none text-on-surface-muted"
+                    style={fill.tabla}
+                  >
+                    <span className="text-[0.6em] uppercase tracking-wide">tabla</span>{" "}
+                    <span className="font-mono text-on-surface">{s.tablaPitch ?? "—"}</span>
+                  </div>
+
+                  {/* Singer, bottom right. */}
+                  <div className="flex justify-end">
+                    <span className="font-medium" style={fill.singer}>
+                      {s.singerName}
+                    </span>
+                    {dot ? <span className="sr-only">{dot.label} mic cushion</span> : null}
                   </div>
                 </div>
               </li>
