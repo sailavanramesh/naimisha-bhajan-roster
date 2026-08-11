@@ -57,17 +57,23 @@ export function LiveBoard({
   const roomy = slots.length > 0 && slots.length <= 4;
 
   /*
-   * Type scales with the viewport HEIGHT, not with the slot count, so a
-   * three-bhajan session genuinely fills a laptop screen while the same three
-   * on a phone held sideways — 390px tall — stay readable instead of
-   * overflowing. clamp() does this without a resize listener, and the floors
+   * Type scales with the viewport, not with the slot count, so a three-bhajan
+   * session genuinely fills a laptop screen while the same three on a phone
+   * stay readable. clamp() does this without a resize listener, and the floors
    * are the sizes used when the list is long enough to scroll.
+   *
+   * vmin, NOT vh. Scaling off height alone ignored how narrow the column is:
+   * on a phone held upright, 390x844, 6vh came to a 50px title inside a 390px
+   * card, so every title wrapped to four lines and the cards overlapped. vmin
+   * follows whichever dimension is scarcer, which is the one that decides
+   * whether the text fits. Landscape and desktop are unaffected — their
+   * smaller dimension is the height that was already being used.
    */
   const fill = roomy
     ? {
-        title: { fontSize: "clamp(22px, 6vh, 56px)" },
-        pitch: { fontSize: "clamp(22px, 6.2vh, 58px)" },
-        singer: { fontSize: "clamp(15px, 3vh, 30px)" },
+        title: { fontSize: "clamp(22px, 5.2vmin, 52px)" },
+        pitch: { fontSize: "clamp(22px, 5.4vmin, 54px)" },
+        singer: { fontSize: "clamp(15px, 2.6vmin, 28px)" },
       }
     : { title: undefined, pitch: undefined, singer: undefined };
 
@@ -94,7 +100,14 @@ export function LiveBoard({
         <div className="flex min-h-0 flex-1 items-center py-3">
           <p className="[writing-mode:vertical-rl] rotate-180 whitespace-nowrap text-xs font-semibold tracking-wide">
             {heading}
-            <span className="ml-3 font-normal text-on-ground-muted">{subheading}</span>
+            {/*
+              A LOGICAL margin, not ml-3. In writing-mode: vertical-rl the
+              inline axis runs top to bottom, so margin-left pushes along the
+              block axis and produced no gap at all — the date and the count
+              ran together as "…20263 bhajans". margin-inline-start follows the
+              text direction whichever way it is flowing.
+            */}
+            <span className="ms-3 font-normal text-on-ground-muted">{subheading}</span>
           </p>
         </div>
 
@@ -118,7 +131,20 @@ export function LiveBoard({
                   tint ? { background: tint.row, boxShadow: `inset 5px 0 0 0 ${tint.edge}` } : undefined
                 }
               >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+                {/*
+                  Row when the screen is landscape, stacked when it is portrait
+                  — orientation, not width.
+                  
+                  Width alone got this wrong in both directions. Side by side
+                  from a width breakpoint squeezed the title into a ~160px
+                  column on a portrait tablet, because the pitch box does not
+                  shrink; stacking below that breakpoint then broke a phone held
+                  sideways, where three cards share 390px of height and there is
+                  no room to put the pitch under the title. Stacking needs
+                  vertical room and a row needs horizontal room, which is what
+                  the aspect ratio actually tells us.
+                */}
+                <div className="flex flex-col gap-3 [@media(min-aspect-ratio:1/1)]:flex-row [@media(min-aspect-ratio:1/1)]:items-center [@media(min-aspect-ratio:1/1)]:justify-between [@media(min-aspect-ratio:1/1)]:gap-6">
                   <div className="min-w-0 flex-1">
                     {/* Bhajan — the biggest thing on the row, as asked. */}
                     <div className="flex items-center gap-2.5">
@@ -164,7 +190,7 @@ export function LiveBoard({
 
                   {/* Confirmed pitch — the other thing that has to read from a
                       distance. Tabla sits under it, quietly. */}
-                  <div className="flex shrink-0 items-end gap-4 sm:flex-col sm:items-end sm:gap-1">
+                  <div className="flex shrink-0 items-end gap-4 [@media(min-aspect-ratio:1/1)]:flex-col [@media(min-aspect-ratio:1/1)]:items-end [@media(min-aspect-ratio:1/1)]:gap-1">
                     <div
                       className="rounded-[12px] border-2 border-brass/45 bg-field px-3 py-1.5 font-mono text-2xl font-semibold leading-none sm:text-[30px]"
                       style={fill.pitch}
