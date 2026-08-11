@@ -206,3 +206,36 @@ export async function removeSingerSlot(formData: FormData): Promise<void> {
   revalidatePath(`/roster/${sessionId}/assign`);
   redirect(`/roster/${sessionId}/assign?removed=${encodeURIComponent(slot.singer?.name ?? "")}`);
 }
+
+const GoToDate = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "pick a date"),
+});
+
+/**
+ * Point the panel at a different day, creating that session if it does not
+ * exist yet.
+ *
+ * Rostering starts from "who is around on Thursday", not from a session id, so
+ * the date belongs in the panel rather than being fixed by whichever URL you
+ * happened to arrive through. Creating on demand matches the calendar, where
+ * tapping an empty day in edit mode also creates one.
+ *
+ * Sessions are Melbourne calendar dates, so the date is parsed as a plain UTC
+ * midnight rather than through a local timezone that could shift it a day.
+ */
+export async function goToSessionForDate(formData: FormData): Promise<void> {
+  await requireCapability("buildSessions");
+
+  const parsed = GoToDate.safeParse({ date: String(formData.get("date") ?? "") });
+  if (!parsed.success) {
+    throw new Error(`Could not switch date: ${parsed.error.issues[0]?.message ?? "invalid date"}`);
+  }
+  const day = new Date(`${parsed.data.date}T00:00:00.000Z`);
+
+  const existing = await prisma.session.findUnique({ where: { date: day }, select: { id: true } });
+  const session =
+    existing ?? (await prisma.session.create({ data: { date: day }, select: { id: true } }));
+
+  revalidatePath(`/roster/${session.id}/assign`);
+  redirect(`/roster/${session.id}/assign`);
+}

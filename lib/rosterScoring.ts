@@ -45,6 +45,15 @@ export type SingerContext = {
 
 export type SlotContext = {
   position: number;
+  /**
+   * Who is already rostered on this slot, if anybody.
+   *
+   * The assigner used not to be told this, so it proposed a fresh singer for
+   * every slot — including ones somebody had just deliberately filled. The
+   * page treats an existing assignment as a pin, so the proposal completes a
+   * session rather than competing with it.
+   */
+  assignedSingerId?: string | null;
   bhajanId: string | null;
   bhajanTitle: string | null;
   raga: string | null;
