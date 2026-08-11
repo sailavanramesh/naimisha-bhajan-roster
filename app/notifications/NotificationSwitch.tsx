@@ -127,10 +127,16 @@ export function NotificationSwitch({ vapidKey, signedIn }: { vapidKey: string; s
       setMessage("Off for this device.");
     });
 
-  const test = () =>
+  const test = (kind: "rostered" | "published") =>
     startTransition(async () => {
-      const res = await sendTestNotification();
-      setMessage(res.ok ? `Sent to ${res.sent} device${res.sent === 1 ? "" : "s"}.` : res.error);
+      const res = await sendTestNotification(kind);
+      setMessage(
+        res.ok
+          ? kind === "rostered"
+            ? "Sent — it should make a sound."
+            : "Sent — it should arrive silently."
+          : res.error,
+      );
     });
 
   if (state === "checking") {
@@ -194,8 +200,23 @@ export function NotificationSwitch({ vapidKey, signedIn }: { vapidKey: string; s
             <span className="inline-flex h-9 items-center rounded-full border border-brass/45 bg-brass/[0.10] px-3 text-sm font-semibold">
               On for this device
             </span>
-            <Button type="button" className="h-9 text-xs" onClick={test} disabled={pending}>
-              Send a test
+            {/* Both kinds, because the difference between them — buzz versus
+                no buzz — is the thing worth checking on a real phone. */}
+            <Button
+              type="button"
+              className="h-9 text-xs"
+              onClick={() => test("rostered")}
+              disabled={pending}
+            >
+              Test the alert
+            </Button>
+            <Button
+              type="button"
+              className="h-9 text-xs"
+              onClick={() => test("published")}
+              disabled={pending}
+            >
+              Test the quiet one
             </Button>
             <Button type="button" className="h-9 text-xs" onClick={turnOff} disabled={pending}>
               Turn off
