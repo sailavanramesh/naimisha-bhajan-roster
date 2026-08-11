@@ -16,6 +16,7 @@ import { googleSignInConfigured } from "@/lib/authConfig";
 
 import { getRole, can } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
+import { AddPersonForm } from "./AddPersonForm";
 
 export const dynamic = "force-dynamic";
 
@@ -110,6 +111,15 @@ export default async function AdminPage({
           </div>
         </CardHeader>
         <CardContent className="grid gap-2">
+          {/*
+            Adding somebody was the missing half of this panel: it could edit
+            who was already here but not put a new person on, so a new tester
+            needed a database change. Access hangs off Singer, so a person who
+            only ever reads the roster still needs a row — there is no separate
+            user table, by design.
+          */}
+          {canEdit ? <AddPersonForm /> : null}
+
           {singers.map((s) => (
             <form
               key={s.id}
