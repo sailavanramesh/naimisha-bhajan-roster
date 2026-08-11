@@ -146,5 +146,12 @@ export async function addSingerSlot(formData: FormData): Promise<void> {
 
   revalidatePath(`/roster/${sessionId}`);
   revalidatePath(`/roster/${sessionId}/assign`);
-  redirect(`/roster/${sessionId}`);
+  /*
+   * Back to the assign page, not to the roster. Rostering is a run of
+   * decisions — you add three or four people in a sitting — and bouncing to
+   * the roster after each one made it a one-shot flow that had to be navigated
+   * back into every time. `added` is echoed so the page can confirm who landed
+   * without the coordinator having to scan the list for them.
+   */
+  redirect(`/roster/${sessionId}/assign?added=${encodeURIComponent(singerId)}`);
 }
