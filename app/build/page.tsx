@@ -215,7 +215,7 @@ export default async function BuildPage({
   const chosenIds = result.slots.map((s) => s.candidate.id);
   const [singersByBhajan, allSingers] = await Promise.all([
     getSingersForBhajans(chosenIds),
-    prisma.singer.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true, gender: true } }),
+    prisma.singer.findMany({ where: { gender: { not: null } }, orderBy: { name: "asc" }, select: { id: true, name: true, gender: true } }),
   ]);
 
   return (

@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
+import { rosterBlockReason } from "@/lib/rosterEligibility";
 import { requireCapability, can } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
@@ -140,6 +141,23 @@ export async function upsertSessionSingerRows(sessionId: string, rows: SingerRow
      * written. Refusing is the right trade — a save you have to redo is a
      * nuisance, a pitch quietly lost is not recoverable.
      */
+    /*
+     * Nobody without a recorded voice may hold a slot. The grid's dropdown is
+     * already filtered, but a stale tab could post an id that has since become
+     * ineligible, and hiding a control is not a rule.
+     */
+    const proposedSingerIds = [...new Set(rows.map((r) => r.singerId).filter(Boolean))] as string[];
+    if (proposedSingerIds.length > 0) {
+      const proposed = await tx.singer.findMany({
+        where: { id: { in: proposedSingerIds } },
+        select: { name: true, gender: true },
+      });
+      for (const p of proposed) {
+        const reason = rosterBlockReason(p);
+        if (reason) throw new Error(reason);
+      }
+    }
+
     const stamped = rows.filter(
       (r) => r.id && !String(r.id).startsWith("new_") && r.updatedAt,
     );

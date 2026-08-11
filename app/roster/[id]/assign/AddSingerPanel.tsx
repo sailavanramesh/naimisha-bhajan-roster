@@ -109,6 +109,20 @@ export function AddSingerPanel({
         // Pull the updated server render in the same transition, so the list
         // and the spinner change together rather than in two steps.
         router.refresh();
+      } catch (e) {
+        /*
+         * Show what the server said. A Server Action that throws takes the
+         * whole panel down through the error boundary — a refusal to roster
+         * somebody with no recorded voice wiped the lineup off the screen
+         * instead of explaining itself. The optimistic entry disappears on its
+         * own when the transition unwinds, so the list corrects itself.
+         */
+        setNotice(
+          e instanceof Error && e.message
+            ? e.message
+            : "That did not save. Reload the page and try again.",
+        );
+        router.refresh();
       } finally {
         setBusy(null);
       }
@@ -120,12 +134,16 @@ export function AddSingerPanel({
       applyOptimistic({ type: "add", name });
       setJustAdded(name);
       setNotice(null);
-      await addSingerSlot({
+      const res = await addSingerSlot({
         sessionId,
         singerId,
         bhajanId: bhajanId ?? null,
         confirmedPitch: confirmedPitch ?? null,
       });
+      if (!res.ok) {
+        setNotice(res.error);
+        setJustAdded(null);
+      }
     });
 
   const remove = (slotId: string) => {

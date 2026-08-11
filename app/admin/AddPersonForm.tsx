@@ -63,8 +63,10 @@ export function AddPersonForm() {
           {pending ? "Adding…" : "Add person"}
         </Button>
         <p className="text-xs text-on-surface-muted sm:col-span-5">
-          Leave the address blank for somebody who sings but does not need to sign in. Voice
-          can be left unrecorded — it only affects which reference pitch applies.
+          Leave the address blank for somebody who sings but does not need to sign in.{" "}
+          <strong>Leave the voice unrecorded for somebody who is not a singer</strong> — they
+          can sign in and read the roster, but cannot be put on a session, because the
+          recommended pitch is defined per voice.
         </p>
       </form>
 

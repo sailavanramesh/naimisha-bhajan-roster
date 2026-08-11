@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth";
+import { rosterBlockReason } from "@/lib/rosterEligibility";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -36,6 +37,17 @@ export async function applyAssignments(formData: FormData): Promise<void> {
     throw new Error(`Could not apply: ${parsed.error.issues[0]?.message ?? "invalid input"}`);
   }
   const { sessionId, assignments } = parsed.data;
+
+  // Same rule for the fairness pass: it proposes from a filtered list, but a
+  // stale form could still post somebody who has since lost their voice field.
+  const proposed = await prisma.singer.findMany({
+    where: { id: { in: assignments.map((a) => a.singerId) } },
+    select: { name: true, gender: true },
+  });
+  for (const p of proposed) {
+    const reason = rosterBlockReason(p);
+    if (reason) throw new Error(reason);
+  }
 
   await prisma.$transaction(async (tx) => {
     for (const a of assignments) {
@@ -111,7 +123,7 @@ export async function addSingerSlot(input: {
   singerId: string;
   bhajanId?: string | null;
   confirmedPitch?: string | null;
-}): Promise<{ ok: true }> {
+}): Promise<{ ok: true } | { ok: false; error: string }> {
   await requireCapability("assignSingers");
 
   const parsed = AddSlot.safeParse({
@@ -121,9 +133,29 @@ export async function addSingerSlot(input: {
     confirmedPitch: input.confirmedPitch ?? null,
   });
   if (!parsed.success) {
-    throw new Error(`Could not add the singer: ${parsed.error.issues[0]?.message ?? "invalid input"}`);
+    return { ok: false, error: `Could not add the singer: ${parsed.error.issues[0]?.message ?? "invalid input"}` };
   }
   const { sessionId, singerId, bhajanId, confirmedPitch } = parsed.data;
+
+  /*
+   * Somebody with no voice recorded is not a singer and cannot hold a slot:
+   * the recommended pitch IS the bhajan's reference for their voice, so
+   * without one there is no recommendation and no offset profile. Enforced
+   * here, not only by hiding them in the picker — a hidden control is not a
+   * rule.
+   */
+  const singer = await prisma.singer.findUnique({
+    where: { id: singerId },
+    select: { name: true, gender: true },
+  });
+  /*
+   * Returned, not thrown. Next strips a Server Action's error message in
+   * production — the client gets an opaque digest — so a thrown refusal
+   * reached the coordinator as a blank failure. The whole point of this
+   * message is that it says which person and what to do about it.
+   */
+  const blocked = rosterBlockReason(singer);
+  if (blocked) return { ok: false, error: blocked };
 
   await prisma.$transaction(async (tx) => {
     const last = await tx.sessionSlot.findFirst({
