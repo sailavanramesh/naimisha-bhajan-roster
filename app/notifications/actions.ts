@@ -53,22 +53,32 @@ export async function removeSubscription(endpoint: string): Promise<{ ok: true }
   return { ok: true };
 }
 
-/** Send a test push to the signed-in person's own devices. */
-export async function sendTestNotification(): Promise<
-  { ok: true; sent: number } | { ok: false; error: string }
-> {
+/**
+ * Send a test push to the signed-in person's own devices.
+ *
+ * Both kinds can be sent, because the two behave differently and the
+ * difference is the point: one is meant to interrupt and the other is not.
+ * Checking that on a real phone otherwise means rostering people on real
+ * sessions and waiting to see what buzzes.
+ */
+export async function sendTestNotification(
+  kind: "rostered" | "published" = "rostered",
+): Promise<{ ok: true; sent: number } | { ok: false; error: string }> {
   const me = await getSignedInSinger();
   if (!me) return { ok: false, error: "Sign in first." };
 
   const { pushToSingers, pushConfigured } = await import("@/lib/push");
   if (!pushConfigured) return { ok: false, error: "Push is not configured on the server yet." };
 
+  const alert = kind === "rostered";
   const res = await pushToSingers([me.id], {
-    title: "Naimiṣa Roster",
-    body: `Notifications are working, ${me.name}.`,
+    title: alert ? "You are rostered" : "Roster is up",
+    body: alert
+      ? `This is what being rostered looks like, ${me.name} — it should make a sound.`
+      : "This is the quiet kind — it should arrive without a sound or a buzz.",
     url: "/roster",
-    tag: "test",
-    alert: true,
+    tag: alert ? "test-rostered" : "test-published",
+    alert,
   });
   if (res.sent === 0) {
     return { ok: false, error: "No device accepted it. Try switching notifications off and on." };
