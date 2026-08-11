@@ -1,0 +1,101 @@
+import { prisma } from "@/lib/db";
+import { saOf, NOTE_NAMES, type NoteName } from "@/lib/pitch";
+import { ragaScale } from "@/lib/ragaScales";
+import { recommendTablaForLabel, tablasForSession, type TablaChoice } from "@/lib/tabla";
+
+/**
+ * What the ashram owns.
+ *
+ * A constant rather than a table: it is four drums that change about never, and
+ * a settings screen for it would be more machinery than the fact deserves. If
+ * the centre buys a fifth, this line is the change.
+ */
+export const ASHRAM_TABLAS: readonly NoteName[] = ["C", "C#", "D", "E"];
+const ASHRAM_PC = ASHRAM_TABLAS.map((n) => NOTE_NAMES.indexOf(n));
+
+/** Same normalisation the raga table uses, so overrides key the same way. */
+export function overrideKey(raga: string | null | undefined): string {
+  return (raga ?? "").replace(/^\s*~\s*/, "").trim().toLowerCase();
+}
+
+export type PlannedSlot = {
+  position: number;
+  title: string;
+  raga: string | null;
+  confirmedPitch: string | null;
+  choice: TablaChoice;
+  /** True when a coordinator's decision produced this, not the rule. */
+  overridden: boolean;
+  overrideReason: string | null;
+  /** For the override control: the Sa this bhajan is at. */
+  sa: number | null;
+};
+
+/**
+ * Work out the tabla for every slot in a session, applying overrides.
+ *
+ * An override wins outright. It is keyed on (raga, Sa) with "" meaning any
+ * raga, so the more specific decision is preferred and a blanket one still
+ * catches the rest.
+ */
+export async function planTablas(sessionId: string): Promise<{
+  slots: PlannedSlot[];
+  calls: ReturnType<typeof tablasForSession>["calls"];
+  unresolved: ReturnType<typeof tablasForSession>["unresolved"];
+}> {
+  const rows = await prisma.sessionSlot.findMany({
+    where: { sessionId },
+    orderBy: [{ position: "asc" }],
+    select: {
+      position: true,
+      confirmedPitch: true,
+      bhajanTitle: true,
+      festivalBhajanTitle: true,
+      bhajan: { select: { title: true, raga: true } },
+    },
+  });
+
+  const overrides = await prisma.tablaOverride.findMany();
+  const byKey = new Map(overrides.map((o) => [`${o.raga}|${o.sa}`, o]));
+
+  const slots: PlannedSlot[] = rows.map((r) => {
+    const raga = r.bhajan?.raga ?? null;
+    const title = r.bhajan?.title ?? r.bhajanTitle ?? r.festivalBhajanTitle ?? "—";
+    const sa = saOf(r.confirmedPitch);
+
+    const computed = recommendTablaForLabel(r.confirmedPitch, ragaScale(raga), ASHRAM_PC);
+
+    // Most specific first: this raga at this Sa, then any raga at this Sa.
+    const hit =
+      sa === null
+        ? undefined
+        : byKey.get(`${overrideKey(raga)}|${sa}`) ?? byKey.get(`|${sa}`);
+
+    if (!hit) {
+      return { position: r.position, title, raga, confirmedPitch: r.confirmedPitch, choice: computed, overridden: false, overrideReason: null, sa };
+    }
+
+    const note = (hit.note ?? null) as NoteName | null;
+    return {
+      position: r.position,
+      title,
+      raga,
+      confirmedPitch: r.confirmedPitch,
+      choice: {
+        note,
+        degree: null,
+        why: note ? `set by hand — tune to ${note}` : "set by hand — no tabla for this",
+        confidence: note ? "certain" : "none",
+        alternativesIfNone: note ? [] : computed.alternativesIfNone,
+      },
+      overridden: true,
+      overrideReason: hit.reason ?? null,
+      sa,
+    };
+  });
+
+  const { calls, unresolved } = tablasForSession(
+    slots.map((s) => ({ title: s.title, choice: s.choice })),
+  );
+  return { slots, calls, unresolved };
+}
