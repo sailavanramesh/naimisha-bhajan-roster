@@ -2,7 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle, Button } from "@/components/ui";
 import { getSingerContexts, getSlotContexts, RECENT_WINDOW_DAYS } from "@/lib/rosterQueries";
-import { assignRoster, DEFAULT_WEIGHTS, type Weights } from "@/lib/rosterScoring";
+import { assignRoster, DEFAULT_WEIGHTS, WEIGHT_GUIDE, type Weights } from "@/lib/rosterScoring";
 import { applyAssignments, setAvailability } from "./actions";
 import { AddSingerPanel } from "./AddSingerPanel";
 import { buildSuggestions } from "./suggestions";
@@ -53,17 +53,36 @@ export default async function AssignPage({
   const { id: sessionId } = await params;
   const sp = await searchParams;
 
-  const session = await prisma.session.findUnique({ where: { id: sessionId } });
+  /*
+   * Four serial round trips to Azure — session, then singers+slots, then the
+   * singer list, then the lineup — cost more than the work itself. Only
+   * getSingerContexts genuinely depends on the session date, so everything
+   * else goes in one wave.
+   */
+  const [session, slots, allSingers, lineupRows] = await Promise.all([
+    prisma.session.findUnique({ where: { id: sessionId } }),
+    getSlotContexts(sessionId),
+    prisma.singer.findMany({ orderBy: { name: "asc" } }),
+    prisma.sessionSlot.findMany({
+      where: { sessionId },
+      orderBy: [{ position: "asc" }],
+      select: {
+        id: true,
+        position: true,
+        bhajanTitle: true,
+        confirmedPitch: true,
+        bhajan: { select: { title: true } },
+        singer: { select: { name: true } },
+      },
+    }),
+  ]);
   if (!session) return <div>Not found</div>;
+
+  const singers = await getSingerContexts(session.date);
 
   const dateKey = session.date.toISOString().slice(0, 10);
   const pins = parsePins(one(sp, "pin"));
   const weights = weightsFrom(sp);
-
-  const [singers, slots] = await Promise.all([
-    getSingerContexts(session.date),
-    getSlotContexts(sessionId),
-  ]);
 
   /*
    * A slot that already has a singer is pinned to them. Without this the
@@ -86,23 +105,9 @@ export default async function AssignPage({
 
   // Singer-first flow: ?add=<singerId> opens the suggestion panel for them.
   const addId = one(sp, "add") ?? null;
-  const allSingers = await prisma.singer.findMany({ orderBy: { name: "asc" } });
   const addSinger = addId ? allSingers.find((x) => x.id === addId) ?? null : null;
   // Who is already on, so the coordinator can see progress without leaving.
-  const lineup = (
-    await prisma.sessionSlot.findMany({
-      where: { sessionId },
-      orderBy: [{ position: "asc" }],
-      select: {
-        id: true,
-        position: true,
-        bhajanTitle: true,
-        confirmedPitch: true,
-        bhajan: { select: { title: true } },
-        singer: { select: { name: true } },
-      },
-    })
-  )
+  const lineup = lineupRows
     .filter((x) => x.singer)
     .map((x) => ({
       slotId: x.id,
@@ -304,31 +309,73 @@ export default async function AssignPage({
             <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold">
               Scoring weights
             </summary>
-            <form method="get" className="grid gap-3 px-4 pb-4 sm:grid-cols-3">
+            {/*
+              Outside the grid on purpose. As a grid item this paragraph took
+              one narrow column and, because grid items stretch, forced every
+              weight card to its height — the panel came out unreadable.
+            */}
+            <p className="px-4 pb-3 text-xs text-on-surface-muted">
+              Each singer scores 0–1 on every line below; the weights decide how much each
+              line counts. <strong>0 turns a consideration off entirely.</strong> Doubling a
+              weight makes that consideration twice as decisive relative to the others — only
+              the ratios matter, so raising all six changes nothing.
+            </p>
+            <form
+              method="get"
+              className="grid items-start gap-3 px-4 pb-4 sm:grid-cols-2 xl:grid-cols-3"
+            >
               <input type="hidden" name="pin" value={serialisePins(pins)} />
-              {(Object.keys(DEFAULT_WEIGHTS) as (keyof Weights)[]).map((k) => (
-                <label key={k} className="grid gap-1">
-                  <span className="text-xs font-semibold text-on-surface-muted">{k}</span>
-                  <input
-                    type="number"
-                    step="0.1"
-                    min="0"
-                    name={`w_${k}`}
-                    defaultValue={weights[k]}
-                    className="h-10 w-full rounded-[12px] border px-3 text-sm"
-                  />
-                </label>
-              ))}
-              <div className="sm:col-span-3 flex gap-2">
+              {(Object.keys(DEFAULT_WEIGHTS) as (keyof Weights)[]).map((k) => {
+                const guide = WEIGHT_GUIDE[k];
+                const changed = weights[k] !== DEFAULT_WEIGHTS[k];
+                return (
+                  <label key={k} className="grid gap-1 rounded-[10px] border border-rule-surface bg-surface p-3">
+                    <span className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="text-sm font-semibold">{guide.label}</span>
+                      {guide.penalty ? (
+                        <span className="rounded-full border border-warn/40 bg-warn/[0.08] px-1.5 py-0.5 text-[10px] font-semibold">
+                          penalty
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="text-xs text-on-surface-muted">{guide.effect}</span>
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        name={`w_${k}`}
+                        defaultValue={weights[k]}
+                        className="h-9 w-20 rounded-[10px] border px-2 text-sm"
+                      />
+                      <span className="text-[11px] text-on-surface-muted">
+                        {changed ? (
+                          <>
+                            default {DEFAULT_WEIGHTS[k]} ·{" "}
+                            <strong className="text-brass-ink">changed</strong>
+                          </>
+                        ) : (
+                          <>default {DEFAULT_WEIGHTS[k]}</>
+                        )}
+                      </span>
+                    </span>
+                    <span className="text-[11px] leading-snug text-on-surface-muted">
+                      {guide.detail}
+                    </span>
+                  </label>
+                );
+              })}
+              <div className="flex gap-2 sm:col-span-2 xl:col-span-3">
                 <Button type="submit">Re-score</Button>
                 <Link href={href({ w_repertoire: undefined, w_overdue: undefined, w_loadBalance: undefined, w_pitchFit: undefined, w_variety: undefined, w_genderClump: undefined })}>
                   <Button type="button">Reset</Button>
                 </Link>
               </div>
-              <p className="text-xs text-on-surface-muted sm:col-span-3">
-                Every component is normalised to 0–1 before weighting, so these numbers are
-                directly comparable. Load balance is weighted above repertoire on purpose:
-                the point is to stop the same few people singing every week.
+              <p className="text-xs text-on-surface-muted sm:col-span-2 xl:col-span-3">
+                {/* The normalisation note moved to the intro above; what is worth
+                    keeping here is why the defaults are set the way they are. */}
+                Sharing the singing is weighted above knowing the bhajan on purpose: the
+                point of the defaults is to stop the same few people singing every week.
               </p>
             </form>
           </details>

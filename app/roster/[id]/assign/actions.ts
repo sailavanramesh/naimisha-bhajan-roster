@@ -111,7 +111,7 @@ export async function addSingerSlot(input: {
   singerId: string;
   bhajanId?: string | null;
   confirmedPitch?: string | null;
-}): Promise<{ ok: true; name: string }> {
+}): Promise<{ ok: true }> {
   await requireCapability("assignSingers");
 
   const parsed = AddSlot.safeParse({
@@ -124,11 +124,6 @@ export async function addSingerSlot(input: {
     throw new Error(`Could not add the singer: ${parsed.error.issues[0]?.message ?? "invalid input"}`);
   }
   const { sessionId, singerId, bhajanId, confirmedPitch } = parsed.data;
-
-  const singer = await prisma.singer.findUnique({
-    where: { id: singerId },
-    select: { name: true },
-  });
 
   await prisma.$transaction(async (tx) => {
     const last = await tx.sessionSlot.findFirst({
@@ -169,7 +164,7 @@ export async function addSingerSlot(input: {
   revalidatePath(`/roster/${sessionId}`);
   revalidatePath(`/roster/${sessionId}/assign`);
 
-  return { ok: true, name: singer?.name ?? "" };
+  return { ok: true };
 }
 
 const RemoveSlot = z.object({
