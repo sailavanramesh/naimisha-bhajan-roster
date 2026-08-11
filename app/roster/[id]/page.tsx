@@ -73,14 +73,34 @@ export default async function RosterSessionPage({
    * Adjacent by DATE, not by id: ids are cuids and carry no order, and a
    * session created later can sit earlier in the calendar.
    */
+  /*
+   * Only days with a bhajan actually scheduled. A session record can outlive
+   * its contents — build one, empty it, and the row remains — and stepping
+   * through those was landing on blank days that are indistinguishable from a
+   * day with nothing on it.
+   *
+   * A bhajan may be recorded three ways: linked to the masterlist, or as free
+   * text kept from the sheet, or as a festival title. Any of them counts.
+   */
+  // Not `as const`: Prisma's filter type wants a mutable array.
+  const HAS_A_BHAJAN = {
+    some: {
+      OR: [
+        { bhajanId: { not: null } },
+        { bhajanTitle: { not: null } },
+        { festivalBhajanTitle: { not: null } },
+      ],
+    },
+  };
+
   const [previousSession, nextSession] = await Promise.all([
     prisma.session.findFirst({
-      where: { date: { lt: session.date } },
+      where: { date: { lt: session.date }, slots: HAS_A_BHAJAN },
       orderBy: { date: "desc" },
       select: { id: true, date: true },
     }),
     prisma.session.findFirst({
-      where: { date: { gt: session.date } },
+      where: { date: { gt: session.date }, slots: HAS_A_BHAJAN },
       orderBy: { date: "asc" },
       select: { id: true, date: true },
     }),
