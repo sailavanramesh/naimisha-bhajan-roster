@@ -6,6 +6,8 @@ import { assignRoster, DEFAULT_WEIGHTS, WEIGHT_GUIDE, type Weights } from "@/lib
 import { applyAssignments, setAvailability } from "./actions";
 import { AddSingerPanel } from "./AddSingerPanel";
 import { buildSuggestions } from "./suggestions";
+import { getRole, can } from "@/lib/auth";
+import { NoAccess } from "@/components/RequireRole";
 
 export const dynamic = "force-dynamic";
 
@@ -52,6 +54,21 @@ export default async function AssignPage({
 }) {
   const { id: sessionId } = await params;
   const sp = await searchParams;
+
+  /*
+   * Who sings what is an editor's decision (lib/auth.ts: members hold
+   * editSlotBhajan but not assignSingers).
+   *
+   * This page had NO gate at all. Every mutating action on it checks the
+   * capability, so a member could not actually change anything — but the page
+   * rendered in full, offering controls that would refuse on submit. A page
+   * that shows you a job you are not allowed to do is its own kind of wrong,
+   * and it only held because each action remembered to check for itself.
+   */
+  const role = await getRole();
+  if (!can(role, "assignSingers")) {
+    return <NoAccess what="Assigning singers" role={role} />;
+  }
 
   /*
    * Four serial round trips to Azure — session, then singers+slots, then the
