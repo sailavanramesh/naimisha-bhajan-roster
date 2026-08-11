@@ -147,3 +147,77 @@ export async function setSingerAccess(formData: FormData): Promise<void> {
 
   revalidatePath("/admin");
 }
+
+const NewSinger = z.object({
+  name: z.string().trim().min(1, "a name is needed").max(80),
+  email: z.string().trim().email("that is not an email address").or(z.literal("")),
+  gender: z.enum(["Gents", "Ladies", ""]),
+  role: z.enum(["coordinator", "singer"]),
+});
+
+/**
+ * Add a person to the allowlist.
+ *
+ * Access in this app hangs off `Singer`, so somebody who only ever needs to
+ * READ the roster still needs a row here — there is no separate user table.
+ * That is deliberate (SPEC §9.5): signing in never creates anybody, so being
+ * on this list is an act a coordinator has to take.
+ *
+ * Name and email are both unique in the schema, and both collisions are things
+ * a coordinator will actually hit — a second Ashwin, or pasting an address
+ * already used by somebody else. Each gets its own message naming the clash,
+ * rather than a Prisma constraint error.
+ */
+export type AddSingerState = { error?: string; added?: string };
+
+/*
+ * Returns its outcome instead of throwing. A throw from a Server Action
+ * surfaces in production as "An error occurred in the Server Components
+ * render", with the actual message stripped — so "Ashwin is already on the
+ * list" became an opaque error page, which is worse than useless for the one
+ * mistake a coordinator will actually make.
+ */
+export async function addSinger(
+  _prev: AddSingerState,
+  formData: FormData,
+): Promise<AddSingerState> {
+  await requireCapability("manageAllocations");
+
+  const parsed = NewSinger.safeParse({
+    name: String(formData.get("name") ?? ""),
+    email: String(formData.get("email") ?? ""),
+    gender: String(formData.get("gender") ?? ""),
+    role: String(formData.get("role") ?? "singer"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Could not add that person." };
+  }
+  const { name, email, gender, role } = parsed.data;
+
+  const clash = await prisma.singer.findFirst({
+    where: { OR: [{ name }, ...(email ? [{ email }] : [])] },
+    select: { name: true, email: true },
+  });
+  if (clash) {
+    return {
+      error:
+        clash.name === name
+          ? `${name} is already on the list. Edit their row instead of adding a second one.`
+          : `${email} is already set against ${clash.name}. One address, one person.`,
+    };
+  }
+
+  await prisma.singer.create({
+    data: {
+      name,
+      email: email || null,
+      gender: gender ? (gender as "Gents" | "Ladies") : null,
+      role,
+    },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/singers");
+
+  return { added: name };
+}
