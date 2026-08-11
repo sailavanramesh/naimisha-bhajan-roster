@@ -291,14 +291,6 @@ export default async function BuildPage({
                 </select>
               </Field>
             </div>
-            <p className="-mt-1 text-xs text-on-surface-muted">
-              Only about 600 of the 3,607 bhajans have ever been sung here, so
-              &ldquo;anything&rdquo; will often suggest songs nobody knows yet. That is
-              deliberate — it is how the group learns new material — but pick{" "}
-              <strong>only bhajans the group has sung</strong> when you need a set that will
-              work this week.
-            </p>
-
             <details className="rounded-[12px] border border-rule-surface bg-panel">
               <summary className="cursor-pointer select-none px-4 py-3 text-sm font-semibold">
                 Filters
@@ -552,11 +544,6 @@ export default async function BuildPage({
               <Button type="submit" variant="primary">
                 Save as draft session on {date}
               </Button>
-              <span className="text-xs text-on-surface-muted">
-                Saves the bhajans, not the seed — the generator&rsquo;s weights change as history
-                grows, so the same seed will not reproduce this set later. Singers are assigned in
-                the roster.
-              </span>
             </form>
           ) : null}
         </CardContent>

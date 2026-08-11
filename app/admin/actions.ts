@@ -223,3 +223,57 @@ export async function addSinger(
 
   return { added: name };
 }
+
+export type RemoveSingerState = { error?: string; removed?: string };
+
+/**
+ * Remove a person from the list entirely.
+ *
+ * REFUSES anybody who has ever been on a session. `SessionSlot.singerId` is
+ * `onDelete: SetNull`, so deleting them would not delete their history — it
+ * would ORPHAN it, silently detaching every bhajan they ever sang from the
+ * person who sang it. That would corrupt the offset profiles, and the singer
+ * table in CLAUDE.md would stop reproducing, which is the one thing the Phase 0
+ * gate exists to catch.
+ *
+ * So this is for the case it is actually needed: a tester or a mis-typed name
+ * added by mistake, with nothing behind them. For anybody real, revoking access
+ * means clearing their address, which leaves the person and their history
+ * intact — and the message says so rather than just refusing.
+ */
+export async function removeSinger(singerId: string): Promise<RemoveSingerState> {
+  await requireCapability("manageAllocations");
+
+  if (!singerId) return { error: "No such person." };
+
+  const singer = await prisma.singer.findUnique({
+    where: { id: singerId },
+    select: { name: true },
+  });
+  if (!singer) return { error: "That person is no longer on the list." };
+
+  const [slots, repertoire] = await Promise.all([
+    prisma.sessionSlot.count({ where: { singerId } }),
+    prisma.singerRepertoire.count({ where: { singerId } }),
+  ]);
+
+  if (slots > 0) {
+    return {
+      error:
+        `${singer.name} has sung ${slots} time${slots === 1 ? "" : "s"}, so removing them would ` +
+        `detach that history from the person who sang it. Clear their Google address instead — ` +
+        `that revokes access and keeps the record.`,
+    };
+  }
+
+  await prisma.$transaction(async (tx) => {
+    if (repertoire > 0) await tx.singerRepertoire.deleteMany({ where: { singerId } });
+    await tx.singerAvailability.deleteMany({ where: { singerId } });
+    await tx.micCushion.deleteMany({ where: { singerId } });
+    await tx.singer.delete({ where: { id: singerId } });
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/singers");
+  return { removed: singer.name };
+}
