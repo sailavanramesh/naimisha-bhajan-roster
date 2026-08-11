@@ -14,6 +14,10 @@ import { CopyRowsPanel } from "./CopyRowsPanel";
 import { melbourneTodayISO } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
+/** One look for every action in the session header. */
+const PILL =
+  "inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-full border border-rule-surface px-3 text-[13px] hover:border-brass/50";
+
 export default async function RosterSessionPage({
   params,
 }: {
@@ -208,29 +212,43 @@ export default async function RosterSessionPage({
           <CardTitle>{dateLabel}</CardTitle>
 
           <div className="mt-2 grid gap-2 text-sm">
-            <div className="flex items-center gap-2">
-              {canEdit ? (
-                <span className="rounded-[12px] border bg-green-50 px-3 py-1">Edit mode ON</span>
-              ) : (
-                <span className="rounded-[12px] border bg-amber-50 px-3 py-1">Read-only</span>
-              )}
+            {/*
+              One row of no-wrap pills that wraps BETWEEN items.
 
-              <Link href={backToRosterHref} className="underline underline-offset-2">
-                Back to roster
+              This was a plain `flex` with no wrap, so on a phone the items
+              squeezed into narrow columns and each label wrapped inside itself
+              — "Back to roster" came out as three stacked lines. Letting the
+              row wrap between items and forbidding a break inside one turns
+              six squashed columns into two tidy lines.
+
+              They also all look the same now. A mix of underlined text links
+              and pills made the row read as more things than it is; only Live
+              view keeps its own emphasis, because it is the one you reach for
+              standing at the desk rather than while editing.
+            */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span
+                className={[
+                  "inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-full border px-3 text-[13px]",
+                  canEdit ? "border-green-600/30 bg-green-50" : "border-amber-600/30 bg-amber-50",
+                ].join(" ")}
+              >
+                {canEdit ? "Edit mode ON" : "Read-only"}
+              </span>
+
+              <Link href={backToRosterHref} className={PILL}>
+                Roster
               </Link>
 
-              <Link
-                href={`/roster/${sessionId}/assign`}
-                className="underline underline-offset-2"
-              >
-                Assign singers
+              <Link href={`/roster/${sessionId}/assign`} className={PILL}>
+                Assign
               </Link>
 
               {/* Step through the sessions in date order. */}
               {previousSession ? (
                 <Link
                   href={`/roster/${previousSession.id}`}
-                  className="inline-flex h-7 items-center rounded-full border border-rule-surface px-2.5 text-[12px] hover:border-brass/50"
+                  className={PILL}
                   title={`Previous session — ${shortDate(previousSession.date)}`}
                 >
                   ← {shortDate(previousSession.date)}
@@ -239,26 +257,20 @@ export default async function RosterSessionPage({
               {nextSession ? (
                 <Link
                   href={`/roster/${nextSession.id}`}
-                  className="inline-flex h-7 items-center rounded-full border border-rule-surface px-2.5 text-[12px] hover:border-brass/50"
+                  className={PILL}
                   title={`Next session — ${shortDate(nextSession.date)}`}
                 >
                   {shortDate(nextSession.date)} →
                 </Link>
               ) : null}
 
-              <Link
-                href={`/roster/${sessionId}/print`}
-                className="underline underline-offset-2"
-              >
-                Print sheet
+              <Link href={`/roster/${sessionId}/print`} className={PILL}>
+                Print
               </Link>
 
-              {/* The performance view. Given its own emphasis because it is
-                  what gets opened while standing at the desk, not while
-                  editing. */}
               <Link
                 href={`/roster/${sessionId}/live`}
-                className="inline-flex h-7 items-center gap-1.5 rounded-full border border-brass/45 bg-brass/10 px-3 text-[12px] font-semibold text-brass-ink hover:border-brass/70"
+                className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-brass/45 bg-brass/10 px-3 text-[13px] font-semibold text-brass-ink hover:border-brass/70"
               >
                 <span aria-hidden>▶</span> Live view
               </Link>
