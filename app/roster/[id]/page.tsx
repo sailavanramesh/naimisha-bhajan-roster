@@ -6,7 +6,6 @@ import { SessionSingersGrid } from "./SessionSingersGrid";
 import { getPitchSuggestions } from "@/lib/pitchSuggestions";
 import { computeRecommendedPitch } from "@/lib/computeRecommendedPitch";
 import { deleteInstrumentRow, updateSessionNotes } from "./actions";
-import { EnableEditForm } from "@/components/EnableEditForm";
 import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { planTablas } from "@/lib/tablaPlan";
 import { TablaPanel } from "./TablaPanel";
@@ -227,15 +226,7 @@ export default async function RosterSessionPage({
               standing at the desk rather than while editing.
             */}
             <div className="flex flex-wrap items-center gap-1.5">
-              <span
-                className={[
-                  "inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-full border px-3 text-[13px]",
-                  canEdit ? "border-green-600/30 bg-green-50" : "border-amber-600/30 bg-amber-50",
-                ].join(" ")}
-              >
-                {canEdit ? "Edit mode ON" : "Read-only"}
-              </span>
-
+              {/* No standing edit-mode pill: see app/roster/page.tsx. */}
               <Link href={backToRosterHref} className={PILL}>
                 Roster
               </Link>
@@ -280,7 +271,6 @@ export default async function RosterSessionPage({
               </Link>
             </div>
 
-            {!canEdit ? <EnableEditForm returnTo={`/roster/${sessionId}`} compact /> : null}
           </div>
         </CardHeader>
 

@@ -3,7 +3,8 @@ import { prisma } from "@/lib/db";
 import { Gender } from "@prisma/client";
 import { Button } from "@/components/ui";
 import { computeRecommendedPitch } from "@/lib/computeRecommendedPitch";
-import { tablaPitchOf, semitoneDelta } from "@/lib/pitch";
+import { semitoneDelta } from "@/lib/pitch";
+import { planTablas } from "@/lib/tablaPlan";
 
 export const dynamic = "force-dynamic";
 
@@ -39,6 +40,18 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
     timeZone: "UTC",
   });
 
+  /*
+   * The drum to TUNE, not Sa + 7.
+   *
+   * This sheet still used tablaPitchOf — the fifth of the shruti — long after
+   * the roster grid and the live view moved to the prescriptive rule. The fifth
+   * is only an answer when the ashram happens to own that note, so the printed
+   * sheet was telling the player to tune to drums that do not exist, and
+   * disagreeing with both screens.
+   */
+  const plan = await planTablas(id);
+  const tablaByPosition = new Map(plan.slots.map((p) => [p.position, p.choice]));
+
   return (
     <div className="print-sheet grid gap-4 rounded-[14px] bg-[#FBF8F3] p-6 text-[#14121A] print:rounded-none print:bg-white print:p-0">
       <div className="no-print flex flex-wrap items-center gap-2">
@@ -64,7 +77,7 @@ export default async function PrintPage({ params }: { params: Promise<{ id: stri
             null;
           const pitch = slot.confirmedPitch || reference;
           const delta = semitoneDelta(slot.confirmedPitch, reference);
-          const tabla = tablaPitchOf(pitch);
+          const tabla = tablaByPosition.get(slot.position)?.note ?? null;
 
           return (
             <li key={slot.id} className="print-slot border-b border-black/25 pb-3">

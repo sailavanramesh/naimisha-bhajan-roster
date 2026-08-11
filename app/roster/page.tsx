@@ -1,9 +1,9 @@
 import Link from "next/link";
+import { SessionRows } from "@/components/SessionRows";
 import { getRole, can } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle, Input, Button } from "@/components/ui";
 import RosterCalendarClient from "./RosterCalendarClient";
-import { EnableEditForm } from "@/components/EnableEditForm";
 
 export const dynamic = "force-dynamic";
 function toISODateUTC(d: Date) {
@@ -39,17 +39,6 @@ function monthKey(d: Date) {
   return `${y}-${m}`;
 }
 
-function buildDaySummary(
-  slots: Array<{ singer: { name: string } | null; bhajanTitle: string | null }>
-) {
-  const parts = slots
-    .slice(0, 3)
-    .map((x) => `${x.singer?.name ?? "Unassigned"}${x.bhajanTitle ? ` — ${x.bhajanTitle}` : ""}`)
-    .filter(Boolean);
-  if (!parts.length) return null;
-  const suffix = slots.length > 3 ? " …" : "";
-  return parts.join(" · ") + suffix;
-}
 
 function addDaysUTC(d: Date, n: number) {
   const out = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0));
@@ -96,20 +85,41 @@ export default async function RosterPage({
       date: true,
       _count: { select: { slots: true } },
       slots: {
-        select: { bhajanTitle: true, singer: { select: { name: true } } },
+        select: {
+          bhajanTitle: true,
+          confirmedPitch: true,
+          festivalBhajanTitle: true,
+          bhajan: { select: { title: true } },
+          singer: { select: { name: true } },
+        },
         orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+        // Matches app/roster/month/route.ts, which serves the same shape when
+        // the month is changed without a reload.
+        take: 6,
       },
     },
     orderBy: { date: "asc" },
   });
 
-  const dayInfo: Record<string, { sessionId: string; entries: number; hasSession: boolean; summary?: string | null }> = {};
+  const dayInfo: Record<
+    string,
+    {
+      sessionId: string;
+      entries: number;
+      hasSession: boolean;
+      rows: { singer: string; bhajan: string | null; pitch: string | null }[];
+    }
+  > = {};
   for (const s of monthSessions) {
     const value = {
       sessionId: s.id,
       entries: s._count.slots ?? 0,
       hasSession: true,
-      summary: buildDaySummary(s.slots),
+      rows: s.slots.map((x) => ({
+        singer: x.singer?.name ?? "Unassigned",
+        bhajan: x.bhajan?.title ?? x.bhajanTitle ?? x.festivalBhajanTitle ?? null,
+        pitch: x.confirmedPitch,
+      })),
     };
 
     const utcKey = toISODateUTC(s.date);
@@ -124,7 +134,13 @@ export default async function RosterPage({
         id: string;
         date: Date;
         notes: string | null;
-        slots: { singer: { name: string } | null; bhajanTitle: string | null }[];
+        slots: {
+          singer: { name: string } | null;
+          bhajan: { title: string } | null;
+          bhajanTitle: string | null;
+          festivalBhajanTitle: string | null;
+          confirmedPitch: string | null;
+        }[];
       }>
     | null = null;
 
@@ -134,6 +150,17 @@ export default async function RosterPage({
 
     listSessions = await prisma.session.findMany({
       where: {
+        /*
+         * Same rule as the calendar: a session record can outlive its
+         * contents, and one with nothing on it is not a session. The calendar
+         * already stops drawing those and the arrows already skip them; the
+         * list was still printing them as "nothing rostered", which is exactly
+         * the noise that rule exists to remove.
+         *
+         * A session being BUILT — singers on, bhajans not yet chosen — still
+         * has slots, so it still appears.
+         */
+        slots: { some: {} },
         ...(q
           ? {
               OR: [
@@ -154,7 +181,12 @@ export default async function RosterPage({
       },
       orderBy: { date: "desc" },
       take: 200,
-      include: { slots: { include: { singer: true } } },
+      include: {
+        slots: {
+          orderBy: [{ position: "asc" }],
+          include: { singer: true, bhajan: { select: { title: true } } },
+        },
+      },
     });
   }
 
@@ -182,34 +214,19 @@ export default async function RosterPage({
             </div>
           </div>
 
-          {canEdit ? (
-            <div className="rounded-[12px] border bg-green-50 px-3 py-2 text-sm">
-              <span className="font-medium">Edit mode ON</span>
-              <span className="text-on-surface-muted"> — this browser can edit.</span>
-            </div>
-          ) : role === "viewer" ? (
-            <div className="rounded-[12px] border bg-amber-50 px-3 py-2 text-sm grid gap-2">
-              <div>
-                <span className="font-medium">Read-only</span>
-                <span className="text-on-surface-muted"> — enter your edit key here to enable editing in this browser.</span>
-              </div>
-              <EnableEditForm returnTo={`/roster?view=${view}`} />
-            </div>
-          ) : (
-            /*
-             * Somebody signed in who is not an editor. Offering them the edit
-             * key box would be telling them to go and find a key that is not
-             * theirs to have — their access is real, it just does not extend
-             * to creating sessions. Say that instead.
-             */
-            <div className="rounded-[12px] border bg-amber-50 px-3 py-2 text-sm">
-              <span className="font-medium">Read-only here</span>
-              <span className="text-on-surface-muted">
-                {" "}— your access covers editing the bhajan on a session, not creating
-                sessions. Open a day to see it.
-              </span>
-            </div>
-          )}
+          {/*
+            No standing "Edit mode ON" or "Read-only" banner.
+            
+            Sailavan: it took a line of the page on every visit to tell people
+            something they only need at the moment they try to do something —
+            and for an editor, which is most visits, it said nothing at all.
+            Whoever cannot do a thing is told when they attempt it, by the
+            control they attempted it with.
+
+            The edit-key form goes with it. It only ever reached a signed-out
+            visitor, and with sign-in required they meet the sign-in wall
+            instead and never see this page.
+          */}
         </CardHeader>
 
         <CardContent className="grid gap-4">
@@ -260,28 +277,17 @@ export default async function RosterPage({
                       </span>
                     </div>
 
-                    {s.slots.length > 0 ? (
-                      <ul className="mt-2 grid gap-0.5">
-                        {s.slots.slice(0, 5).map((x, i) => (
-                          <li
-                            key={i}
-                            className="grid grid-cols-[7rem_1fr] items-baseline gap-2 text-[13px]"
-                          >
-                            <span className="truncate font-medium">
-                              {x.singer?.name ?? "Unassigned"}
-                            </span>
-                            <span className="truncate text-on-surface-muted">
-                              {x.bhajanTitle ?? "—"}
-                            </span>
-                          </li>
-                        ))}
-                        {s.slots.length > 5 ? (
-                          <li className="mt-0.5 text-[11px] text-on-surface-muted">
-                            + {s.slots.length - 5} more
-                          </li>
-                        ) : null}
-                      </ul>
-                    ) : null}
+                    <div className="mt-2">
+                      <SessionRows
+                        rows={s.slots.slice(0, 6).map((x) => ({
+                          singer: x.singer?.name ?? "Unassigned",
+                          bhajan: x.bhajan?.title ?? x.bhajanTitle ?? x.festivalBhajanTitle,
+                          pitch: x.confirmedPitch,
+                        }))}
+                        total={s.slots.length}
+                        emptyLabel="Nothing rostered."
+                      />
+                    </div>
                   </Link>
                 ))}
               </div>
