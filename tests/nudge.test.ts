@@ -3,6 +3,8 @@ import {
   dueNudge,
   missingParts,
   nudgeNotification,
+  removedNotification,
+  rosteredNotification,
   NUDGE_HOUR,
   NUDGE_FINAL_HOUR,
   NUDGE_LATEST_HOUR,
@@ -123,5 +125,22 @@ describe("melbourneHour", () => {
 
   it("returns 0 at midnight, not 24", () => {
     expect(melbourneHour(new Date("2026-07-16T14:00:00Z"))).toBe(0);
+  });
+});
+
+describe("removedNotification", () => {
+  it("says which day, and nothing about why", () => {
+    const n = removedNotification({ sessionId: "s1", dateISO: "2026-08-13" });
+    expect(n.body).toBe("You are no longer on the roster for Thursday 13 August.");
+    expect(n.alert).toBe(true);
+    expect(n.url).toBe("/roster/s1");
+  });
+
+  it("does not collide with the rostered notice for the same session", () => {
+    // Different tags, so "you are singing" and "you are not" cannot replace
+    // one another in the shade.
+    const off = removedNotification({ sessionId: "s1", dateISO: "2026-08-13" });
+    const on = rosteredNotification({ sessionId: "s1", dateISO: "2026-08-13", bhajanTitles: [] });
+    expect(off.tag).not.toBe(on.tag);
   });
 });

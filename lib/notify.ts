@@ -13,6 +13,8 @@
  *                filled in. Alerts, because it is asking you to do something
  *                and there are hours left in which to do it.
  *   NUDGE_FINAL  5pm, the second and last one. Nobody is nudged a third time.
+ *   REMOVED      you were taken off a session you had been put on. Alerts —
+ *                somebody who has been practising needs telling.
  *
  * The distinction is the whole point. A group of a dozen people cannot have
  * everybody buzzed every time a session is planned, but the three or four who
@@ -212,4 +214,28 @@ export function dueNudge(
     return sent.includes("nudge_final") ? null : "nudge_final";
   }
   return sent.includes("nudge") ? null : "nudge";
+}
+
+/**
+ * "You are no longer on the roster for Thursday 13 August."
+ *
+ * The counterpart of `rosteredNotification`, and it alerts for the same
+ * reason: being told you are singing and then quietly not singing is the one
+ * that wastes somebody's week. Says nothing about who replaced them or why —
+ * that is a conversation, and a lock-screen banner is a bad place to start it.
+ *
+ * Not recorded in SessionNotice. Being added, removed and added again is a
+ * normal thing for a roster to do, and each of those is news.
+ */
+export function removedNotification(input: {
+  sessionId: string;
+  dateISO: string;
+}): Notification {
+  return {
+    title: "Roster change",
+    body: `You are no longer on the roster for ${formatSessionDate(input.dateISO)}.`,
+    url: `/roster/${input.sessionId}`,
+    tag: `removed-${input.sessionId}`,
+    alert: true,
+  };
 }

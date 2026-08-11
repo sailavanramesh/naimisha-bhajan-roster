@@ -10,12 +10,75 @@ import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { planTablas } from "@/lib/tablaPlan";
 import { TablaPanel } from "./TablaPanel";
 import { CopyRowsPanel } from "./CopyRowsPanel";
+import { NotifyPanel } from "./NotifyPanel";
 import { melbourneTodayISO } from "@/lib/dates";
+import { missingParts } from "@/lib/notify";
+import type { NotifyPerson } from "./NotifyPanel";
 
 export const dynamic = "force-dynamic";
 /** One look for every action in the session header. */
 const PILL =
   "inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-full border border-rule-surface px-3 text-[13px] hover:border-brass/50";
+
+/**
+ * Everybody rostered on this session, once each, with what their row still
+ * lacks and whether a notification would actually land anywhere.
+ *
+ * Phrased for a human rather than returned as flags: an editor deciding
+ * whether to poke somebody wants to read "no pitch yet", not interpret a pair
+ * of booleans.
+ */
+async function notifyCandidates(sessionId: string): Promise<NotifyPerson[]> {
+  const slots = await prisma.sessionSlot.findMany({
+    where: { sessionId, singerId: { not: null } },
+    orderBy: { position: "asc" },
+    select: {
+      singerId: true,
+      confirmedPitch: true,
+      bhajanTitle: true,
+      festivalBhajanTitle: true,
+      bhajan: { select: { title: true } },
+      singer: { select: { id: true, name: true } },
+    },
+  });
+  if (slots.length === 0) return [];
+
+  const subscribed = new Set(
+    (
+      await prisma.pushSubscription.findMany({
+        where: { singerId: { in: slots.map((s) => s.singerId!) } },
+        select: { singerId: true },
+        distinct: ["singerId"],
+      })
+    ).map((s) => s.singerId),
+  );
+
+  const byPerson = new Map<string, NotifyPerson>();
+  for (const slot of slots) {
+    if (!slot.singer) continue;
+    const missing = missingParts({
+      bhajanTitle: slot.bhajan?.title ?? slot.bhajanTitle ?? slot.festivalBhajanTitle ?? null,
+      confirmedPitch: slot.confirmedPitch,
+    });
+    const existing = byPerson.get(slot.singer.id);
+    // First gap wins, same as the automatic nudge, so the two agree.
+    if (existing && (existing.gap || missing.length === 0)) continue;
+    byPerson.set(slot.singer.id, {
+      id: slot.singer.id,
+      name: slot.singer.name,
+      gap:
+        missing.length === 2
+          ? "no bhajan or pitch yet"
+          : missing[0] === "bhajan"
+            ? "no bhajan yet"
+            : missing[0] === "pitch"
+              ? "no confirmed pitch yet"
+              : "",
+      hasDevice: subscribed.has(slot.singer.id),
+    });
+  }
+  return [...byPerson.values()];
+}
 
 export default async function RosterSessionPage({
   params,
@@ -67,6 +130,16 @@ export default async function RosterSessionPage({
     : false;
 
   const tablaPlan = isTablaPlayer ? await planTablas(sessionId) : null;
+
+  /*
+   * Who could be sent a reminder by hand, and whether it would reach them.
+   *
+   * Only queried for somebody who may actually send one — this is two extra
+   * round trips on a page that already makes several, and a viewer would be
+   * paying for a control they never see.
+   */
+  const canNotify = can(role, "notifySingers");
+  const notifyPeople = canNotify ? await notifyCandidates(sessionId) : [];
 
   // The grid recomputes a row's tabla in the browser as the pitch is edited,
   // so it needs the overrides rather than a pre-computed answer.
@@ -301,6 +374,8 @@ export default async function RosterSessionPage({
               }))}
             />
           ) : null}
+
+          {canNotify ? <NotifyPanel sessionId={sessionId} people={notifyPeople} /> : null}
 
           {/* Collapsible: Instruments */}
           <details className="rounded-[12px] border border-rule-surface bg-panel">

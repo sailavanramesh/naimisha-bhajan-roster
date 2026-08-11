@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db";
 import { rosterBlockReason } from "@/lib/rosterEligibility";
 import { notifyAboutSession } from "@/lib/notifySession";
+import { rosteredSingerIds, notifyRemovals } from "@/lib/notifyRemoval";
 import { requireCapability, can } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
@@ -79,7 +80,10 @@ export async function deleteSingerRow(id: string) {
   const row = await prisma.sessionSlot.findUnique({ where: { id } });
   if (!row) return;
 
+  const before = await rosteredSingerIds(row.sessionId);
   await prisma.sessionSlot.delete({ where: { id } });
+  await notifyRemovals(row.sessionId, before);
+
   revalidatePath(`/roster/${row.sessionId}`);
 }
 
@@ -92,6 +96,9 @@ export async function deleteSingerRow(id: string) {
  */
 export async function upsertSessionSingerRows(sessionId: string, rows: SingerRowInput[]) {
   const role = await requireCapability("editSlotBhajan");
+  // Read before the transaction: saving the grid is also how somebody gets
+  // swapped out of a row, which is a removal with no delete anywhere.
+  const rosteredBefore = await rosteredSingerIds(sessionId);
 
   if (!can(role, "assignSingers")) {
     const existing = await prisma.sessionSlot.findMany({
@@ -243,7 +250,9 @@ export async function upsertSessionSingerRows(sessionId: string, rows: SingerRow
     }
   });
 
-  // Saving the grid can be the moment somebody is first rostered.
+  // Saving the grid can be the moment somebody is first rostered — or the
+  // moment somebody is quietly replaced.
+  await notifyRemovals(sessionId, rosteredBefore);
   await notifyAboutSession(sessionId);
 
   revalidatePath(`/roster/${sessionId}`);

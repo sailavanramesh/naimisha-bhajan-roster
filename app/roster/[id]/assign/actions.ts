@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth";
 import { rosterBlockReason } from "@/lib/rosterEligibility";
 import { notifyAboutSession } from "@/lib/notifySession";
+import { rosteredSingerIds, notifyRemovals } from "@/lib/notifyRemoval";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -246,7 +247,9 @@ export async function removeSingerSlot(input: {
     return { ok: false, reason: "has-pitch", name: slot.singer?.name ?? "that singer" };
   }
 
+  const before = await rosteredSingerIds(sessionId);
   await prisma.sessionSlot.delete({ where: { id: slotId } });
+  await notifyRemovals(sessionId, before);
 
   revalidatePath(`/roster/${sessionId}`);
   revalidatePath(`/roster/${sessionId}/assign`);
