@@ -74,8 +74,13 @@ export function LiveBoard({
         title: { fontSize: "clamp(22px, 5.2vmin, 52px)" },
         pitch: { fontSize: "clamp(22px, 5.4vmin, 54px)" },
         singer: { fontSize: "clamp(15px, 2.6vmin, 28px)" },
+        // Deliberately well under the pitch: the tabla player needs to read it
+        // across a hall, but it must never be mistaken for the shruti at a
+        // glance. Roughly two thirds.
+        tabla: { fontSize: "clamp(14px, 3.4vmin, 34px)" },
+        raga: { fontSize: "clamp(13px, 2.4vmin, 26px)" },
       }
-    : { title: undefined, pitch: undefined, singer: undefined };
+    : { title: undefined, pitch: undefined, singer: undefined, tabla: undefined, raga: undefined };
 
   return (
     <div className="fixed inset-0 z-[100] flex overflow-hidden bg-ground text-on-ground">
@@ -130,6 +135,7 @@ export function LiveBoard({
                 style={
                   tint ? { background: tint.row, boxShadow: `inset 5px 0 0 0 ${tint.edge}` } : undefined
                 }
+                title={dot ? `${dot.label} mic cushion` : undefined}
               >
                 {/*
                   Row when the screen is landscape, stacked when it is portrait
@@ -167,24 +173,15 @@ export function LiveBoard({
                       {/* Raga sits with the cushion rather than with the title:
                           both are things you glance at, where the title and the
                           pitch are things you read. */}
-                      {s.raga ? (
-                        <span className="text-sm italic text-on-surface-muted" title={`Raga ${s.raga}`}>
-                          {s.raga}
-                        </span>
-                      ) : null}
-                      {dot ? (
-                        <span
-                          className="inline-flex items-center gap-1.5 text-xs text-on-surface-muted"
-                          title={`${dot.label} mic cushion`}
-                        >
-                          <span
-                            aria-hidden
-                            className="inline-block h-3.5 w-3.5 rounded-full ring-1 ring-black/20"
-                            style={{ background: dot.dot }}
-                          />
-                          {dot.label} mic
-                        </span>
-                      ) : null}
+                      {/*
+                        No "Blue mic" chip. The card is already washed in the
+                        cushion colour, which says the same thing without
+                        spending a line on it. Kept for anyone who cannot use
+                        the colour: the card carries it as a tooltip and as
+                        screen-reader text, so removing the visible label loses
+                        nothing but the clutter.
+                      */}
+                      {dot ? <span className="sr-only">{dot.label} mic cushion</span> : null}
                     </div>
                   </div>
 
@@ -197,8 +194,31 @@ export function LiveBoard({
                     >
                       {s.confirmedPitch ?? "—"}
                     </div>
-                    <div className="text-sm text-on-surface-muted">
-                      tabla <span className="font-mono">{s.tablaPitch ?? "—"}</span>
+                    <div className="flex flex-col items-end gap-0.5">
+                      {/*
+                        Raga belongs with the pitch, not with the singer:
+                        whoever is on harmonium reads them together.
+
+                        Width-capped and wrapping on purpose. This column does
+                        not shrink, and raga names are often dual —
+                        "Shankarabharanam / Bilawal" — so an uncapped one would
+                        widen the column and squeeze the title back into a
+                        one-word-per-line stack, which is the failure this
+                        layout was just fixed for.
+                      */}
+                      {s.raga ? (
+                        <span
+                          className="max-w-[18ch] break-words text-right text-base italic leading-tight text-on-surface-muted"
+                          style={fill.raga}
+                          title={`Raga ${s.raga}`}
+                        >
+                          {s.raga}
+                        </span>
+                      ) : null}
+                      <div className="text-base text-on-surface-muted" style={fill.tabla}>
+                        <span className="text-[0.62em] uppercase tracking-wide">tabla</span>{" "}
+                        <span className="font-mono">{s.tablaPitch ?? "—"}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
