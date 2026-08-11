@@ -44,6 +44,14 @@ export const metadata = {
   description: "Bhajan suggestions, rostering and pitch for Naimisha",
   applicationName: "Naimiṣa Roster",
   /*
+    Without this, Next resolves og:image against "http://localhost:3000" and a
+    scraper is handed an image it cannot fetch — the preview then falls back to
+    a bare link. AUTH_URL is already the canonical public address and is set in
+    production, so reusing it avoids a second setting that could drift out of
+    step with the first.
+  */
+  metadataBase: new URL(process.env.AUTH_URL ?? "http://localhost:3000"),
+  /*
    * iOS needs this as well as the manifest. Without `capable`, an
    * "Add to Home Screen" icon opens in Safari with the URL bar, back/forward
    * and share buttons still showing — which is exactly what it was doing.
@@ -53,6 +61,23 @@ export const metadata = {
     capable: true,
     title: "Naimiṣa Roster",
     statusBarStyle: "default" as const,
+  },
+  /*
+    What a shared link shows. Next picks up app/opengraph-image.png on its own
+    and emits the og:image tags; these give the scraper a title and description
+    of their own, since without them some read the page's <title> and others
+    fall back to the bare URL.
+  */
+  openGraph: {
+    title: "Naimiṣa Bhajan Roster",
+    description: "Bhajan suggestions, rostering and pitch for Naimisha",
+    type: "website",
+    siteName: "Naimiṣa Bhajan Roster",
+  },
+  twitter: {
+    card: "summary_large_image" as const,
+    title: "Naimiṣa Bhajan Roster",
+    description: "Bhajan suggestions, rostering and pitch for Naimisha",
   },
   icons: {
     icon: [
