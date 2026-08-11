@@ -104,6 +104,7 @@ export async function getSlotContexts(sessionId: string): Promise<SlotContext[]>
     orderBy: { position: 'asc' },
     select: {
       position: true,
+      singerId: true,
       bhajanId: true,
       bhajanTitle: true,
       bhajan: {
@@ -114,6 +115,7 @@ export async function getSlotContexts(sessionId: string): Promise<SlotContext[]>
 
   return slots.map((s) => ({
     position: s.position,
+    assignedSingerId: s.singerId,
     bhajanId: s.bhajanId,
     bhajanTitle: s.bhajan?.title ?? s.bhajanTitle,
     raga: s.bhajan?.raga ?? null,

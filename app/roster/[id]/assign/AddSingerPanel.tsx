@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui";
 import { DeitySymbols } from "@/components/DeitySymbol";
-import { addSingerSlot, removeSingerSlot } from "./actions";
+import { addSingerSlot, removeSingerSlot, goToSessionForDate } from "./actions";
 import { SongsLink } from "./SongsLink";
 import { SOURCE_LABEL, type SuggestedPitch } from "@/lib/suggestedPitch";
 
@@ -58,6 +58,7 @@ export function AddSingerPanel({
   justAdded,
   justRemoved,
   blocked,
+  sessionDate,
 }: {
   sessionId: string;
   singers: Array<{ id: string; name: string; gender: string | null }>;
@@ -68,15 +69,42 @@ export function AddSingerPanel({
   justAdded: string | null;
   justRemoved: string | null;
   blocked: string | null;
+  sessionDate: string;
 }) {
   return (
     <div className="grid gap-4">
+      {/*
+        The date lives here because rostering starts from "who is around on
+        Thursday", not from a session id. Switching creates the session if that
+        day does not have one yet, the same as tapping an empty day on the
+        calendar.
+      */}
+      <form action={goToSessionForDate} className="flex flex-wrap items-end gap-2">
+        <label className="grid gap-1 text-xs text-on-surface-muted">
+          Session date
+          <input
+            type="date"
+            name="date"
+            defaultValue={sessionDate}
+            className="h-9 rounded-[10px] border border-rule-surface bg-field px-2 text-sm text-on-surface"
+          />
+        </label>
+        <Button type="submit" className="h-9 text-xs">
+          Switch date
+        </Button>
+        <span className="pb-1.5 text-xs text-on-surface-muted">
+          Creates the session if that day has none.
+        </span>
+      </form>
+
       {justAdded ? (
         <p
           role="status"
           className="rounded-[10px] border border-brass/40 bg-brass/[0.08] px-3 py-2 text-sm"
         >
-          Added <strong>{justAdded}</strong>. Pick the next singer, or{" "}
+          Added <strong>{justAdded}</strong> — {lineup.length}{" "}
+          {lineup.length === 1 ? "singer is" : "singers are"} now on {sessionDate}. Pick the
+          next singer, or{" "}
           <Link href={`/roster/${sessionId}`} className="underline underline-offset-2">
             go to the roster
           </Link>

@@ -65,7 +65,24 @@ export default async function AssignPage({
     getSlotContexts(sessionId),
   ]);
 
-  const result = assignRoster(singers, slots, { pins, weights });
+  /*
+   * A slot that already has a singer is pinned to them. Without this the
+   * fairness pass proposed a fresh name for every slot, so adding three people
+   * by hand and then looking at the panel below showed three DIFFERENT people
+   * — it read as the app disagreeing with what you had just done. Explicit
+   * pins from the URL still win, so "Choose someone else" keeps working.
+   */
+  const effectivePins = new Map<number, string>();
+  for (const slot of slots) {
+    if (slot.assignedSingerId) effectivePins.set(slot.position, slot.assignedSingerId);
+  }
+  for (const [position, singerId] of pins) effectivePins.set(position, singerId);
+
+  const alreadyOn = new Set(
+    slots.filter((s) => s.assignedSingerId).map((s) => s.position),
+  );
+
+  const result = assignRoster(singers, slots, { pins: effectivePins, weights });
 
   // Singer-first flow: ?add=<singerId> opens the suggestion panel for them.
   const addId = one(sp, "add") ?? null;
@@ -147,16 +164,18 @@ export default async function AssignPage({
             justAdded={justAdded}
             justRemoved={one(sp, "removed") ?? null}
             blocked={one(sp, "blocked") ?? null}
+            sessionDate={dateKey}
           />
         </CardContent>
       </Card>
 
       <Card>
         <CardHeader>
-          <CardTitle>Assign singers — {dateKey}</CardTitle>
+          <CardTitle>This session — {dateKey}</CardTitle>
           <div className="mt-1 text-sm text-on-surface-muted">
-            Suggestions only. Nothing is written until you apply, and applying only sets the
-            singer — it never touches a confirmed pitch.
+            Slots marked <strong>already on</strong> are set. The rest are suggestions:
+            nothing is written until you apply, and applying only sets the singer — it never
+            touches a confirmed pitch.
           </div>
           <div className="mt-2">
             <Link href={`/roster/${sessionId}`} className="text-sm underline underline-offset-2">
@@ -201,9 +220,18 @@ export default async function AssignPage({
                             <span className="font-mono text-xs text-on-surface-muted">
                               {String(a.position).padStart(2, "0")}
                             </span>
-                            {a.pinned ? (
+                            {a.pinned && !alreadyOn.has(a.position) ? (
                               <span className="rounded-full border px-2 py-0.5 text-[10px]">
                                 pinned
+                              </span>
+                            ) : null}
+                            {/* Distinguishes what is already true from what is
+                                merely proposed. Without it, a session you had
+                                just filled by hand looked identical to one the
+                                assigner had invented. */}
+                            {alreadyOn.has(a.position) ? (
+                              <span className="rounded-full border border-brass/50 bg-brass/[0.08] px-2 py-0.5 text-[10px] font-semibold text-brass-ink">
+                                already on
                               </span>
                             ) : null}
                           </div>
@@ -219,7 +247,13 @@ export default async function AssignPage({
                             {a.slot.bhajanTitle ?? "no bhajan chosen"}
                           </div>
                           <div className="mt-1 text-xs" style={{ color: "rgb(var(--muted))" }}>
-                            {a.reasons.join(" · ")}
+                            {/* "Pinned by you" is untrue of a slot that was
+                                already rostered — it was pinned by the fact
+                                that somebody is on it. */}
+                            {(alreadyOn.has(a.position)
+                              ? ["already rostered", ...a.reasons.filter((r) => !/pinned by you/i.test(r))]
+                              : a.reasons
+                            ).join(" · ")}
                           </div>
                         </div>
 
