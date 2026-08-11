@@ -20,7 +20,9 @@ export default function manifest(): MetadataRoute.Manifest {
     short_name: "Naimiṣa",
     // Same line as metadata.description in app/layout.tsx.
     description: "Bhajan suggestions, rostering and pitch for Naimisha",
-    start_url: "/",
+    // Opens on the roster: what somebody actually came to look at. The
+    // dashboard is a coordinator's overview and members no longer see it.
+    start_url: "/roster",
     scope: "/",
     display: "standalone",
     orientation: "any",
