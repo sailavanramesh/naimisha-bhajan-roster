@@ -38,7 +38,42 @@ function withPathname(req: NextRequest) {
   return NextResponse.next({ request: { headers } });
 }
 
+/**
+ * Send everyone to one address.
+ *
+ * Once a custom domain is bound, the azurewebsites.net name keeps working —
+ * Azure never stops serving it — so old links, old bookmarks and old home
+ * screen icons would quietly go on using it forever. Anything host-specific
+ * then has to be kept working twice over: the Google OAuth redirect URI, the
+ * cookie domain, the link previews.
+ *
+ * Set CANONICAL_HOST to the new domain and every other host 308s to it, path
+ * and query intact. 308 rather than 302 so the method is preserved and the
+ * browser is told it is permanent.
+ *
+ * Unset, this does nothing, which is why it can ship before the domain exists.
+ * Localhost is never redirected — that would make development impossible.
+ */
+function canonicalRedirect(req: NextRequest): NextResponse | null {
+  const canonical = process.env.CANONICAL_HOST?.trim();
+  if (!canonical) return null;
+
+  const host = req.headers.get("x-forwarded-host") ?? req.headers.get("host") ?? "";
+  const bare = host.split(":")[0].toLowerCase();
+  if (!bare || bare === canonical.toLowerCase()) return null;
+  if (bare === "localhost" || bare === "127.0.0.1" || bare.endsWith(".local")) return null;
+
+  const target = new URL(req.nextUrl.toString());
+  target.host = canonical;
+  target.protocol = "https:";
+  target.port = "";
+  return NextResponse.redirect(target, 308);
+}
+
 export function middleware(req: NextRequest) {
+  const moved = canonicalRedirect(req);
+  if (moved) return moved;
+
   const url = req.nextUrl;
 
   if (url.searchParams.get("logout") === "1") {
