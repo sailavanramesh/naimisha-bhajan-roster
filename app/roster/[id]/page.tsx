@@ -44,7 +44,7 @@ export default async function RosterSessionPage({
   const sid = session.id;
 
   const allSingers = canAssign
-    ? await prisma.singer.findMany({ orderBy: { name: "asc" } })
+    ? await prisma.singer.findMany({ where: { gender: { not: null } }, orderBy: { name: "asc" } })
     : [];
 
   const initialRows = session.slots.map((x) => ({

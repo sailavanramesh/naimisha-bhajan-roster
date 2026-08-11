@@ -62,7 +62,8 @@ export default async function AssignPage({
   const [session, slots, allSingers, lineupRows] = await Promise.all([
     prisma.session.findUnique({ where: { id: sessionId } }),
     getSlotContexts(sessionId),
-    prisma.singer.findMany({ orderBy: { name: "asc" } }),
+    // Only people who can actually hold a slot (lib/rosterEligibility).
+    prisma.singer.findMany({ where: { gender: { not: null } }, orderBy: { name: "asc" } }),
     prisma.sessionSlot.findMany({
       where: { sessionId },
       orderBy: [{ position: "asc" }],

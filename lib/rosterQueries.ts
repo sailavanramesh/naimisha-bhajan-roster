@@ -18,7 +18,9 @@ export const RECENT_WINDOW_DAYS = 90;
 
 export async function getSingerContexts(sessionDate: Date): Promise<SingerContext[]> {
   const [singers, repertoire, slots, availability, sungRows] = await Promise.all([
-    prisma.singer.findMany({ orderBy: { name: 'asc' } }),
+    // Somebody with no recorded voice is not a singer and cannot be proposed:
+    // the reference pitch, and therefore the whole score, is defined per voice.
+    prisma.singer.findMany({ where: { gender: { not: null } }, orderBy: { name: 'asc' } }),
     prisma.singerRepertoire.findMany({
       where: { bhajanId: { not: null } },
       select: { singerId: true, bhajanId: true },
