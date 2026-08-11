@@ -73,9 +73,61 @@ enum BhajanOrigin {
 }
 
 enum Role {
+  /// Everything a coordinator can do, plus the notification rules. See
+  /// lib/auth.ts — the app deliberately had no owner until the rules for when
+  /// people get reminded became something to configure rather than to deploy.
+  owner
   coordinator
   singer
   viewer
+}
+
+/// When the day-of reminders go out, for one scope.
+///
+/// The 3pm and 5pm in lib/notify.ts are the fallback. Most sessions are in the
+/// evening but some are mornings, and a reminder at 3pm for a session that
+/// finished at noon is worse than none — so an owner can say "Sunday runs in
+/// the morning" once, or override a single festival, without a deploy.
+///
+/// Most specific wins: a rule on the session beats one on its weekday, which
+/// beats the default. See lib/nudgeRules.ts, where the resolution lives as a
+/// pure function.
+model NotificationRule {
+  id String @id @default(cuid())
+
+  scope RuleScope
+
+  /// 0 = Sunday … 6 = Saturday. Only for scope = weekday.
+  weekday   Int?
+  /// Only for scope = session.
+  sessionId String?
+
+  /// Melbourne hour, 0–23, for the first reminder.
+  firstHour     Int
+  /// The second and last one. Null means there is only ever one.
+  finalHour     Int?
+  /// Never send after this hour — people are on their way by then.
+  stopAfterHour Int
+
+  /// Off means this scope sends nothing at all.
+  enabled Boolean @default(true)
+
+  /// Who last touched it, for the Admin screen. A name, not an id.
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session Session? @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([scope, weekday, sessionId])
+  @@index([sessionId])
+}
+
+enum RuleScope {
+  /// The one rule that applies when nothing more specific does.
+  default
+  weekday
+  session
 }
 
 model Singer {
@@ -89,10 +141,10 @@ model Singer {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  slots        SessionSlot[]
-  repertoire   SingerRepertoire[]
-  availability SingerAvailability[]
-  micCushions MicCushion[]
+  slots             SessionSlot[]
+  repertoire        SingerRepertoire[]
+  availability      SingerAvailability[]
+  micCushions       MicCushion[]
   pushSubscriptions PushSubscription[]
   notices           SessionNotice[]
 }
@@ -132,7 +184,7 @@ model Bhajan {
 
   /// See BhajanOrigin. Defaults to masterlist so the 3,607 imported rows are
   /// unaffected by this column being added.
-  origin BhajanOrigin @default(masterlist)
+  origin     BhajanOrigin @default(masterlist)
   /// Free-text note on a locally added bhajan — where it came from, who asked.
   originNote String?
 
@@ -203,20 +255,21 @@ model Session {
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 
-  template    SessionTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  slots       SessionSlot[]
-  instruments SessionInstrument[]
+  template          SessionTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  slots             SessionSlot[]
+  instruments       SessionInstrument[]
+  micCushions       MicCushion[]
+  notices           SessionNotice[]
+  notificationRules NotificationRule[]
 
   @@index([templateId])
   @@index([date])
-  micCushions MicCushion[]
-  notices SessionNotice[]
 }
 
 /// One ordered slot in a session: a singer, a bhajan, and the pitch they sang.
 /// Renamed from v1's `SessionSinger`; `slot Int?` became `position Int`.
 model SessionSlot {
-  id        String @id @default(cuid())
+  id        String  @id @default(cuid())
   sessionId String
   /// Null until a singer is assigned. The session builder chooses bhajans
   /// first and drafts a session with unassigned slots; rostering fills these
@@ -290,13 +343,13 @@ model SingerRepertoire {
 
   /// The singer's own note — what they are finding hard, where they heard it.
   /// Visible to them and to editors only.
-  note     String?
+  note           String?
   /// The shruti this singer wants for it, if they have settled on one.
   /// Overrides the derived recommendation for them on this bhajan.
   preferredPitch String?
 
   createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
 
   singer Singer  @relation(fields: [singerId], references: [id], onDelete: Cascade)
   bhajan Bhajan? @relation(fields: [bhajanId], references: [id], onDelete: SetNull)
@@ -358,15 +411,15 @@ model SlotRule {
 /// The 24 shruti labels. Renamed from v1's `PitchLookup`; the pitch maths is
 /// now first-class columns rather than something parsed at read time.
 model PitchLabel {
-  id    String @id @default(cuid())
-  label String @unique
+  id         String  @id @default(cuid())
+  label      String  @unique
   /// The numeric step in the label, e.g. 2.5 in `2.5 Madhyam / G#`.
-  step  Float
-  series Series
+  step       Float
+  series     Series
   /// Absolute Sa as a note name, from the letter after the slash.
-  note  String
+  note       String
   /// Absolute Sa as a pitch class, 0..11.
-  semitone Int
+  semitone   Int
   /// Recorded tabla pitch. Always Sa + 7; stored only to verify the source.
   tablaPitch String?
   value      Float?
@@ -441,7 +494,6 @@ model MicCushion {
   @@index([sessionId])
 }
 
-
 /// A coordinator's decision about which tabla to tune, overriding the rule.
 ///
 /// Keyed on (raga, Sa) because that is what the rule actually depends on: the
@@ -461,7 +513,7 @@ model TablaOverride {
   /// Lower-cased, "~" stripped, matching lib/ragaScales.ts. "" = any raga.
   raga String @default("")
   /// Pitch class of Sa, 0..11.
-  sa Int
+  sa   Int
 
   /// Note name, e.g. "C#". Null records "no tabla fits" as a decision.
   note String?
@@ -477,7 +529,6 @@ model TablaOverride {
   @@unique([raga, sa])
   @@index([sa])
 }
-
 
 /// A browser's push endpoint, belonging to a person.
 ///

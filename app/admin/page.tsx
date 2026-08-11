@@ -170,13 +170,18 @@ export default async function AdminPage({
               <select
                 key={`role-${s.role}`}
                 name="role"
-                defaultValue={s.role === "coordinator" ? "coordinator" : "singer"}
+                defaultValue={
+                  s.role === "owner" ? "owner" : s.role === "coordinator" ? "coordinator" : "singer"
+                }
                 disabled={!canEdit}
                 className="h-11 rounded-[10px] border border-rule-surface bg-field px-3 text-sm"
                 aria-label={`Access level for ${s.name}`}
               >
                 <option value="singer">Member</option>
                 <option value="coordinator">Editor</option>
+                {/* An owner is an editor who also sets when the app buzzes
+                    people. Listed last because it is the rarest. */}
+                <option value="owner">Owner</option>
               </select>
               <div className="flex items-center gap-2">
                 {canEdit ? (
@@ -188,7 +193,13 @@ export default async function AdminPage({
                     longer "saved: Editor" cannot push the buttons around. */}
                 <span className="ml-auto w-[5.5rem] shrink-0 text-right text-[11px] leading-tight text-on-surface-muted">
                   {s.email
-                    ? `saved: ${s.role === "coordinator" ? "Editor" : "Member"}`
+                    ? `saved: ${
+                        s.role === "owner"
+                          ? "Owner"
+                          : s.role === "coordinator"
+                            ? "Editor"
+                            : "Member"
+                      }`
                     : "no access"}
                 </span>
               </div>
@@ -196,6 +207,41 @@ export default async function AdminPage({
           ))}
         </CardContent>
       </Card>
+
+      {/* Owner only: when the day-of reminders go out. */}
+
+      {can(role, "manageNotificationRules") ? (
+
+        <Card>
+
+          <CardHeader>
+
+            <CardTitle>Notifications</CardTitle>
+
+          </CardHeader>
+
+          <CardContent>
+
+            <p className="text-sm text-on-surface-muted">
+
+              The hours people are reminded on the day of a session, by day of the week or
+
+              for a single date.{" "}
+
+              <Link href="/admin/notifications" className="underline underline-offset-2">
+
+                Open
+
+              </Link>
+
+            </p>
+
+          </CardContent>
+
+        </Card>
+
+      ) : null}
+
 
       {/* ---- Instrument eligibility ---- */}
       <Card>

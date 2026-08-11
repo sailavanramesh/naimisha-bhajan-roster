@@ -1,6 +1,12 @@
 import { prisma } from "@/lib/db";
 import { pushToSingers, pushConfigured } from "@/lib/push";
-import { dueNudge, missingParts, nudgeNotification, type NoticeKind } from "@/lib/notify";
+import { missingParts, nudgeNotification, type NoticeKind } from "@/lib/notify";
+import {
+  dueNudgeUnder,
+  resolveRule,
+  weekdayOfISO,
+  type ScopedRule,
+} from "@/lib/nudgeRules";
 import { melbourneTodayISO, melbourneHour } from "@/lib/dates";
 
 /**
@@ -32,10 +38,20 @@ export async function runNudges(now: Date = new Date()): Promise<NudgeRun> {
   const hour = melbourneHour(now);
   const base = { hour, date, due: 0, nudged: 0, complete: 0 };
 
-  // Cheap exit for the twenty-odd runs a day that fall outside the window.
-  // Checked before push config so the hourly log says which of the two it is.
-  if (dueNudge(hour, []) === null) return { ...base, skipped: "outside the nudge window" };
+  // No global window any more: a Sunday morning session and a Thursday
+  // evening one have different hours, so whether this hour matters can only be
+  // answered per session. The cheap exit is now "no session today".
   if (!pushConfigured) return { ...base, skipped: "push is not configured" };
+
+  const rules: ScopedRule[] = (await prisma.notificationRule.findMany()).map((r) => ({
+    scope: r.scope,
+    weekday: r.weekday,
+    sessionId: r.sessionId,
+    firstHour: r.firstHour,
+    finalHour: r.finalHour,
+    stopAfterHour: r.stopAfterHour,
+    enabled: r.enabled,
+  }));
 
   const sessions = await prisma.session.findMany({
     // Session dates are stored at UTC midnight and read as Melbourne dates.
@@ -60,7 +76,11 @@ export async function runNudges(now: Date = new Date()): Promise<NudgeRun> {
   let nudged = 0;
   let complete = 0;
 
+  if (sessions.length === 0) return { ...base, skipped: "nothing on today" };
+
   for (const session of sessions) {
+    const rule = resolveRule(rules, { id: session.id, weekday: weekdayOfISO(date) });
+
     const sentBySinger = new Map<string, NoticeKind[]>();
     for (const n of session.notices) {
       sentBySinger.set(n.singerId, [...(sentBySinger.get(n.singerId) ?? []), n.kind]);
@@ -89,7 +109,7 @@ export async function runNudges(now: Date = new Date()): Promise<NudgeRun> {
     }
 
     for (const [singerId, gap] of firstGap) {
-      const kind = dueNudge(hour, sentBySinger.get(singerId) ?? []);
+      const kind = dueNudgeUnder(rule, hour, sentBySinger.get(singerId) ?? []);
       if (!kind) continue;
       due++;
 
@@ -102,6 +122,7 @@ export async function runNudges(now: Date = new Date()): Promise<NudgeRun> {
           bhajanTitle: gap.title,
           confirmedPitch: gap.pitch,
           final: kind === "nudge_final",
+          atHour: hour,
         }),
       );
 
