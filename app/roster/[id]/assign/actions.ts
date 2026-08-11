@@ -106,19 +106,29 @@ const AddSlot = z.object({
  * singer at the same moment cannot land on the same one; the unique index on
  * (sessionId, position) is the backstop if they do.
  */
-export async function addSingerSlot(formData: FormData): Promise<void> {
+export async function addSingerSlot(input: {
+  sessionId: string;
+  singerId: string;
+  bhajanId?: string | null;
+  confirmedPitch?: string | null;
+}): Promise<{ ok: true; name: string }> {
   await requireCapability("assignSingers");
 
   const parsed = AddSlot.safeParse({
-    sessionId: String(formData.get("sessionId") ?? ""),
-    singerId: String(formData.get("singerId") ?? ""),
-    bhajanId: (formData.get("bhajanId") as string) || null,
-    confirmedPitch: (formData.get("confirmedPitch") as string) || null,
+    sessionId: input.sessionId,
+    singerId: input.singerId,
+    bhajanId: input.bhajanId ?? null,
+    confirmedPitch: input.confirmedPitch ?? null,
   });
   if (!parsed.success) {
     throw new Error(`Could not add the singer: ${parsed.error.issues[0]?.message ?? "invalid input"}`);
   }
   const { sessionId, singerId, bhajanId, confirmedPitch } = parsed.data;
+
+  const singer = await prisma.singer.findUnique({
+    where: { id: singerId },
+    select: { name: true },
+  });
 
   await prisma.$transaction(async (tx) => {
     const last = await tx.sessionSlot.findFirst({
@@ -144,16 +154,22 @@ export async function addSingerSlot(formData: FormData): Promise<void> {
     });
   });
 
+  /*
+   * Revalidate, do not redirect.
+   *
+   * This used to redirect back to the assign page, which meant every single
+   * add was a full navigation: the page visibly reloaded, scroll position
+   * moved, and nothing acknowledged the click until the round trip finished.
+   * Rostering is a run of four or five of these, so it felt choppy.
+   *
+   * Called from a client component inside a transition instead, the
+   * revalidation updates the list in place and the caller can show a pending
+   * state on the exact control that was pressed.
+   */
   revalidatePath(`/roster/${sessionId}`);
   revalidatePath(`/roster/${sessionId}/assign`);
-  /*
-   * Back to the assign page, not to the roster. Rostering is a run of
-   * decisions — you add three or four people in a sitting — and bouncing to
-   * the roster after each one made it a one-shot flow that had to be navigated
-   * back into every time. `added` is echoed so the page can confirm who landed
-   * without the coordinator having to scan the list for them.
-   */
-  redirect(`/roster/${sessionId}/assign?added=${encodeURIComponent(singerId)}`);
+
+  return { ok: true, name: singer?.name ?? "" };
 }
 
 const RemoveSlot = z.object({
@@ -176,13 +192,13 @@ const RemoveSlot = z.object({
  * refuse those — the message says where to go instead rather than failing
  * silently.
  */
-export async function removeSingerSlot(formData: FormData): Promise<void> {
+export async function removeSingerSlot(input: {
+  sessionId: string;
+  slotId: string;
+}): Promise<{ ok: true; name: string } | { ok: false; reason: "has-pitch"; name: string }> {
   await requireCapability("assignSingers");
 
-  const parsed = RemoveSlot.safeParse({
-    sessionId: String(formData.get("sessionId") ?? ""),
-    slotId: String(formData.get("slotId") ?? ""),
-  });
+  const parsed = RemoveSlot.safeParse({ sessionId: input.sessionId, slotId: input.slotId });
   if (!parsed.success) throw new Error("Could not remove that singer.");
   const { sessionId, slotId } = parsed.data;
 
@@ -191,20 +207,19 @@ export async function removeSingerSlot(formData: FormData): Promise<void> {
     select: { id: true, sessionId: true, confirmedPitch: true, singer: { select: { name: true } } },
   });
   if (!slot || slot.sessionId !== sessionId) {
-    redirect(`/roster/${sessionId}/assign`);
+    return { ok: false, reason: "has-pitch", name: "" };
   }
 
   if (slot.confirmedPitch) {
-    redirect(
-      `/roster/${sessionId}/assign?blocked=${encodeURIComponent(slot.singer?.name ?? "that singer")}`,
-    );
+    return { ok: false, reason: "has-pitch", name: slot.singer?.name ?? "that singer" };
   }
 
   await prisma.sessionSlot.delete({ where: { id: slotId } });
 
   revalidatePath(`/roster/${sessionId}`);
   revalidatePath(`/roster/${sessionId}/assign`);
-  redirect(`/roster/${sessionId}/assign?removed=${encodeURIComponent(slot.singer?.name ?? "")}`);
+
+  return { ok: true, name: slot.singer?.name ?? "" };
 }
 
 const GoToDate = z.object({

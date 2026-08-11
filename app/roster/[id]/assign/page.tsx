@@ -88,9 +88,6 @@ export default async function AssignPage({
   const addId = one(sp, "add") ?? null;
   const allSingers = await prisma.singer.findMany({ orderBy: { name: "asc" } });
   const addSinger = addId ? allSingers.find((x) => x.id === addId) ?? null : null;
-  const addedId = one(sp, "added") ?? null;
-  const justAdded = addedId ? allSingers.find((x) => x.id === addedId)?.name ?? null : null;
-
   // Who is already on, so the coordinator can see progress without leaving.
   const lineup = (
     await prisma.sessionSlot.findMany({
@@ -161,9 +158,6 @@ export default async function AssignPage({
             groups={suggestionGroups}
             basePath={`/roster/${sessionId}/assign`}
             lineup={lineup}
-            justAdded={justAdded}
-            justRemoved={one(sp, "removed") ?? null}
-            blocked={one(sp, "blocked") ?? null}
             sessionDate={dateKey}
           />
         </CardContent>
