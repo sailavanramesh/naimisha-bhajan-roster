@@ -3,6 +3,7 @@
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth";
 import { rosterBlockReason } from "@/lib/rosterEligibility";
+import { notifyAboutSession } from "@/lib/notifySession";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -57,6 +58,8 @@ export async function applyAssignments(formData: FormData): Promise<void> {
       });
     }
   });
+
+  await notifyAboutSession(sessionId);
 
   revalidatePath(`/roster/${sessionId}`);
   redirect(`/roster/${sessionId}`);
@@ -193,6 +196,8 @@ export async function addSingerSlot(input: {
    * revalidation updates the list in place and the caller can show a pending
    * state on the exact control that was pressed.
    */
+  await notifyAboutSession(sessionId);
+
   revalidatePath(`/roster/${sessionId}`);
   revalidatePath(`/roster/${sessionId}/assign`);
 
@@ -358,6 +363,8 @@ export async function autoAddFairestSingers(input: {
       position++;
     }
   });
+
+  await notifyAboutSession(sessionId);
 
   revalidatePath(`/roster/${sessionId}`);
   revalidatePath(`/roster/${sessionId}/assign`);

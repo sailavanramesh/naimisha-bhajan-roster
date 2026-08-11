@@ -21,6 +21,7 @@ const ITEMS: NavItem[] = [
   { href: "/bhajans", label: "Bhajans", short: "B" },
   { href: "/explore", label: "Explore", short: "?" },
   { href: "/my-list", label: "My list", short: "♪" },
+  { href: "/notifications", label: "Alerts", short: "!" },
   { href: "/singers", label: "Singers", short: "S" },
   { href: "/fairness", label: "Fairness", short: "≡" },
   { href: "/admin", label: "Admin", short: "⚙" },
@@ -75,7 +76,7 @@ export function Nav({ role = "viewer" }: { role?: string }) {
       : // No Dashboard for a member: it is a coordinator's overview — session
         // counts, fairness loads, what needs building — and none of it is a
         // member's to act on. They start at the roster.
-        ITEMS.filter((i) => ["/roster", "/bhajans", "/singers", "/explore", "/my-list"].includes(i.href));
+        ITEMS.filter((i) => ["/roster", "/bhajans", "/singers", "/explore", "/my-list", "/notifications"].includes(i.href));
 
   const NavLinks = ({ collapsed }: { collapsed: boolean }) => (
     <nav className="grid gap-1">
