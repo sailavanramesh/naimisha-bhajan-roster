@@ -82,7 +82,9 @@ export default async function SingerPage({
         <CardHeader>
           <CardTitle>{singer.name}</CardTitle>
           <div className="mt-2 text-sm text-on-surface-muted">
-            {singer.gender ?? "Gender not recorded"} · {profile.overall.n} sung{" "}
+            {/* Reachable only by direct link now that the index lists singers
+                only, so it should say plainly what this person is. */}
+            {singer.gender ?? "Not a singer — no voice recorded"} · {profile.overall.n} sung{" "}
             {profile.overall.n === 1 ? "record" : "records"} with a usable pitch
           </div>
         </CardHeader>
