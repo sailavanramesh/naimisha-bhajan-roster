@@ -26,6 +26,16 @@ export type SuggestionGroup = {
   items: Suggestion[];
 };
 
+/**
+ * How many suggestions a group shows before "show N more".
+ *
+ * A singer's own list can run to ninety. All of it is sent so the search box
+ * can reach it, but a wall of ninety rows above the roster is not a choice
+ * either — twelve is about what fits on a phone without scrolling past the
+ * thing you came to do.
+ */
+const VISIBLE = 12;
+
 export type LineupEntry = {
   slotId: string;
   position: number;
@@ -98,6 +108,9 @@ export function AddSingerPanel({
   );
   /** Which control is mid-flight, so only that one shows a spinner. */
   const [busy, setBusy] = useState<string | null>(null);
+  /** Per-group search text, and which groups have had their cap lifted. */
+  const [queries, setQueries] = useState<Record<string, string>>({});
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [justAdded, setJustAdded] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -353,15 +366,59 @@ export function AddSingerPanel({
             </p>
           ) : null}
 
-          {groups.map((group) =>
-            group.items.length === 0 ? null : (
+          {groups.map((group) => {
+            const q = queries[group.key]?.trim().toLowerCase() ?? "";
+            const matches = q
+              ? group.items.filter(
+                  (i) =>
+                    i.title.toLowerCase().includes(q) ||
+                    (i.raga ?? "").toLowerCase().includes(q) ||
+                    i.deities.some((d) => d.toLowerCase().includes(q)),
+                )
+              : group.items;
+            // Searching means you are after a particular song, so the cap comes
+            // off — a search that hides its own results is worse than no search.
+            const shown = q || expanded[group.key] ? matches : matches.slice(0, VISIBLE);
+            const hidden = matches.length - shown.length;
+
+            return group.items.length === 0 ? null : (
               <div key={group.key} className="grid gap-2">
-                <div>
-                  <h4 className="text-sm font-semibold">{group.heading}</h4>
-                  <p className="text-xs text-on-surface-muted">{group.blurb}</p>
+                <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+                  <div className="min-w-0">
+                    <h4 className="text-sm font-semibold">
+                      {group.heading}{" "}
+                      <span className="font-normal text-on-surface-muted">
+                        ({group.items.length})
+                      </span>
+                    </h4>
+                    <p className="text-xs text-on-surface-muted">{group.blurb}</p>
+                  </div>
+                  {/*
+                    Only where it earns its space. A group of six is already
+                    all on screen, and a search box over it is furniture.
+                  */}
+                  {group.items.length > VISIBLE ? (
+                    <input
+                      type="search"
+                      value={queries[group.key] ?? ""}
+                      onChange={(e) =>
+                        setQueries((prev) => ({ ...prev, [group.key]: e.target.value }))
+                      }
+                      placeholder={`Search ${group.items.length}…`}
+                      aria-label={`Search ${group.heading.toLowerCase()}`}
+                      className="h-8 w-40 rounded-[10px] border border-rule-surface bg-field px-2 text-sm text-on-surface placeholder:text-on-surface-muted"
+                    />
+                  ) : null}
                 </div>
+
+                {q && matches.length === 0 ? (
+                  <p className="text-xs text-on-surface-muted">
+                    Nothing in this group matches “{queries[group.key]}”.
+                  </p>
+                ) : null}
+
                 <ul className="grid gap-1.5">
-                  {group.items.map((item) => (
+                  {shown.map((item) => (
                     <li
                       key={`${group.key}-${item.bhajanId}`}
                       className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 rounded-[10px] border border-rule-surface bg-surface px-3 py-2"
@@ -414,9 +471,19 @@ export function AddSingerPanel({
                     </li>
                   ))}
                 </ul>
+
+                {hidden > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setExpanded((prev) => ({ ...prev, [group.key]: true }))}
+                    className="justify-self-start text-xs text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+                  >
+                    Show {hidden} more
+                  </button>
+                ) : null}
               </div>
-            ),
-          )}
+            );
+          })}
         </section>
       ) : (
         <p className="text-xs text-on-surface-muted">

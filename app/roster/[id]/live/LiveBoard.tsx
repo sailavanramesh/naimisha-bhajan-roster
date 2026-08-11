@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { DeitySymbols } from "@/components/DeitySymbol";
 import { useMicCushions, cushionTint } from "@/components/MicCushions";
 import { MIC_COLOURS } from "@/lib/micCushion";
@@ -16,6 +17,8 @@ export type LiveSlot = {
   confirmedPitch: string | null;
   tablaPitch: string | null;
   tablaWhy?: string | null;
+  /** For the words sheet. Null when the row is not a masterlist bhajan. */
+  lyrics?: string | null;
 };
 
 export type LiveInstrument = { instrument: string; person: string | null };
@@ -47,6 +50,21 @@ export function LiveBoard({
   instruments: LiveInstrument[];
 }) {
   const cushions = useMicCushions(sessionId);
+  /** Which card's words are open, by position. Null for none. */
+  const [words, setWords] = useState<number | null>(null);
+  const openSlot = words === null ? null : (slots.find((s) => s.position === words) ?? null);
+
+  // Escape closes the words before it would exit the live view itself.
+  useEffect(() => {
+    if (openSlot === null) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.stopPropagation();
+      setWords(null);
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [openSlot]);
 
   /*
    * A typical weekday session is three or four bhajans (CLAUDE.md: 163 of 188),
@@ -83,15 +101,16 @@ export function LiveBoard({
       }
     : { title: undefined, pitch: undefined, singer: undefined, tabla: undefined, raga: undefined };
 
+  /*
+    h-[100dvh] as well as inset-0. On Chrome for Android the address bar hides
+    and shows as you scroll and the layout viewport changes underneath a
+    position:fixed element, so the board could sit misaligned against the
+    screen — Safari on iPhone happened not to show it. dvh tracks the visible
+    viewport, and overscroll-none stops the pull-to-refresh rubber band
+    dragging the whole board with it.
+  */
   return (
-    /*
-      h-[100dvh] as well as inset-0. On Chrome for Android the address bar
-      hides and shows as you scroll and the layout viewport changes underneath
-      a position:fixed element, so the board could sit misaligned against the
-      screen — Safari on iPhone happened not to show it. dvh tracks the visible
-      viewport, and overscroll-none stops the pull-to-refresh rubber band
-      dragging the whole board with it.
-    */
+    <>
     <div className="fixed inset-0 z-[100] flex h-[100dvh] overflow-hidden overscroll-none bg-ground text-on-ground">
       {/*
         The date as a vertical rail. It has to stay on screen — you need to
@@ -214,6 +233,26 @@ export function LiveBoard({
                     )}
                   </div>
 
+                  {/*
+                    The words, without leaving.
+                    
+                    Sailavan: singers want the lyrics up during a session and
+                    must be able to get back "without losing it". So this opens
+                    a sheet OVER the live view rather than navigating anywhere —
+                    nothing is unmounted, no scroll position is lost, and the
+                    full details page is one more tap away in a new tab for
+                    whoever wants the meaning or the audio.
+                  */}
+                  {s.lyrics || s.bhajanId ? (
+                    <button
+                      type="button"
+                      onClick={() => setWords(s.position)}
+                      className="self-center rounded-full border border-rule-surface px-3 py-0.5 text-[11px] uppercase tracking-wide text-on-surface-muted hover:border-brass/50 hover:text-on-surface"
+                    >
+                      words
+                    </button>
+                  ) : null}
+
                   {/* Singer, bottom right. */}
                   <div className="flex justify-end">
                     <span className="font-medium" style={fill.singer}>
@@ -249,5 +288,74 @@ export function LiveBoard({
         ) : null}
       </div>
     </div>
+
+      {/*
+        The words sheet.
+
+        Sits above the live view at a higher z-index rather than replacing it,
+        so closing it restores the board exactly — same scroll, same live mic
+        cushions, no refetch. On a phone it is the whole screen, because that
+        is what reading lyrics wants.
+      */}
+      {openSlot ? (
+        <div
+          /* Above the board's own z-[100], or the board paints over it and
+             swallows the clicks — which is exactly what happened first time. */
+          className="fixed inset-0 z-[120] flex flex-col bg-ground/95 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-label={`Words for ${openSlot.bhajanTitle}`}
+          onClick={() => setWords(null)}
+        >
+          <div
+            className="mx-auto flex h-full w-full max-w-2xl flex-col p-4 sm:p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-rule pb-3">
+              <div className="min-w-0">
+                <h2 className="font-display text-xl font-semibold text-on-ground sm:text-2xl">
+                  {openSlot.bhajanTitle}
+                </h2>
+                <p className="mt-0.5 text-xs text-on-ground-muted">
+                  {openSlot.singerName}
+                  {openSlot.confirmedPitch ? ` · ${openSlot.confirmedPitch}` : ""}
+                  {openSlot.raga ? ` · ${openSlot.raga}` : ""}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setWords(null)}
+                className="shrink-0 rounded-key border border-rule px-3 py-1.5 text-sm text-on-ground hover:bg-white/[0.08]"
+              >
+                Back
+              </button>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-auto py-4">
+              {openSlot.lyrics ? (
+                <p className="whitespace-pre-wrap font-display text-lg leading-relaxed text-on-ground sm:text-xl">
+                  {openSlot.lyrics}
+                </p>
+              ) : (
+                <p className="text-sm text-on-ground-muted">
+                  No words recorded for this bhajan.
+                </p>
+              )}
+            </div>
+
+            {openSlot.bhajanId ? (
+              <Link
+                href={`/bhajans/${openSlot.bhajanId}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 border-t border-rule pt-3 text-sm text-on-ground-muted underline underline-offset-2 hover:text-on-ground"
+              >
+                Meaning, audio and details ↗
+              </Link>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+    </>
   );
 }

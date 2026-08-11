@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
+import { LearningList } from "@/components/LearningList";
+import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { ShrutiLadder } from "@/components/ShrutiLadder";
 import { SungBhajanSearch, type SungBhajan } from "./SungBhajanSearch";
 import { getPitchLabels, getSingerProfile } from "@/lib/pitchQueries";
@@ -24,6 +26,15 @@ export default async function SingerPage({
 
   const singer = await prisma.singer.findUnique({ where: { id } });
   if (!singer) return <div>Not found</div>;
+
+  /*
+   * Your own list is editable; somebody else's is readable.
+   *
+   * An editor may keep anyone's, which is what the /my-list picker used to be
+   * for — they just visit the person instead now.
+   */
+  const [role, me] = await Promise.all([getRole(), getSignedInSinger()]);
+  const canKeepList = me?.id === singer.id || can(role, "assignSingers");
 
   const [{ profile, rows }, rungs] = await Promise.all([
     getSingerProfile(singer.id, singer.name),
@@ -241,6 +252,11 @@ export default async function SingerPage({
         </CardContent>
       </Card>
 
+      <LearningList
+        singerId={singer.id}
+        singerName={singer.name}
+        canEdit={canKeepList}
+      />
     </div>
   );
 }

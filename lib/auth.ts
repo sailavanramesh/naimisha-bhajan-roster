@@ -47,6 +47,7 @@ export type Capability =
   | "exploreBhajans" // browse a randomised slice of the masterlist
   | "manageOwnLearning" // keep a personal learning list
   | "setMicCushion" // mark which colour mic cushion a singer is on
+  | "notifySingers" // send somebody a reminder about a session by hand
   | "viewAllPages";
 
 const MATRIX: Record<Role, ReadonlySet<Capability>> = {
@@ -61,6 +62,7 @@ const MATRIX: Record<Role, ReadonlySet<Capability>> = {
     "exploreBhajans",
     "manageOwnLearning",
     "setMicCushion",
+    "notifySingers",
     "viewAllPages",
   ]),
   member: new Set<Capability>([

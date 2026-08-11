@@ -71,6 +71,9 @@ export default async function LiveSessionPage({
     bhajanId: s.bhajanId,
     deities: s.bhajan?.deities.map((d) => d.deity.name) ?? [],
     raga: s.bhajan?.raga?.trim() || null,
+    // Short — the longest in the masterlist is a few hundred characters — so
+    // they travel with the board rather than costing a fetch mid-session.
+    lyrics: s.bhajan?.lyrics?.trim() || null,
     confirmedPitch: s.confirmedPitch,
     tablaPitch: tablaByPosition.get(s.position)?.choice.note ?? null,
     tablaWhy: tablaByPosition.get(s.position)?.choice.why ?? null,
