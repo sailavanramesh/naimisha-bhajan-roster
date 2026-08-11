@@ -48,11 +48,24 @@ sets), `lib/tablaPlan.ts` (overrides + session plan),
   labelled assumed. That is wrong for Malkauns (no Pa) and Kalyani (sharp
   fourth), which is exactly why it says so.
 
-**Known limits — REVIEW THESE:**
-- `lib/ragaScales.ts` was seeded by Claude from standard melakarta/thaat theory,
-  NOT supplied by the centre. Kalyana Vasantham in particular looks doubtful.
-  Anything wrong there is correctable in place, and any single answer can be
-  overridden from the roster page.
+**Confirmed by Sailavan, 2026-08-11.** He checked every case where the rule
+goes past Sa and the fifth — A# with a major third (D), A# with a minor third
+(C#), G# in Kalyani (C, skipping the sharp fourth), G# in Malkauns (C#,
+skipping the absent fifth), G# in Mohanam (C, no Ma at all), D# in Desh (C, the
+sixth) and D# in Darbari (C#, the flat seventh) — and all seven were right. He
+also confirmed Kalyana Vasantham takes the NATURAL fourth, which is now fixed
+and lifted coverage to 96.9%. Those answers are pinned as tests in
+`lib/tabla.test.ts`, so they are the group's ruling rather than my reasoning.
+
+**Known limits — STILL OPEN:**
+- `lib/ragaScales.ts` was otherwise seeded by Claude from standard
+  melakarta/thaat theory, NOT supplied by the centre. Anything wrong is
+  correctable in place, and any single answer can be overridden from the roster
+  page.
+- Awaiting Sailavan on two things: the ~12 combinations with no answer at all
+  (Sa=D#, A# or B in ragas containing nothing usable — he may prefer
+  "re-pitch it"), and whether to seed the ~30 ragas absent from the table,
+  which currently produce "assumed" answers.
 - Ragas still missing that appeared in the history: Khamas, Hamir Kalyani /
   Kedar. Adding them would resolve 6 of the 22 remaining no-fit records.
 - The roster grid still shows the old Sa+7 "Tabla" column. It is the historical

@@ -157,3 +157,33 @@ describe('tablasForSession', () => {
     expect(tablasForSession(slots).calls[0].anyAssumed).toBe(true);
   });
 });
+
+/*
+ * Confirmed by Sailavan on 2026-08-11, going through each case by hand.
+ *
+ * These are not my reasoning about the rule — they are the group's answers to
+ * "which drum would you actually bring". They pin the behaviour that matters
+ * most: every case where the rule goes past Sa and the fifth, which is where
+ * it could plausibly be wrong.
+ */
+describe('confirmed against the group', () => {
+  const check = (pitch: string, raga: string, expected: string) =>
+    it(`${raga} at ${pitch} -> ${expected}`, () => {
+      expect(recommendTablaForLabel(pitch, scale(raga), ASHRAM).note).toBe(expected);
+    });
+
+  check('6.5 Pancham / A#', 'Shankarabharanam', 'D');   // major third
+  check('6.5 Pancham / A#', 'Jaunpuri', 'C#');          // minor third
+  check('5.5 Pancham / G#', 'Kalyani / Yaman', 'C');    // skips the sharp fourth
+  check('5.5 Pancham / G#', 'Hindolam / Malkauns', 'C#'); // skips the absent fifth
+  check('5.5 Pancham / G#', 'Mohanam / Bhoop', 'C');    // no Ma at all
+  check('2.5 Pancham / D#', 'Desh', 'C');               // the sixth
+  check('2.5 Pancham / D#', 'Darbari', 'C#');           // the flat seventh
+
+  // Also confirmed: Kalyana Vasantham takes the NATURAL fourth, M1.
+  it('Kalyana Vasantham has a natural fourth, so G# resolves to C#', () => {
+    expect(scale('Kalyana Vasantham')).toContain(5);
+    expect(scale('Kalyana Vasantham')).not.toContain(6);
+    expect(recommendTablaForLabel('5.5 Pancham / G#', scale('Kalyana Vasantham'), ASHRAM).note).toBe('C#');
+  });
+});
