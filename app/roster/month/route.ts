@@ -26,17 +26,15 @@ function isoDateLocal(d: Date) {
   return `${y}-${m}-${day}`;
 }
 
-function buildDaySummary(
-  slots: Array<{ singer: { name: string } | null; bhajanTitle: string | null }>
-) {
-  const parts = slots
-    .slice(0, 3)
-    .map((x) => `${x.singer?.name ?? "Unassigned"}${x.bhajanTitle ? ` — ${x.bhajanTitle}` : ""}`)
-    .filter(Boolean);
-  if (!parts.length) return null;
-  const suffix = slots.length > 3 ? " …" : "";
-  return parts.join(" · ") + suffix;
-}
+/**
+ * The day's rows, as structure rather than a sentence.
+ *
+ * This used to return one joined string — "Anvita — Sathya Sai · Ashwin — Mata
+ * Maheshwari …" — which the panel printed as a run-on line. Sending the parts
+ * lets the panel lay them out the way the list view does, and carry the pitch,
+ * which a glance at a day is largely for.
+ */
+type DayRow = { singer: string; bhajan: string | null; pitch: string | null };
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -56,15 +54,25 @@ export async function GET(req: NextRequest) {
       date: true,
       _count: { select: { slots: true } },
       slots: {
-        select: { bhajanTitle: true, singer: { select: { name: true } } },
+        select: {
+          bhajanTitle: true,
+          confirmedPitch: true,
+          bhajan: { select: { title: true } },
+          festivalBhajanTitle: true,
+          singer: { select: { name: true } },
+        },
         orderBy: [{ position: "asc" }, { createdAt: "asc" }],
-        take: 3,
+        // Six covers a normal session outright; longer ones say "+N more".
+        take: 6,
       },
     },
     orderBy: { date: "asc" },
   });
 
-  const dayInfo: Record<string, { sessionId: string; entries: number; summary?: string | null }> = {};
+  const dayInfo: Record<
+    string,
+    { sessionId: string; entries: number; rows: DayRow[] }
+  > = {};
   for (const s of sessions) {
     /*
      * A session record can outlive its contents: build one, empty it, and the
@@ -76,7 +84,15 @@ export async function GET(req: NextRequest) {
      * creating a second one — it simply stops being advertised.
      */
     if ((s._count.slots ?? 0) === 0) continue;
-    const value = { sessionId: s.id, entries: s._count.slots ?? 0, summary: buildDaySummary(s.slots) };
+    const value = {
+      sessionId: s.id,
+      entries: s._count.slots ?? 0,
+      rows: s.slots.map((x) => ({
+        singer: x.singer?.name ?? "Unassigned",
+        bhajan: x.bhajan?.title ?? x.bhajanTitle ?? x.festivalBhajanTitle ?? null,
+        pitch: x.confirmedPitch,
+      })),
+    };
     const utcKey = isoDateUTC(s.date);
     const localKey = isoDateLocal(s.date);
 

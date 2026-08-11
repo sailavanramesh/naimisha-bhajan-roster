@@ -748,13 +748,55 @@ Still genuinely open, none blocking:
     would overwhelm it; a compact variant is probably wanted, which is a design
     decision rather than a bug.
 
-### Wanted later — push notifications
+### Push notifications — DONE, plus the day-of nudge
 
 Sailavan, 2026-08-10: installed as a PWA on phones, the app should notify
 people when a **new session is created**, and especially when **they have been
-rostered for it**.
+rostered for it**. Built and confirmed working on a real device.
 
-Not started. Notes for whoever picks it up:
+Four kinds now, all defined in `lib/notify.ts` (pure, 35 tests):
+
+| Kind | When | Alerts? |
+|---|---|---|
+| `rostered` | you are put on a future session | yes |
+| `published` | the roster for a day is up — everyone else | no, silent |
+| `nudge` | 3pm on the day, your row still has no bhajan and/or no pitch | yes |
+| `nudge_final` | 5pm the same day, still not filled in. The last one. | yes |
+
+The nudge was asked for on 2026-08-12: *"if a singer hasn't put in their song
+and confirmed pitch by the day of the session they are allocated for, maybe by
+3pm, send them an additional notification asking them to update the song +/-
+pitch based on what's missing"*. Sailavan chose 3pm-then-5pm over a single
+reminder.
+
+**How the clock reaches the app.** Nothing else in this codebase runs on a
+timer — every other notification is triggered by somebody saving something.
+`.github/workflows/nudge.yml` fires hourly and POSTs `/api/nudges/run` with a
+bearer secret; `runNudges()` decides whether that hour is 3pm or 5pm *in
+Melbourne*. Deciding in the app rather than in the cron expression is what
+keeps daylight saving out of the workflow file — Melbourne is UTC+10 for half
+the year and UTC+11 for the other half, and 3pm has to mean 3pm in the hall on
+both sides of the change. It also makes a late or duplicated tick harmless.
+
+Requires two GitHub secrets (`NUDGE_URL`, `NUDGE_SECRET`) and `NUDGE_SECRET`
+as an App Service setting. Without them the workflow exits 0 doing nothing and
+the endpoint answers 503 — an unauthenticated route that can push to
+everyone's phone is not something to leave open by default.
+
+**Not repeated.** `SessionNotice` already existed with a unique key on
+(session, singer, kind); the two new enum values reuse it, so the once-each
+guarantee came for free with no new table. A notice is written even when the
+person has no subscribed device, so they are not retried every hour. Both the
+3pm and 5pm messages carry the same `tag`, so the second replaces the first in
+the shade rather than stacking under it.
+
+**Verified 2026-08-12** against the real roster by forcing the clock: 2pm and
+9pm skip; 3pm finds the one incomplete row (`due:1`) and finds nothing on a
+second run in the same window; 5pm sends the final one to the same person and
+then nothing. The complete row was never nudged. The temporary slot and the
+two notices it produced were deleted afterwards — session back to 1 slot.
+
+Original notes, kept because they explain the shape:
 
 - Needs the Web Push API + a service worker, VAPID keys, and a
   `PushSubscription` per person per device. Azure App Service can serve it; no

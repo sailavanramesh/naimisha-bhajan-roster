@@ -1,7 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { SessionRows } from "@/components/SessionRows";
 import { Button, Input } from "@/components/ui";
 import { fetchMonthInfo, createSessionForDate } from "./calendarActions";
 
@@ -9,7 +11,7 @@ type DayInfo = {
   hasSession: boolean;
   entries: number;
   sessionId?: string;
-  summary?: string | null;
+  rows?: { singer: string; bhajan: string | null; pitch: string | null }[];
 };
 
 function toISODate(d: Date) {
@@ -54,6 +56,7 @@ export default function RosterCalendarClient(props: {
   const [currentMonth, setCurrentMonth] = useState<string>(initialMonth);
   const [selected, setSelected] = useState<string>(initialSelected);
   const [dayInfo, setDayInfo] = useState<Record<string, DayInfo>>(initialDayInfo);
+  const [denied, setDenied] = useState<string | null>(null);
   const [jumpDate, setJumpDate] = useState<string>(initialSelected);
   const [isPending, startTransition] = useTransition();
   const loadedMonthsRef = useRef<Set<string>>(new Set([initialMonth]));
@@ -97,13 +100,19 @@ export default function RosterCalendarClient(props: {
       return;
     }
 
-    if (!canEdit) return;
+    if (!canEdit) {
+      // Was a silent no-op, which reads as the app being broken. Now that the
+      // standing "read-only" banner is gone, the moment of the attempt is the
+      // only place left to say why nothing happened.
+      setDenied("Only an editor can start a session on a new day.");
+      return;
+    }
 
     startTransition(async () => {
       const created = await createSessionForDate(dateISO);
       setDayInfo((prev) => ({
         ...prev,
-        [dateISO]: { hasSession: true, entries: 0, sessionId: created.id, summary: null },
+        [dateISO]: { hasSession: true, entries: 0, sessionId: created.id, rows: [] },
       }));
       router.push(`/roster/${created.id}`);
     });
@@ -203,36 +212,55 @@ export default function RosterCalendarClient(props: {
         })}
       </div>
 
-      <div className="rounded-[12px] border border-rule-surface bg-panel p-3 text-sm">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="font-semibold">{selectedLabel}</div>
-          <div className="flex items-center gap-2 text-xs">
-            <span className={[
-              "rounded-full border px-2 py-1",
-              selectedHasSession ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-on-surface",
-            ].join(" ")}>
-              {selectedHasSession ? "Session exists" : "No session"}
-            </span>
-            <span className="rounded-full border border-slate-200 bg-panel px-2 py-1 text-slate-700">
-              {selectedEntries} row{selectedEntries === 1 ? "" : "s"}
-            </span>
-          </div>
+      {/*
+        The selected day, laid out the way the list view lays out a session —
+        singer, bhajan, pitch in columns — rather than as one run-on sentence
+        with the names jammed together. Same component, so the two cannot
+        drift apart again.
+      */}
+      <div className="grid gap-2 rounded-[12px] border border-rule-surface bg-panel p-3 text-sm">
+        <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+          <span className="font-semibold">{selectedLabel}</span>
+          <span className="text-[11px] text-on-surface-muted">
+            {selectedHasSession
+              ? `${selectedEntries} row${selectedEntries === 1 ? "" : "s"}`
+              : "no session"}
+          </span>
         </div>
 
-        {selectedInfo?.summary ? (
-          <div className="mt-2 rounded-[12px] border bg-panel px-3 py-2 text-slate-700">
-            {selectedInfo.summary}
-          </div>
-        ) : null}
-
-        <div className="mt-2 text-slate-700">
-          {selectedHasSession
-            ? "Tap the day again to open the session details."
-            : canEdit
-              ? "No session yet — tap this day to create one instantly."
-              : "This day is read-only and currently has no session."}
-        </div>
+        {selectedHasSession ? (
+          <>
+            <SessionRows
+              rows={selectedInfo?.rows ?? []}
+              total={selectedEntries}
+              emptyLabel="Session created, nothing rostered on it yet."
+            />
+            {selectedInfo?.sessionId ? (
+              <Link
+                href={`/roster/${selectedInfo.sessionId}`}
+                className="justify-self-start text-[12px] text-brass-ink underline underline-offset-2"
+              >
+                Open this session →
+              </Link>
+            ) : null}
+          </>
+        ) : (
+          <p className="text-on-surface-muted">
+            {canEdit
+              ? "Nothing on this day. Tap it to start a session."
+              : "Nothing on this day."}
+          </p>
+        )}
       </div>
+
+      {denied ? (
+        <p
+          role="status"
+          className="rounded-[10px] border border-warn/40 bg-warn/[0.08] px-3 py-2 text-sm"
+        >
+          {denied}
+        </p>
+      ) : null}
 
       {isPending ? <div className="text-xs text-on-surface-muted">Loading…</div> : null}
     </div>

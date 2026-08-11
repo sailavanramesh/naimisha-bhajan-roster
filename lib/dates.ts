@@ -56,6 +56,24 @@ export function melbourneTodayISO(now: Date = new Date()): string {
 }
 
 /**
+ * The hour of the day in Melbourne, 0–23.
+ *
+ * Computed from the zone rather than from an offset because the group is in a
+ * daylight-saving zone: Melbourne is UTC+10 for half the year and UTC+11 for
+ * the other half, and "3pm" has to mean 3pm in the hall on both sides of the
+ * change.
+ */
+export function melbourneHour(now: Date = new Date()): number {
+  const hh = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Australia/Melbourne",
+    hour: "2-digit",
+    hour12: false,
+  }).format(now);
+  // en-GB renders midnight as "24" in some ICU versions.
+  return Number(hh) % 24;
+}
+
+/**
  * The latest session date that counts as history.
  *
  * Session dates are stored at UTC midnight, so comparing `<=` against today's

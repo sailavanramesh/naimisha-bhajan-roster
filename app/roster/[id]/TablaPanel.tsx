@@ -95,11 +95,13 @@ export function TablaPanel({
           {calls.map((c) => (
             <span
               key={c.note}
-              className="inline-flex items-baseline gap-2 rounded-[10px] border-2 border-brass/45 bg-field px-3 py-1.5"
+              /* One width for every drum, so they read as a row of keys rather
+                 than chips of different sizes. */
+              className="inline-flex w-[5.5rem] flex-col items-center rounded-[10px] border-2 border-brass/45 bg-field px-2 py-1.5"
               title={c.forBhajans.join(", ")}
             >
-              <span className="font-mono text-xl font-semibold">{c.note}</span>
-              <span className="text-xs text-on-surface-muted">
+              <span className="font-mono text-xl font-semibold leading-none">{c.note}</span>
+              <span className="mt-0.5 text-[10px] text-on-surface-muted">
                 {c.forBhajans.length} bhajan{c.forBhajans.length === 1 ? "" : "s"}
               </span>
             </span>
@@ -131,39 +133,62 @@ export function TablaPanel({
             key={s.position}
             className="grid gap-1 rounded-[10px] border border-rule-surface bg-surface px-3 py-1.5"
           >
-            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-              <span className="min-w-0 text-sm">
-                <span className="font-mono text-xs text-on-surface-muted">{s.position}</span>{" "}
-                <span className="font-medium">{s.title}</span>
+            {/*
+              A fixed grid, not a flex row.
+              
+              Every piece here varies in length — a bhajan title, a dual raga
+              name, "the fourth of G# — tune to C#" against a bare "Sa" — so a
+              flex row put the drum and the change link in a different place on
+              every line and the column read as random. Fixed tracks mean the
+              answer is always in the same spot, which is the whole use of this
+              panel: run your eye down one column.
+
+              On a phone five columns will not fit honestly, so the answer
+              drops to a second line — still drum, then reason, then change, in
+              that order and at fixed widths. `sm:contents` dissolves that
+              wrapper back into the grid at width, so there is one markup for
+              both.
+            */}
+            <div className="grid grid-cols-[1.5rem_minmax(0,1fr)] items-baseline gap-x-2 gap-y-1 sm:grid-cols-[1.5rem_minmax(0,1fr)_3.25rem_11rem_4rem]">
+              <span className="font-mono text-xs text-on-surface-muted">{s.position}</span>
+
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium">{s.title}</span>
                 {s.raga ? (
-                  <span className="ml-2 text-xs italic text-on-surface-muted">{s.raga}</span>
-                ) : null}
-              </span>
-
-              <span className="flex items-center gap-2">
-                <span
-                  className={[
-                    "inline-flex items-baseline gap-1.5 rounded-[8px] border px-2 py-0.5",
-                    s.note ? "border-brass/45 bg-field" : "border-warn/50 bg-warn/[0.08]",
-                  ].join(" ")}
-                  title={s.why}
-                >
-                  <span className="font-mono text-sm font-semibold">{s.note ?? "—"}</span>
-                  <span className="text-[10px] text-on-surface-muted">
-                    {s.overridden ? "by hand" : s.confidence === "assumed" ? "assumed" : s.why}
+                  <span className="block truncate text-xs italic text-on-surface-muted">
+                    {s.raga}
                   </span>
-                </span>
-
-                {canEdit && s.sa !== null ? (
-                  <button
-                    type="button"
-                    onClick={() => setOpenRow(openRow === s.position ? null : s.position)}
-                    className="text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
-                  >
-                    {openRow === s.position ? "close" : "change"}
-                  </button>
                 ) : null}
               </span>
+
+              <div className="col-start-2 flex items-center gap-2 sm:contents">
+              {/* The drum, always in the same column and always the same width. */}
+              <span
+                className={[
+                  "inline-flex h-7 w-[3.25rem] shrink-0 items-center justify-center rounded-[8px] border font-mono text-sm font-semibold sm:col-start-3",
+                  s.note ? "border-brass/45 bg-field" : "border-warn/50 bg-warn/[0.08]",
+                ].join(" ")}
+                title={s.why}
+              >
+                {s.note ?? "—"}
+              </span>
+
+              <span className="min-w-0 flex-1 truncate text-[11px] text-on-surface-muted sm:col-start-4 sm:self-center">
+                {s.overridden ? "set by hand" : s.confidence === "assumed" ? "assumed" : s.why}
+              </span>
+
+              {canEdit && s.sa !== null ? (
+                <button
+                  type="button"
+                  onClick={() => setOpenRow(openRow === s.position ? null : s.position)}
+                  className="shrink-0 text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface sm:col-start-5 sm:justify-self-end sm:self-center"
+                >
+                  {openRow === s.position ? "close" : "change"}
+                </button>
+              ) : (
+                <span className="hidden sm:block" />
+              )}
+              </div>
             </div>
 
             {!s.note && s.alternatives.length > 0 ? (
