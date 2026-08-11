@@ -23,6 +23,51 @@
 import { saOf, NOTE_NAMES, type NoteName } from "./pitch";
 
 /**
+ * What the ashram owns.
+ *
+ * A constant rather than a table: four drums that change about never. If the
+ * centre buys a fifth, this line is the change.
+ *
+ * Lives here, in the pure module, because the roster grid needs it in the
+ * BROWSER to recompute a row's tabla as the pitch is edited — anything it
+ * imports must not drag Prisma into the client bundle.
+ */
+export const ASHRAM_TABLAS: readonly NoteName[] = ["C", "C#", "D", "E"];
+export const ASHRAM_TABLA_PC: readonly number[] = ASHRAM_TABLAS.map((n) => NOTE_NAMES.indexOf(n));
+
+/** Normalisation shared by the raga table and the override keys. */
+export function overrideKey(raga: string | null | undefined): string {
+  return (raga ?? "").replace(/^\s*~\s*/, "").trim().toLowerCase();
+}
+
+/**
+ * Apply a coordinator's override, falling back to the rule.
+ *
+ * `overrides` is keyed "<ragaKey>|<sa>", with "" for "any raga at this Sa".
+ * A key present with a null value means "nothing fits" was recorded on
+ * purpose, which is different from no answer having been given.
+ */
+export function tablaWithOverride(
+  label: string | null | undefined,
+  raga: string | null | undefined,
+  ragaSemitones: readonly number[] | null,
+  overrides: Readonly<Record<string, string | null>>,
+): { note: NoteName | null; overridden: boolean } {
+  const sa = saOf(label);
+  if (sa === null) return { note: null, overridden: false };
+
+  for (const key of [`${overrideKey(raga)}|${sa}`, `|${sa}`]) {
+    if (key in overrides) {
+      return { note: (overrides[key] as NoteName | null) ?? null, overridden: true };
+    }
+  }
+  return {
+    note: recommendTablaForLabel(label, ragaSemitones, ASHRAM_TABLA_PC).note,
+    overridden: false,
+  };
+}
+
+/**
  * Degrees a tabla may sensibly be tuned to, best first.
  *
  * Sailavan: prefer the fourth over the third. Raga Desh is the example — its

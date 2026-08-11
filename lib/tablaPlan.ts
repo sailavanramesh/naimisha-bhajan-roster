@@ -1,22 +1,16 @@
 import { prisma } from "@/lib/db";
-import { saOf, NOTE_NAMES, type NoteName } from "@/lib/pitch";
+import { saOf, type NoteName } from "@/lib/pitch";
 import { ragaScale } from "@/lib/ragaScales";
-import { recommendTablaForLabel, tablasForSession, type TablaChoice } from "@/lib/tabla";
+import {
+  recommendTablaForLabel,
+  tablasForSession,
+  ASHRAM_TABLAS,
+  ASHRAM_TABLA_PC,
+  overrideKey,
+  type TablaChoice,
+} from "@/lib/tabla";
 
-/**
- * What the ashram owns.
- *
- * A constant rather than a table: it is four drums that change about never, and
- * a settings screen for it would be more machinery than the fact deserves. If
- * the centre buys a fifth, this line is the change.
- */
-export const ASHRAM_TABLAS: readonly NoteName[] = ["C", "C#", "D", "E"];
-const ASHRAM_PC = ASHRAM_TABLAS.map((n) => NOTE_NAMES.indexOf(n));
-
-/** Same normalisation the raga table uses, so overrides key the same way. */
-export function overrideKey(raga: string | null | undefined): string {
-  return (raga ?? "").replace(/^\s*~\s*/, "").trim().toLowerCase();
-}
+export { ASHRAM_TABLAS, overrideKey };
 
 export type PlannedSlot = {
   position: number;
@@ -63,7 +57,7 @@ export async function planTablas(sessionId: string): Promise<{
     const title = r.bhajan?.title ?? r.bhajanTitle ?? r.festivalBhajanTitle ?? "—";
     const sa = saOf(r.confirmedPitch);
 
-    const computed = recommendTablaForLabel(r.confirmedPitch, ragaScale(raga), ASHRAM_PC);
+    const computed = recommendTablaForLabel(r.confirmedPitch, ragaScale(raga), ASHRAM_TABLA_PC);
 
     // Most specific first: this raga at this Sa, then any raga at this Sa.
     const hit =

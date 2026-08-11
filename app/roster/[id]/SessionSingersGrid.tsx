@@ -8,6 +8,8 @@ import { Button } from "@/components/ui";
 import { deleteSingerRow, upsertSessionSingerRows, type SingerRowInput } from "./actions";
 import { useMicCushions, MicCushionDots, cushionTint } from "@/components/MicCushions";
 import { stepWithinSeries } from "@/lib/pitch";
+import { tablaWithOverride } from "@/lib/tabla";
+import { ragaScale } from "@/lib/ragaScales";
 
 type SingerLite = { id: string; name: string; gender: string | null };
 
@@ -51,6 +53,7 @@ type BhSearchState = { q: string; items: { id: string; title: string }[]; open: 
 
 export function SessionSingersGrid(props: {
   canSetMicCushion: boolean;
+  tablaOverrides: Record<string, string | null>;
   canEdit: boolean;
   /** May move singers between slots. Members may not. */
   canAssign: boolean;
@@ -639,9 +642,41 @@ export function SessionSingersGrid(props: {
                     {r.recommendedPitch ?? "—"}
                   </td>
 
-                  {/* Tabla — derived from the confirmed pitch. Plain text. */}
-                  <td data-label="Tabla" className="whitespace-nowrap px-2 py-1.5 text-[12px] text-on-surface-muted">
-                    {r.confirmedPitch ? (r.alternativeTablaPitch ?? "—") : "—"}
+                  {/*
+                    Tabla — the drum to TUNE, not the old Sa + 7.
+                    
+                    Sa + 7 is the fifth, which is only an answer when the ashram
+                    happens to own that note; it owns C, C#, D and E. Recomputed
+                    here in the browser so it follows the confirmed pitch as it
+                    is edited, and honouring any override a coordinator has set.
+                  */}
+                  <td data-label="Tabla" className="whitespace-nowrap px-2 py-1.5 text-[13px]">
+                    {(() => {
+                      if (!r.confirmedPitch) return <span className="text-on-surface-muted">—</span>;
+                      const { note, overridden } = tablaWithOverride(
+                        r.confirmedPitch,
+                        r.raga,
+                        ragaScale(r.raga),
+                        props.tablaOverrides,
+                      );
+                      if (!note) {
+                        return (
+                          <span className="text-warn" title="No ashram tabla fits this pitch">
+                            none fits
+                          </span>
+                        );
+                      }
+                      return (
+                        <span className="font-mono font-semibold" title={overridden ? "set by hand" : "computed"}>
+                          {note}
+                          {overridden ? (
+                            <span className="ml-1 font-sans text-[10px] font-normal text-on-surface-muted">
+                              set
+                            </span>
+                          ) : null}
+                        </span>
+                      );
+                    })()}
                   </td>
 
                   {/* Delete */}
