@@ -10,7 +10,9 @@ export default async function FestivalPage() {
   const role = await getRole();
   if (!can(role, "viewAllPages")) return <NoAccess what="The festival page" role={role} />;
 
+  // Who could sing at a festival, so rosterable singers only.
   const singers = await prisma.singer.findMany({
+    where: { gender: { not: null } },
     orderBy: { name: "asc" },
     include: {
       repertoire: {

@@ -17,6 +17,7 @@ import { googleSignInConfigured } from "@/lib/authConfig";
 import { getRole, can } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
 import { AddPersonForm } from "./AddPersonForm";
+import { TablaDecisions } from "./TablaDecisions";
 
 export const dynamic = "force-dynamic";
 
@@ -91,6 +92,21 @@ export default async function AdminPage({
             </div>
           ) : null}
         </CardHeader>
+      </Card>
+
+      {/* ---- Tabla decisions, collected over time ---- */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Tabla decisions</CardTitle>
+          <div className="mt-1 max-w-2xl text-sm text-on-surface-muted">
+            Every tabla chosen by hand, beside what the rule computed. Rather than encoding
+            every raga up front, the cases it cannot resolve get decided as they come up and
+            collected here — the disagreements are what will refine the rule.
+          </div>
+        </CardHeader>
+        <CardContent>
+          <TablaDecisions />
+        </CardContent>
       </Card>
 
       {/* ---- Who can sign in ---- */}

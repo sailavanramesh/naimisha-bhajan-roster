@@ -8,6 +8,25 @@ open uncertainties.
 
 ---
 
+## Auto-add by fairness (assign page)
+
+A second way to fill a session, alongside picking by hand — which stays the
+mainstay. "Add 3 fairest" puts on whoever is most owed a turn.
+
+`fairestSingers` in `lib/rosterScoring.ts`, 13 tests. Only the fairness terms
+apply — overdue, load balance, and a gender-clump penalty so the picks
+alternate voice — because the others need a bhajan to score against.
+
+**Decisions and why:**
+- *Bhajans are left blank.* Who sings and what they sing are separate
+  decisions, and the fairness score has nothing to say about the second.
+  Filling one in would put a bhajan on the roster that nobody chose.
+- *Pressing it again tops up rather than duplicating*, and continues the voice
+  pattern already on the session so a second press cannot create a run of three.
+- *Greedy, not exhaustive.* Eleven singers and three slots; the difference from
+  an optimal search is nil and the order it produces is the order shown.
+
+
 ## Tabla tuning (which drum to bring)
 
 The ashram owns tablas in **C, C#, D, E**. The app now says which of them to
@@ -62,10 +81,15 @@ and lifted coverage to 96.9%. Those answers are pinned as tests in
   melakarta/thaat theory, NOT supplied by the centre. Anything wrong is
   correctable in place, and any single answer can be overridden from the roster
   page.
-- Awaiting Sailavan on two things: the ~12 combinations with no answer at all
-  (Sa=D#, A# or B in ragas containing nothing usable — he may prefer
-  "re-pitch it"), and whether to seed the ~30 ragas absent from the table,
-  which currently produce "assumed" answers.
+- **Sailavan, 2026-08-11: do NOT hand-code the remaining ragas.** Neither the
+  ~15 combinations with nothing usable nor the ~30 ragas absent from the table.
+  He will decide them as they come up and the app collects the answers, so the
+  rule can be refined from real decisions rather than from my theory. The
+  collection surface is Admin -> Tabla decisions, which shows each hand-picked
+  answer beside what the rule computed; a disagreement means either the raga's
+  notes are wrong or the degree order is, and which becomes clear once a few
+  accumulate. Nothing is silently wrong meanwhile — an unresolved case says
+  "needs a decision" and an unknown raga says "assumed".
 - Ragas still missing that appeared in the history: Khamas, Hamir Kalyani /
   Kedar. Adding them would resolve 6 of the 22 remaining no-fit records.
 - The roster grid still shows the old Sa+7 "Tabla" column. It is the historical

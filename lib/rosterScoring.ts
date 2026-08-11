@@ -469,3 +469,79 @@ export const WEIGHT_GUIDE: Record<
     penalty: true,
   },
 };
+
+/**
+ * Pick the fairest singers to put on a session, without reference to bhajans.
+ *
+ * A second way in, alongside the existing flow — not a replacement for it.
+ * `assignRoster` fits singers to slots that already HAVE bhajans, so it can use
+ * repertoire and pitch fit. This answers a different question: nobody is on the
+ * session yet, who is most owed a turn.
+ *
+ * Only the fairness terms apply, because the others need a bhajan to score
+ * against:
+ *
+ *   overdue      how long since they last sang anything
+ *   loadBalance  their recent count against the group average
+ *   genderClump  penalised while building, so the picks alternate voice rather
+ *                than handing three slots to the same side
+ *
+ * Greedy rather than exhaustive: it takes the best, records the voice, and
+ * re-scores. With eleven singers and three slots the difference from an optimal
+ * search is nil, and the order it produces is the order a coordinator sees.
+ */
+export function fairestSingers(
+  singers: readonly SingerContext[],
+  {
+    count,
+    exclude = new Set<string>(),
+    weights = DEFAULT_WEIGHTS,
+    startingGenders = [],
+  }: {
+    count: number;
+    exclude?: ReadonlySet<string>;
+    weights?: Weights;
+    startingGenders?: readonly (Gender | null)[];
+  },
+): Array<{ singer: SingerContext; score: number; reasons: string[] }> {
+  const pool = singers.filter(
+    (s) => !exclude.has(s.id) && s.available && s.gender !== null,
+  );
+  if (pool.length === 0 || count <= 0) return [];
+
+  const groupMean =
+    pool.reduce((sum, s) => sum + s.recentCount, 0) / Math.max(1, pool.length);
+
+  const chosen: Array<{ singer: SingerContext; score: number; reasons: string[] }> = [];
+  const taken = new Set<string>();
+  const genders: (Gender | null)[] = [...startingGenders];
+
+  for (let i = 0; i < count; i++) {
+    let best: { singer: SingerContext; score: number; reasons: string[] } | null = null;
+
+    for (const singer of pool) {
+      if (taken.has(singer.id)) continue;
+
+      const overdue = overdueScore(singer);
+      const load = loadBalanceScore(singer, groupMean);
+      const clump = genderClumpPenalty(singer, genders);
+      const score =
+        weights.overdue * overdue + weights.loadBalance * load - weights.genderClump * clump;
+
+      const reasons: string[] = [];
+      if (singer.daysSinceLastSang === null) reasons.push("never sung here");
+      else if (overdue > 0.6) reasons.push(`${singer.daysSinceLastSang} days since they sang`);
+      if (load > 0.6) reasons.push("under-used lately");
+      if (clump > 0) reasons.push("would make three of the same voice");
+
+      if (!best || score > best.score) best = { singer, score, reasons };
+    }
+
+    if (!best) break;
+    chosen.push(best);
+    taken.add(best.singer.id);
+    genders.push(best.singer.gender);
+  }
+
+  return chosen;
+}

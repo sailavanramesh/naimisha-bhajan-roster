@@ -24,7 +24,9 @@ export default async function Page() {
           }),
           prisma.bhajan.count(),
           prisma.session.count(),
-          prisma.singer.findMany({ orderBy: { name: "asc" } }),
+          // Rosterable singers only: this feeds the load summary and the
+          // Singers count, both of which are statements about who sings.
+          prisma.singer.findMany({ where: { gender: { not: null } }, orderBy: { name: "asc" } }),
           prisma.sessionSlot.findMany({
             where: { session: { date: { gte: since } } },
             select: { singerId: true },
