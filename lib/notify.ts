@@ -3,19 +3,23 @@
  *
  * Pure. No Prisma, no web-push.
  *
- * Two kinds, because Sailavan asked for two:
+ * Four kinds:
  *
- *   ROSTERED   you are singing. Alerts: sound, vibration, and it stays on the
- *              lock screen until dismissed.
- *   PUBLISHED  the roster for a day is up. Silent — it appears in the shade
- *              without interrupting anybody.
+ *   ROSTERED     you are singing. Alerts: sound, vibration, and it stays on the
+ *                lock screen until dismissed.
+ *   PUBLISHED    the roster for a day is up. Silent — it appears in the shade
+ *                without interrupting anybody.
+ *   NUDGE        3pm on the day you are singing and your row is still not
+ *                filled in. Alerts, because it is asking you to do something
+ *                and there are hours left in which to do it.
+ *   NUDGE_FINAL  5pm, the second and last one. Nobody is nudged a third time.
  *
  * The distinction is the whole point. A group of a dozen people cannot have
  * everybody buzzed every time a session is planned, but the three or four who
  * have to turn up and sing do need to know.
  */
 
-export type NoticeKind = "rostered" | "published";
+export type NoticeKind = "rostered" | "published" | "nudge" | "nudge_final";
 
 export type Notification = {
   title: string;
@@ -108,4 +112,104 @@ export function publishedNotification(input: {
  */
 export function shouldNotifyForSession(sessionISO: string, todayISO: string): boolean {
   return sessionISO >= todayISO;
+}
+
+/* ------------------------------------------------------------------ *\
+ * The day-of nudge.
+ *
+ * A rostered row is only useful once it says WHAT is being sung and AT WHAT
+ * PITCH — the tabla player tunes from the pitch, and nobody can practise a
+ * bhajan nobody has named. Both are routinely left until the last minute, and
+ * the person who has to chase them is a volunteer.
+\* ------------------------------------------------------------------ */
+
+/** Which of the two things a slot is still short of. */
+export type MissingPart = "bhajan" | "pitch";
+
+export function missingParts(slot: {
+  bhajanTitle: string | null;
+  confirmedPitch: string | null;
+}): MissingPart[] {
+  const out: MissingPart[] = [];
+  if (!slot.bhajanTitle || slot.bhajanTitle.trim().length === 0) out.push("bhajan");
+  if (!slot.confirmedPitch || slot.confirmedPitch.trim().length === 0) out.push("pitch");
+  return out;
+}
+
+/**
+ * Ask for exactly what is missing, and nothing else.
+ *
+ * The three cases read differently on purpose. Telling somebody who has chosen
+ * their bhajan to "pick your bhajan and pitch" is the kind of thing that makes
+ * people stop reading notifications, and a nudge that gets ignored is worse
+ * than none — it costs the same attention and buys nothing.
+ *
+ * `final` only changes the framing, never the ask. It is the last one, so it
+ * says so; a reminder that might be followed by six more is easy to defer.
+ */
+export function nudgeNotification(input: {
+  sessionId: string;
+  dateISO: string;
+  missing: readonly MissingPart[];
+  /** Named when it is known, so the message is about something concrete. */
+  bhajanTitle?: string | null;
+  confirmedPitch?: string | null;
+  final?: boolean;
+}): Notification {
+  const wantsBhajan = input.missing.includes("bhajan");
+  const wantsPitch = input.missing.includes("pitch");
+
+  let body: string;
+  if (wantsBhajan && wantsPitch) {
+    body = "You are singing tonight. Choose your bhajan and confirm your pitch.";
+  } else if (wantsPitch) {
+    body = input.bhajanTitle
+      ? `You are singing ${input.bhajanTitle} tonight. Confirm the pitch so the tabla can be tuned.`
+      : "You are singing tonight. Confirm your pitch so the tabla can be tuned.";
+  } else {
+    body = input.confirmedPitch
+      ? `You are singing tonight at ${input.confirmedPitch}. Which bhajan?`
+      : "You are singing tonight. Which bhajan?";
+  }
+
+  return {
+    title: input.final ? "Last reminder — tonight" : "Your bhajan for tonight",
+    body,
+    url: `/roster/${input.sessionId}`,
+    // Deliberately one tag for both, so the 5pm one REPLACES the 3pm one in
+    // the shade rather than sitting under it. Two identical-looking unread
+    // reminders read as a broken app.
+    tag: `nudge-${input.sessionId}`,
+    alert: true,
+  };
+}
+
+/** 3pm, then 5pm. Melbourne hours. */
+export const NUDGE_HOUR = 15;
+export const NUDGE_FINAL_HOUR = 17;
+/**
+ * After this, stop. Bhajans start in the evening; a reminder that arrives once
+ * everybody is already in the hall is only an interruption.
+ */
+export const NUDGE_LATEST_HOUR = 20;
+
+/**
+ * Which nudge, if any, is owed to a person right now.
+ *
+ * `sent` is the kinds they have already had for this session.
+ *
+ * From 5pm the answer is the final one whether or not the 3pm one went out —
+ * that is what makes a missed cron tick harmless rather than silent. It also
+ * means a person who got the 3pm reminder gets exactly one more, which is what
+ * Sailavan chose.
+ */
+export function dueNudge(
+  melbourneHour: number,
+  sent: readonly NoticeKind[],
+): "nudge" | "nudge_final" | null {
+  if (melbourneHour < NUDGE_HOUR || melbourneHour >= NUDGE_LATEST_HOUR) return null;
+  if (melbourneHour >= NUDGE_FINAL_HOUR) {
+    return sent.includes("nudge_final") ? null : "nudge_final";
+  }
+  return sent.includes("nudge") ? null : "nudge";
 }

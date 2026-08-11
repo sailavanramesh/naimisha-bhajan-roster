@@ -520,6 +520,10 @@ enum NoticeKind {
   rostered
   /// "The roster for Thursday is up" — silent.
   published
+  /// 3pm on the day: "you have not chosen a bhajan yet" — alerts.
+  nudge
+  /// 5pm on the day, the last one. Nobody is nudged a third time.
+  nudge_final
 }
 
 /// One row per person per session per kind, so nobody is told twice.

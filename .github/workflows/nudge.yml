@@ -1,0 +1,42 @@
+# Hourly poke at the app so it can chase people on the day they are singing.
+#
+# The schedule knows nothing about 3pm. It fires every hour and the app decides
+# whether this hour is 3pm or 5pm in Melbourne — which is what keeps daylight
+# saving out of this file, and what makes a late or duplicated tick harmless.
+#
+# GitHub's cron is best-effort and can run several minutes late or skip a busy
+# hour; that is why there are two windows rather than one instant.
+name: Nudge singers
+
+on:
+  schedule:
+    - cron: "5 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  nudge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ask the app to send any nudges that are due
+        env:
+          URL: ${{ secrets.NUDGE_URL }}
+          SECRET: ${{ secrets.NUDGE_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${URL:-}" ] || [ -z "${SECRET:-}" ]; then
+            echo "NUDGE_URL or NUDGE_SECRET is not set; nothing to do."
+            exit 0
+          fi
+          code=$(curl -sS -o /tmp/out.json -w '%{http_code}' \
+            -X POST "$URL" \
+            -H "Authorization: Bearer $SECRET" \
+            --max-time 60)
+          echo "HTTP $code"
+          cat /tmp/out.json
+          echo
+          # A 5xx is worth seeing in the Actions tab; anything else is a normal
+          # answer, including "outside the nudge window" twenty times a day.
+          [ "$code" -lt 500 ]
