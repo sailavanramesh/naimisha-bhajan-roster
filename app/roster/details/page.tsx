@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { getRole, can } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
 import { BulkMetaPanel, type BulkSession } from "./BulkMetaPanel";
+import { DateField } from "@/components/DateField";
 
 export const dynamic = "force-dynamic";
 
@@ -137,23 +138,13 @@ export default async function SessionDetailsPage({
 
           {/* Narrowing, not paging: the whole point is to work through a lot. */}
           <form className="mt-3 flex flex-wrap items-end gap-2 text-xs" action="/roster/details">
-            <label className="grid gap-1 text-on-surface-muted">
+            <label className="grid min-w-0 gap-1 text-on-surface-muted">
               From
-              <input
-                type="date"
-                name="from"
-                defaultValue={from ?? ""}
-                className="h-8 rounded-[10px] border border-rule-surface bg-field px-2 text-sm text-on-surface"
-              />
+              <DateField name="from" defaultValue={from ?? ""} label="From" className="h-8" />
             </label>
-            <label className="grid gap-1 text-on-surface-muted">
+            <label className="grid min-w-0 gap-1 text-on-surface-muted">
               To
-              <input
-                type="date"
-                name="to"
-                defaultValue={to ?? ""}
-                className="h-8 rounded-[10px] border border-rule-surface bg-field px-2 text-sm text-on-surface"
-              />
+              <DateField name="to" defaultValue={to ?? ""} label="To" className="h-8" />
             </label>
             <label className="grid gap-1 text-on-surface-muted">
               Kind

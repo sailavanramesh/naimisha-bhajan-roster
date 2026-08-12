@@ -276,3 +276,16 @@ button {
 .stacked-table thead th:nth-child(-n + 3) {
   color: rgb(var(--on-surface));
 }
+
+/*
+  An unset date filter should look unset.
+
+  iOS Safari renders an empty <input type="date"> showing today's date at full
+  strength, so a filter nobody has touched reads as a date range they chose.
+  components/DateField.tsx stamps data-empty; this is what makes it look like
+  the grey dd/mm/yyyy every desktop browser already shows.
+*/
+input[type="date"][data-empty="true"] {
+  color: rgb(var(--on-surface-muted));
+  opacity: 0.75;
+}
