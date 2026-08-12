@@ -51,6 +51,11 @@ function pickRecommendedPitch(singerGender: string | null | undefined, b?: Bhaja
 
 type BhSearchState = { q: string; items: { id: string; title: string }[]; open: boolean; loading: boolean };
 
+/** Cache key for a singer-and-bhajan pair. */
+function hintKey(singerId: string, bhajanId: string): string {
+  return `${singerId}|${bhajanId}`;
+}
+
 export function SessionSingersGrid(props: {
   canSetMicCushion: boolean;
   tablaOverrides: Record<string, string | null>;
@@ -199,6 +204,69 @@ export function SessionSingersGrid(props: {
     draggingRef.current = null;
     setDraggingId(null);
   };
+
+  /*
+   * What this singer would sing THIS bhajan at, offered as one tap.
+   *
+   * Sailavan: "if its in their list as a song they know, have sung, or have a
+   * shruti/pitch for … the suggestion saves time and gives them something they
+   * can straight away select."
+   *
+   * It is emphatically not the recommendation, which stays exactly where it
+   * is: the recommendation is what the masterlist says for that voice, and
+   * this is what this person has actually done with this bhajan. The two
+   * disagree often, and both are worth seeing.
+   *
+   * Never filled in automatically. confirmedPitch is the historical record;
+   * writing a guess into it and calling it history is the one thing this app
+   * must not do.
+   */
+  type PitchHint = { pitch: string; source: string; times: number; lastOn: string | null };
+  const [pitchHint, setPitchHint] = useState<Record<string, PitchHint | null>>({});
+
+  useEffect(() => {
+    // One lookup per row whose singer-and-bhajan pair is new to us.
+    const wanted = rows.filter(
+      (r) => r.singerId && r.bhajanId && pitchHint[hintKey(r.singerId, r.bhajanId)] === undefined,
+    );
+    if (wanted.length === 0) return;
+
+    let live = true;
+    void (async () => {
+      for (const r of wanted) {
+        const key = hintKey(r.singerId!, r.bhajanId!);
+        try {
+          const res = await fetch(
+            `/api/pitch/suggest?singerId=${encodeURIComponent(r.singerId!)}&bhajanId=${encodeURIComponent(r.bhajanId!)}`,
+          );
+          if (!live) return;
+          if (!res.ok) {
+            setPitchHint((prev) => ({ ...prev, [key]: null }));
+            continue;
+          }
+          const data = await res.json();
+          const pitch: string | null = data?.suggestion?.pitch ?? null;
+          const source: string = data?.suggestion?.source ?? "none";
+          // Only worth a chip when it comes from this singer's own history or
+          // their list. "reference" and "predicted" are what the Recommended
+          // column already says, more or less, and a second chip repeating it
+          // is noise.
+          const useful = pitch && (source === "sung" || source === "list");
+          setPitchHint((prev) => ({
+            ...prev,
+            [key]: useful
+              ? { pitch: pitch!, source, times: data?.sung?.times ?? 0, lastOn: data?.sung?.lastOn ?? null }
+              : null,
+          }));
+        } catch {
+          if (live) setPitchHint((prev) => ({ ...prev, [key]: null }));
+        }
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [rows, pitchHint]);
 
   const [bhSearch, setBhSearch] = useState<Record<string, BhSearchState>>({});
 
@@ -586,10 +654,10 @@ export function SessionSingersGrid(props: {
             <tr className="border-b border-rule-surface">
               {/* Widths are real now that the table is fixed. Everything the
                   bhajan does not need is spent here, and it gets the rest. */}
-              <th className="sticky left-0 z-50 w-[190px] border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
+              <th className="sticky left-0 z-20 w-[190px] border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
                 Singer
               </th>
-              <th className="sticky left-[190px] z-40 border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
+              <th className="sticky left-[190px] z-[15] border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
                 Bhajan
               </th>
               <th className="w-[168px] px-2 py-1.5 text-left font-semibold">Pitch</th>
@@ -635,7 +703,7 @@ export function SessionSingersGrid(props: {
                   <td
                     data-label="Singer"
                     data-key="1"
-                    className="sticky left-0 z-30 whitespace-nowrap bg-surface px-2 py-1.5 border-r border-rule-surface shadow-sm"
+                    className="sticky left-0 z-10 whitespace-nowrap bg-surface px-2 py-1.5 border-r border-rule-surface shadow-sm"
                     style={
                       tint
                         ? { background: tint.row, boxShadow: `inset 3px 0 0 0 ${tint.edge}` }
@@ -888,6 +956,37 @@ export function SessionSingersGrid(props: {
                               = rec
                             </button>
                           ) : null}
+
+                          {/*
+                            What they have sung it at, or asked for on their
+                            list. Only shown when it differs from what is
+                            already in the field — a chip offering the value
+                            you can see is just clutter.
+                          */}
+                          {(() => {
+                            const hint =
+                              r.singerId && r.bhajanId
+                                ? pitchHint[hintKey(r.singerId, r.bhajanId)]
+                                : null;
+                            if (!hint || hint.pitch === r.confirmedPitch) return null;
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => pickPitch(r._localId, hint.pitch)}
+                                title={
+                                  hint.source === "list"
+                                    ? `${hint.pitch} — the shruti on their list`
+                                    : `${hint.pitch} — sung ${hint.times}\u00d7${hint.lastOn ? `, last ${hint.lastOn}` : ""}`
+                                }
+                                className="inline-flex h-6 items-center gap-1 rounded-[8px] border border-brass/45 bg-brass/[0.08] px-1.5 text-[11px] leading-none text-on-surface hover:border-brass"
+                              >
+                                <span className="font-mono">{hint.pitch}</span>
+                                <span className="text-on-surface-muted">
+                                  {hint.source === "list" ? "list" : `sung${hint.times > 1 ? ` ${hint.times}\u00d7` : ""}`}
+                                </span>
+                              </button>
+                            );
+                          })()}
                         </div>
                       </div>
                     ) : (

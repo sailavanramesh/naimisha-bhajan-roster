@@ -148,7 +148,7 @@ export function Nav({ role = "viewer" }: { role?: string }) {
       </aside>
 
       {/* Mobile top-left trigger */}
-      <div className="no-print lg:hidden fixed left-3 top-3 z-50">
+      <div className="no-print lg:hidden fixed left-3 top-3 z-[60]">
         <button type="button" onClick={() => setMobileOpen(true)} aria-label="Open navigation">
           <Hamburger open={false} />
         </button>
@@ -156,7 +156,9 @@ export function Nav({ role = "viewer" }: { role?: string }) {
 
       {/* Mobile drawer */}
       {mobileOpen ? (
-        <div className="lg:hidden fixed inset-0 z-50">
+        // Above every sticky cell (10-20), below the live view (100) — see the
+        // layering note in app/globals.css.
+        <div className="lg:hidden fixed inset-0 z-[60]">
           <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
           <div className="absolute left-0 top-0 h-full w-[82%] max-w-[320px] bg-ground-raised border-r border-rule p-3">
             <div className="flex items-center justify-between px-1 pb-3">
