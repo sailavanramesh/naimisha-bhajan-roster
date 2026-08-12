@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SessionRows, Marked } from "@/components/SessionRows";
+import { DateField } from "@/components/DateField";
 import { matches, excerpt } from "@/lib/highlight";
 import { timeLabel, USUAL_START } from "@/lib/sessionsOfDay";
 import { getRole, can, getSignedInSinger } from "@/lib/auth";
@@ -348,27 +349,18 @@ export default async function RosterPage({
                 </label>
                 <label className="grid min-w-0 gap-1 text-[11px] text-on-surface-muted">
                   From
-                  <Input
-                    name="from"
-                    type="date"
-                    defaultValue={sp.from ?? ""}
-                    aria-label="From"
-                    className="w-full"
-                  />
+                  <DateField name="from" defaultValue={sp.from ?? ""} label="From" />
                 </label>
                 <label className="grid min-w-0 gap-1 text-[11px] text-on-surface-muted">
                   To
-                  <Input
-                    name="to"
-                    type="date"
-                    defaultValue={sp.to ?? ""}
-                    aria-label="To"
-                    className="w-full"
-                  />
+                  <DateField name="to" defaultValue={sp.to ?? ""} label="To" />
                 </label>
                 <Button type="submit" className="col-span-2 sm:col-span-1">
                   Apply
                 </Button>
+                <p className="col-span-2 text-[11px] text-on-surface-muted sm:basis-full">
+                  Leave the dates blank to see every session.
+                </p>
                 <input type="hidden" name="view" value="list" />
               </form>
 
