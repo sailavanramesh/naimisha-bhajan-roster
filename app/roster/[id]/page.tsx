@@ -11,6 +11,7 @@ import { planTablas } from "@/lib/tablaPlan";
 import { TablaPanel } from "./TablaPanel";
 import { CopyRowsPanel } from "./CopyRowsPanel";
 import { SessionMetaPanel } from "./SessionMetaPanel";
+import { DeleteSessionButton } from "./DeleteSessionButton";
 import { NotifyPanel } from "./NotifyPanel";
 import { melbourneTodayISO } from "@/lib/dates";
 import { missingParts } from "@/lib/notify";
@@ -479,6 +480,15 @@ export default async function RosterSessionPage({
               )}
             </div>
           </details>
+
+          {/* Last on the page, and quiet. See DeleteSessionButton. */}
+          {can(role, "buildSessions") ? (
+            <DeleteSessionButton
+              sessionId={sessionId}
+              dateLabel={dateLabel}
+              rows={session.slots.length}
+            />
+          ) : null}
         </CardContent>
       </Card>
     </div>
