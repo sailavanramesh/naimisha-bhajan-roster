@@ -312,3 +312,36 @@ input[type="date"][data-empty="true"] {
   Anything new picks a band; nothing new invents a number above 120 unless it
   genuinely has to cover the live view.
 */
+
+/*
+  A row that has just changed, on the live view.
+
+  The board refreshes itself silently, so somebody at the desk would otherwise
+  see only that it now says something different, never that it changed. Two
+  seconds of a warm ring is enough to catch the eye and short enough not to
+  become part of the furniture.
+
+  Held at full strength for the first third: a glow that starts fading
+  immediately is easy to miss if you looked up a moment late.
+*/
+@keyframes live-row-changed {
+  0%,
+  30% {
+    box-shadow: 0 0 0 3px rgb(var(--brass) / 0.55);
+  }
+  100% {
+    box-shadow: 0 0 0 3px rgb(var(--brass) / 0);
+  }
+}
+
+.live-row-changed {
+  animation: live-row-changed 2s ease-out 1;
+}
+
+/* Somebody who has asked for less motion still gets told, just not by moving. */
+@media (prefers-reduced-motion: reduce) {
+  .live-row-changed {
+    animation: none;
+    box-shadow: 0 0 0 3px rgb(var(--brass) / 0.45);
+  }
+}

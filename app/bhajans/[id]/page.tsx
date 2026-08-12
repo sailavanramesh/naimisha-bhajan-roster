@@ -9,6 +9,7 @@ import { predictForSinger } from "@/lib/singerProfile";
 import { semitoneDelta } from "@/lib/pitch";
 import { AddToList } from "@/components/AddToList";
 import { getRole, can, getSignedInSinger } from "@/lib/auth";
+import { rosterable } from "@/lib/rosterEligibility";
 import { EditBhajanPanel, EditedDot } from "./EditBhajanPanel";
 import { EDITABLE_FIELDS } from "@/lib/bhajanFields";
 
@@ -140,9 +141,21 @@ export default async function BhajanPage({
     date: r.date,
   }));
 
-  // Everyone who has NOT sung it — this is where prediction earns its keep.
+  /*
+   * Everyone who has NOT sung it — this is where prediction earns its keep.
+   *
+   * Singers only. A prediction is a gender reference shifted by that person's
+   * own median offset, and somebody with no recorded voice has neither: the
+   * table was listing them with a bare reference and "0 records", which reads
+   * as a prediction and is not one. They are users — mic operators,
+   * instrumentalists who do not sing — and lib/rosterEligibility.ts is the
+   * same rule that already keeps them off the roster and off /singers.
+   *
+   * They keep their list, though. Wanting to learn a bhajan is not the same
+   * claim as being ready to be rostered for it.
+   */
   const sungNames = new Set(sungRows.map((r) => r.singerName));
-  const predictions = singers
+  const predictions = rosterable(singers)
     .filter((s) => !sungNames.has(s.name))
     .map((s) => ({
       singer: s,

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { DeitySymbols } from "@/components/DeitySymbol";
 import { useMicCushions, cushionTint } from "@/components/MicCushions";
 import { useSessionVersion } from "@/components/useSessionVersion";
@@ -23,6 +23,17 @@ export type LiveSlot = {
 };
 
 export type LiveInstrument = { instrument: string; person: string | null };
+
+/**
+ * Everything on a row that is worth noticing a change to.
+ *
+ * The mic cushion is deliberately absent: it has its own live colour and
+ * changes far more often, and ringing the row every time somebody swaps a
+ * cushion would make the ring mean nothing.
+ */
+function rowSignature(s: LiveSlot): string {
+  return [s.singerName, s.bhajanTitle, s.confirmedPitch, s.tablaPitch, s.raga].join("\u0000");
+}
 
 /**
  * The performance view: what the harmonium, tabla and sound desk actually read
@@ -60,6 +71,37 @@ export function LiveBoard({
    * a session, so it is the last one that should be showing yesterday.
    */
   useSessionVersion(sessionId);
+
+  /*
+   * Which rows have just changed.
+   *
+   * The refresh is silent by design — nothing flashes the whole board — so
+   * without this the desk sees only that a line now reads differently, never
+   * that it moved. Compared against what was on screen a moment ago rather
+   * than against the server, because what matters is what this person was
+   * looking at.
+   *
+   * The FIRST render sets the baseline and glows nothing: arriving at a page
+   * is not a change.
+   */
+  const [changed, setChanged] = useState<Set<number>>(new Set());
+  const seen = useRef<Map<number, string> | null>(null);
+
+  useEffect(() => {
+    const now = new Map(slots.map((s) => [s.position, rowSignature(s)]));
+    const before = seen.current;
+    seen.current = now;
+    if (!before) return;
+
+    const moved = [...now.entries()]
+      .filter(([position, sig]) => before.has(position) && before.get(position) !== sig)
+      .map(([position]) => position);
+    if (moved.length === 0) return;
+
+    setChanged(new Set(moved));
+    const timer = setTimeout(() => setChanged(new Set()), 2200);
+    return () => clearTimeout(timer);
+  }, [slots]);
   /** Which card's words are open, by position. Null for none. */
   const [words, setWords] = useState<number | null>(null);
   const openSlot = words === null ? null : (slots.find((s) => s.position === words) ?? null);
@@ -176,9 +218,11 @@ export function LiveBoard({
                   than the list scrolling, which is the wrong failure — better
                   to scroll than to hide the pitch.
                 */
-                className={`flex flex-col justify-center rounded-[14px] border border-card-edge bg-surface p-3 sm:p-4 ${
-                  roomy ? "min-h-fit flex-1" : ""
-                }`}
+                className={[
+                  "flex flex-col justify-center rounded-[14px] border border-card-edge bg-surface p-3 sm:p-4",
+                  roomy ? "min-h-fit flex-1" : "",
+                  changed.has(s.position) ? "live-row-changed" : "",
+                ].join(" ")}
                 style={
                   tint ? { background: tint.row, boxShadow: `inset 5px 0 0 0 ${tint.edge}` } : undefined
                 }
