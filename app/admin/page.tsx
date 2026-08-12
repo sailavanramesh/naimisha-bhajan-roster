@@ -22,6 +22,14 @@ import { RemovePersonButton } from "./RemovePersonButton";
 
 export const dynamic = "force-dynamic";
 
+/** The three stages, as they are written on screen. */
+const STAGE_LABEL: Record<RepertoireKind, string> = {
+  known: "knows it",
+  learning: "learning",
+  wantToLearn: "wants to learn",
+  festival: "knows it", // dead value — see SingerRepertoire.isFestival
+};
+
 /**
  * Admin — the allocation data behind the roster.
  *
@@ -356,8 +364,11 @@ export default async function AdminPage({
                     className="h-11 rounded-[12px] border border-rule-surface bg-field px-3 text-sm"
                     aria-label="List"
                   >
-                    <option value={RepertoireKind.known}>Knows</option>
-                    <option value={RepertoireKind.festival}>Festival list</option>
+                    {/* Three stages. "Festival" was never a stage — it
+                        describes the bhajan, and is a flag on the row now. */}
+                    <option value={RepertoireKind.known}>Knows it</option>
+                    <option value={RepertoireKind.learning}>Learning</option>
+                    <option value={RepertoireKind.wantToLearn}>Wants to learn</option>
                   </select>
                   <Button type="submit">Add</Button>
                   <p className="text-xs text-on-surface-muted sm:col-span-3">
@@ -398,7 +409,8 @@ export default async function AdminPage({
                       </span>
 
                       <span className="flex shrink-0 items-center gap-2">
-                        <Badge>{r.kind === RepertoireKind.festival ? "festival" : "knows"}</Badge>
+                        <Badge>{STAGE_LABEL[r.kind]}</Badge>
+                        {r.isFestival ? <Badge tone="warn">festival</Badge> : null}
                         {canEdit ? (
                           <form action={removeRepertoireEntry}>
                             <input type="hidden" name="id" value={r.id} />

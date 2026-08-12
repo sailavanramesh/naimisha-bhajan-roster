@@ -130,9 +130,10 @@ export async function buildSuggestions(opts: {
     // "On their list" and "has sung it" are different claims — see
     // historyPhrase. Every row in this group carries both.
     known: "knows it",
-    festival: "festival",
     learning: "learning",
     wantToLearn: "wants to learn",
+    // Dead — no row carries it. See SingerRepertoire.isFestival.
+    festival: "festival",
   };
 
   /*
@@ -152,9 +153,16 @@ export async function buildSuggestions(opts: {
         daysSinceSung: daysSince.get(r.bhajanId!) ?? null,
         deity: features.get(r.bhajanId!)?.deities[0] ?? null,
         kind: r.kind,
+        isFestival: r.isFestival,
       })),
   )
-    .map((r) => toSuggestion(r.id, [KIND_LABEL[r.kind], historyPhrase(r.daysSinceSung)]))
+    .map((r) =>
+      toSuggestion(r.id, [
+        KIND_LABEL[r.kind],
+        historyPhrase(r.daysSinceSung),
+        ...(r.isFestival ? ["festival bhajan"] : []),
+      ]),
+    )
     .filter((x): x is Suggestion => x !== null);
 
   // Anchors for "more like what they know": their list plus what they have sung.
@@ -204,16 +212,17 @@ export async function buildSuggestions(opts: {
   ];
 }
 
-/** known < festival < learning < wantToLearn, readiest first. */
+/** known < learning < wantToLearn, readiest first. */
 function rank(kind: RepertoireKind): number {
   switch (kind) {
     case RepertoireKind.known:
-      return 0;
+    // Dead value; nothing carries it. Ranked with known so an old row, if one
+    // ever turned up, would not sort below something they want to learn.
     case RepertoireKind.festival:
-      return 1;
+      return 0;
     case RepertoireKind.learning:
-      return 2;
+      return 1;
     default:
-      return 3;
+      return 2;
   }
 }

@@ -50,6 +50,9 @@ enum SessionStatus {
 /// builder's repertoire scoring with no other wiring.
 enum RepertoireKind {
   known
+  /// DEAD as of 2026-08-12 — see SingerRepertoire.isFestival. No row should
+  /// carry it; the value stays only because dropping an enum value in Postgres
+  /// means rewriting the column, and an unused value costs nothing.
   festival
   wantToLearn
   learning
@@ -340,6 +343,18 @@ model SingerRepertoire {
   title    String
   kind     RepertoireKind
   order    Int?
+
+  /// This is one of the bhajans they do at festivals.
+  ///
+  /// A FLAG, not a stage. `festival` used to be a value of RepertoireKind,
+  /// which meant the same bhajan appeared twice on a singer's page — once as
+  /// "festival" and once as "known" — because the two came from two different
+  /// sheets at seed time. Sailavan, 2026-08-12: "festival songs are not songs
+  /// that were sung, they were just songs for people to learn or that they
+  /// know." Being a festival bhajan describes the song; wanting to learn it,
+  /// learning it and knowing it are the stages, and a song is at exactly one
+  /// of them.
+  isFestival Boolean @default(false)
 
   /// The singer's own note — what they are finding hard, where they heard it.
   /// Visible to them and to editors only.
