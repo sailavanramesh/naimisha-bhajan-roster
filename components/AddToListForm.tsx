@@ -73,6 +73,13 @@ export function AddToListForm({ singerId }: { singerId: string }) {
     title: string;
     preferredPitch: string | null;
   } | null>(null);
+  /** They have sung it, and are filing it under something less than "know it". */
+  const [sung, setSung] = useState<{
+    title: string;
+    times: number;
+    lastOn: string | null;
+    pitch: string | null;
+  } | null>(null);
   const [insight, setInsight] = useState<Insight | null>(null);
   const [keepPitch, setKeepPitch] = useState(true);
   const seq = useRef(0);
@@ -129,22 +136,27 @@ export function AddToListForm({ singerId }: { singerId: string }) {
     })();
   };
 
-  const submit = (title: string) =>
+  const submit = (title: string, opts: { force?: boolean; asKind?: string } = {}) =>
     startTransition(async () => {
       setMessage(null);
       setRefused(null);
+      setSung(null);
       const res = await addToList({
         singerId,
         title,
-        kind: kind as RepertoireKind,
+        kind: (opts.asKind ?? kind) as RepertoireKind,
         // Only ever a suggestion the person accepted, never applied silently.
         preferredPitch: keepPitch && insight?.suggestion.pitch ? insight.suggestion.pitch : "",
+        force: opts.force,
       });
 
       if (!res.ok) {
         if ("already" in res) {
           // Already theirs. Say so and stop — moving it is a separate act.
           setRefused(res.already);
+        } else if ("sung" in res) {
+          // The roster knows it even though the list does not.
+          setSung(res.sung);
         } else {
           setMessage(res.error);
         }
@@ -208,6 +220,8 @@ export function AddToListForm({ singerId }: { singerId: string }) {
               setQuery(e.target.value);
               setPicked(null);
               setMessage(null);
+              setRefused(null);
+              setSung(null);
             }}
             onKeyDown={onKeyDown}
             onFocus={() => hits.length > 0 && setOpen(true)}
@@ -269,6 +283,36 @@ export function AddToListForm({ singerId }: { singerId: string }) {
           {pending ? "Adding…" : "Add"}
         </Button>
       </div>
+
+      {sung ? (
+        <p className="grid gap-2 rounded-[10px] border border-warn/40 bg-warn/[0.08] px-3 py-2 text-xs">
+          <span>
+            Not added as <strong>{kindLabel(kind)}</strong> — you have sung{" "}
+            <strong>{sung.title}</strong> {sung.times}
+            {"\u00d7"}
+            {sung.lastOn ? `, last on ${sung.lastOn}` : ""}
+            {sung.pitch ? ` at ${sung.pitch}` : ""}.
+          </span>
+          <span className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => submit(sung.title, { asKind: "known", force: true })}
+              className="underline underline-offset-2 hover:text-on-surface"
+            >
+              Add it to Know it
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => submit(sung.title, { force: true })}
+              className="text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+            >
+              No, {kindLabel(kind).toLowerCase()} is right
+            </button>
+          </span>
+        </p>
+      ) : null}
 
       {refused ? (
         <p className="grid gap-2 rounded-[10px] border border-warn/40 bg-warn/[0.08] px-3 py-2 text-xs">
