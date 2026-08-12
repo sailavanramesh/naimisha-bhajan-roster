@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { SessionRows } from "@/components/SessionRows";
-import { getRole, can } from "@/lib/auth";
+import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { startSessionOnDate } from "./viewActions";
+import { DefaultViewToggle } from "./DefaultViewToggle";
 import { Card, CardContent, CardHeader, CardTitle, Input, Button } from "@/components/ui";
 import RosterCalendarClient from "./RosterCalendarClient";
+import { nextThursday, melbourneTodayISO } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
 function toISODateUTC(d: Date) {
@@ -69,7 +72,27 @@ export default async function RosterPage({
   const role = await getRole();
   const canEdit = can(role, "buildSessions");
 
-  const view = sp.view === "list" ? "list" : "calendar";
+  /*
+   * An explicit ?view= always wins, so a link somebody shares still shows what
+   * they meant. Otherwise it is whichever the person asked to be their
+   * default, and the calendar for anybody who has not said.
+   */
+  const me = await getSignedInSinger();
+  const savedView = me
+    ? (
+        await prisma.singer.findUnique({
+          where: { id: me.id },
+          select: { defaultRosterView: true },
+        })
+      )?.defaultRosterView ?? null
+    : null;
+
+  const view: "calendar" | "list" =
+    sp.view === "list" || sp.view === "calendar"
+      ? sp.view
+      : savedView === "list"
+        ? "list"
+        : "calendar";
   const q = (sp.q ?? "").trim();
 
   const todayUTC = new Date();
@@ -215,7 +238,16 @@ export default async function RosterPage({
               </div>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+              {canEdit ? (
+                <Link
+                  href="/roster/details"
+                  className="text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+                >
+                  Session kinds in bulk
+                </Link>
+              ) : null}
+              <DefaultViewToggle view={view} isDefault={savedView === view} />
               <Link
                 className="rounded-[12px] border px-3 py-2 text-sm hover:bg-panel-hover"
                 href={`/roster?view=${view === "calendar" ? "list" : "calendar"}`}
@@ -257,6 +289,32 @@ export default async function RosterPage({
                 <Button type="submit">Apply</Button>
                 <input type="hidden" name="view" value="list" />
               </form>
+
+              {canEdit ? (
+                /*
+                  The calendar has always been able to start a session — tap a
+                  day — and the list simply could not. Now that the list can be
+                  somebody's default, that gap would be the first thing they
+                  hit.
+                */
+                <form
+                  action={startSessionOnDate}
+                  className="flex flex-wrap items-center gap-2 rounded-[12px] border border-rule-surface bg-panel p-3 text-sm"
+                >
+                  <span className="text-xs text-on-surface-muted">Start a session on</span>
+                  <input
+                    type="date"
+                    name="date"
+                    defaultValue={nextThursday(melbourneTodayISO())}
+                    aria-label="Date for the new session"
+                    className="h-9 rounded-[10px] border border-rule-surface bg-field px-2 text-sm text-on-surface"
+                  />
+                  <Button type="submit">Start</Button>
+                  <span className="text-xs text-on-surface-muted">
+                    Opens the day&rsquo;s session, or creates it at 7pm if there is none.
+                  </span>
+                </form>
+              ) : null}
 
               <div className="grid gap-2">
                 {(listSessions ?? []).map((s) => (
