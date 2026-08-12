@@ -46,7 +46,16 @@ export function SessionRows({
         {rows.map((r, i) => (
           <li
             key={i}
-            className="grid grid-cols-[6.5rem_1fr] items-baseline gap-x-2 gap-y-0 rounded-[8px] px-1.5 py-1 text-[13px] odd:bg-surface/60 sm:grid-cols-[7rem_1fr_auto]"
+            /*
+              Three columns at every width, not two-plus-a-wrapped-line.
+              
+              The pitch used to drop under the names on a phone, which spent a
+              whole extra line on eleven characters and made a four-row session
+              eight rows tall. It sits on the right now and the bhajan gives up
+              the space instead — this is a summary, and the session itself is
+              one tap away.
+            */
+            className="grid grid-cols-[4.5rem_minmax(0,1fr)_auto] items-baseline gap-x-2 rounded-[8px] px-1.5 py-1 text-[13px] odd:bg-surface/60 sm:grid-cols-[7rem_minmax(0,1fr)_auto]"
           >
             <span className="truncate font-medium">
               <Marked text={r.singer} query={query} />
@@ -54,12 +63,9 @@ export function SessionRows({
             <span className="truncate text-on-surface-muted">
               {r.bhajan ? <Marked text={r.bhajan} query={query} /> : "no bhajan yet"}
             </span>
-            {/*
-              On a phone the pitch drops to its own line under the two names
-              rather than squeezing a third column into 6rem — it is short,
-              and a truncated pitch is worse than a wrapped one.
-            */}
-            <span className="col-span-2 font-mono text-[12px] text-on-surface-muted sm:col-span-1 sm:text-right">
+            {/* Never truncated and never wrapped: a half-read shruti is worse
+                than no shruti. */}
+            <span className="whitespace-nowrap text-right font-mono text-[11px] text-on-surface-muted sm:text-[12px]">
               {r.pitch ?? ""}
             </span>
           </li>
