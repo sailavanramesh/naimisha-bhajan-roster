@@ -2,7 +2,11 @@
 
 import { useState, useTransition } from "react";
 import { Button, Input } from "@/components/ui";
-import { addSessionCategory, removeSessionCategory } from "@/app/roster/[id]/metaActions";
+import {
+  addSessionCategory,
+  removeSessionCategory,
+  setCategoryImage,
+} from "@/app/roster/[id]/metaActions";
 
 /**
  * The kinds of session the centre runs.
@@ -14,11 +18,42 @@ import { addSessionCategory, removeSessionCategory } from "@/app/roster/[id]/met
  * Removing one leaves its sessions alone — they simply become uncategorised —
  * so the confirm says how many that is rather than warning about nothing.
  */
+/**
+ * Shrink a chosen file to a small square data URL, in the browser.
+ *
+ * Uploading a three-megabyte photograph to draw a twenty-pixel badge would be
+ * absurd, and doing the resize here means the server never has to hold the
+ * big one at all.
+ */
+async function shrinkToDataUrl(file: File, size = 256): Promise<string> {
+  const bitmap = await createImageBitmap(file);
+  const side = Math.min(bitmap.width, bitmap.height);
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) throw new Error("Could not read that image.");
+  // Centre crop to a square: these are drawn as circles and badges, and a
+  // squashed picture looks worse than a cropped one.
+  ctx.drawImage(
+    bitmap,
+    (bitmap.width - side) / 2,
+    (bitmap.height - side) / 2,
+    side,
+    side,
+    0,
+    0,
+    size,
+    size,
+  );
+  return canvas.toDataURL("image/jpeg", 0.82);
+}
+
 export function SessionCategories({
   categories,
   canEdit,
 }: {
-  categories: { id: string; name: string; sessions: number }[];
+  categories: { id: string; name: string; sessions: number; image: string | null }[];
   canEdit: boolean;
 }) {
   const [name, setName] = useState("");
@@ -57,22 +92,75 @@ export function SessionCategories({
           categories.map((c) => (
             <li
               key={c.id}
-              className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-3 rounded-[8px] px-2 py-1 text-sm odd:bg-surface/60"
+              className="grid grid-cols-[2rem_minmax(0,1fr)_auto_auto] items-center gap-x-3 rounded-[8px] px-2 py-1 text-sm odd:bg-surface/60"
             >
+              {c.image ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={c.image}
+                  alt=""
+                  className="h-7 w-7 rounded-full border border-rule-surface object-cover"
+                />
+              ) : (
+                <span className="h-7 w-7 rounded-full border border-dashed border-rule-surface" />
+              )}
               <span className="truncate font-medium">{c.name}</span>
               <span className="whitespace-nowrap text-xs text-on-surface-muted">
                 {c.sessions === 0 ? "unused" : `${c.sessions} session${c.sessions === 1 ? "" : "s"}`}
               </span>
               {canEdit ? (
-                <Button
-                  type="button"
-                  variant="danger"
-                  className="h-8 text-xs"
-                  disabled={pending}
-                  onClick={() => remove(c.id, c.name)}
-                >
-                  Remove
-                </Button>
+                <span className="flex items-center gap-2">
+                  <label className="cursor-pointer text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface">
+                    {c.image ? "change image" : "add image"}
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        e.target.value = "";
+                        if (!file) return;
+                        try {
+                          const image = await shrinkToDataUrl(file);
+                          startTransition(async () => {
+                            const res = await setCategoryImage({ id: c.id, image });
+                            setMessage(
+                              res.ok
+                                ? { ok: true, text: `Image set for "${c.name}".` }
+                                : { ok: false, text: res.error },
+                            );
+                          });
+                        } catch {
+                          setMessage({ ok: false, text: "Could not read that image." });
+                        }
+                      }}
+                    />
+                  </label>
+                  {c.image ? (
+                    <button
+                      type="button"
+                      disabled={pending}
+                      onClick={() =>
+                        startTransition(async () => {
+                          await setCategoryImage({ id: c.id, image: null });
+                          setMessage({ ok: true, text: `Image removed from "${c.name}".` });
+                        })
+                      }
+                      className="text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-warn"
+                    >
+                      remove image
+                    </button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="danger"
+                    className="h-8 text-xs"
+                    disabled={pending}
+                    onClick={() => remove(c.id, c.name)}
+                  >
+                    Remove
+                  </Button>
+                </span>
               ) : (
                 <span />
               )}

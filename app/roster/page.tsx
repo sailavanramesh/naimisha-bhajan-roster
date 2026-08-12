@@ -280,7 +280,7 @@ export default async function RosterPage({
                   Session kinds in bulk
                 </Link>
               ) : null}
-              <DefaultViewToggle view={view} isDefault={savedView === view} />
+              <DefaultViewToggle view={view} defaultView={savedView} />
               <Link
                 className="rounded-[12px] border px-3 py-2 text-sm hover:bg-panel-hover"
                 href={`/roster?view=${view === "calendar" ? "list" : "calendar"}`}
@@ -315,10 +315,33 @@ export default async function RosterPage({
             />
           ) : (
             <>
-              <form className="grid gap-2 md:grid-cols-4">
-                <Input name="q" defaultValue={q} placeholder="Search singer / bhajan / notes…" />
-                <Input name="from" type="date" defaultValue={sp.from ?? ""} />
-                <Input name="to" type="date" defaultValue={sp.to ?? ""} />
+              {/*
+                Wrapping, and labelled.
+                
+                This was a four-column grid, which on a phone squeezed the
+                search box until its own placeholder was cut off and left two
+                unlabelled date boxes beside it — nothing on screen said what
+                they were for. Wrapping lets each control keep a usable width
+                and drop to the next line instead of shrinking.
+              */}
+              <form className="flex flex-wrap items-end gap-2">
+                <label className="grid min-w-[14rem] flex-1 gap-1 text-[11px] text-on-surface-muted">
+                  Search
+                  <Input
+                    name="q"
+                    defaultValue={q}
+                    placeholder="Singer, bhajan or notes…"
+                    aria-label="Search singer, bhajan or notes"
+                  />
+                </label>
+                <label className="grid gap-1 text-[11px] text-on-surface-muted">
+                  From
+                  <Input name="from" type="date" defaultValue={sp.from ?? ""} aria-label="From" />
+                </label>
+                <label className="grid gap-1 text-[11px] text-on-surface-muted">
+                  To
+                  <Input name="to" type="date" defaultValue={sp.to ?? ""} aria-label="To" />
+                </label>
                 <Button type="submit">Apply</Button>
                 <input type="hidden" name="view" value="list" />
               </form>

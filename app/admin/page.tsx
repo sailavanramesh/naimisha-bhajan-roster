@@ -54,9 +54,9 @@ export default async function AdminPage({
   const sessionCategories = (
     await prisma.sessionCategory.findMany({
       orderBy: [{ order: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, _count: { select: { sessions: true } } },
+      select: { id: true, name: true, image: true, _count: { select: { sessions: true } } },
     })
-  ).map((c) => ({ id: c.id, name: c.name, sessions: c._count.sessions }));
+  ).map((c) => ({ id: c.id, name: c.name, image: c.image, sessions: c._count.sessions }));
 
   const [singers, eligibility, instrumentPeople] = await Promise.all([
     prisma.singer.findMany({ orderBy: { name: "asc" } }),

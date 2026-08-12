@@ -185,14 +185,25 @@ export async function addToList(input: {
   });
   const resolvedTitle = bhajan?.title ?? title;
 
-  // Matched on the bhajan when it resolves, and on the title when it does not
-  // — the same pair the rest of the app treats as "this bhajan for this
-  // person".
+  /*
+   * Matched on the bhajan OR the title, never just one of them.
+   *
+   * The first version matched on bhajanId when the incoming title resolved to
+   * the masterlist, and on the title only when it did not. That misses the
+   * case where the row already on their list is free text — no bhajanId — and
+   * the title they have just typed does resolve: the two are plainly the same
+   * bhajan, and the check would have let a duplicate straight through. Both
+   * conditions cost nothing to ask for together.
+   */
   const existing = await prisma.singerRepertoire.findFirst({
     where: {
       singerId,
       kind: { in: [...LEARNABLE] },
-      ...(bhajan ? { bhajanId: bhajan.id } : { title: { equals: title, mode: "insensitive" } }),
+      OR: [
+        ...(bhajan ? [{ bhajanId: bhajan.id }] : []),
+        { title: { equals: resolvedTitle, mode: "insensitive" as const } },
+        { title: { equals: title, mode: "insensitive" as const } },
+      ],
     },
     select: { kind: true, title: true, preferredPitch: true },
   });
