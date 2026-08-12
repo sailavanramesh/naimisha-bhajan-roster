@@ -110,23 +110,18 @@ export function SessionSingersGrid(props: {
     }))
   );
 
-  /** The row being dragged, and the one it is hovering over. Desktop only. */
-  const [dragging, setDragging] = useState<string | null>(null);
-  const [dragOver, setDragOver] = useState<string | null>(null);
-
   /*
    * Reordering.
    *
    * Order carries meaning here — CLAUDE.md: "the set builds; it does not start
-   * fast" — so moving a bhajan up or down is a real editing action, not a
-   * convenience.
+   * fast" — so moving a bhajan up or down is a real editing action.
    *
-   * Two ways in, deliberately. Dragging is what people reach for with a mouse
-   * and reads as moving the thing itself; the arrows are what work on a phone
-   * held in one hand in a hall, and with a keyboard, and for anybody who finds
-   * a drag target fiddly. Touch drag was not attempted — done properly it
-   * needs pointer capture and autoscroll, and done badly it fights the page
-   * scroll, which on the one device that matters most is worse than arrows.
+   * Arrows, and only arrows. This shipped with an HTML5 drag handle as well,
+   * and Sailavan could not find it in portrait (it was hidden below 640px,
+   * where the table becomes cards) and could not make it work in landscape
+   * either: HTML5 drag-and-drop does not fire for touch at all, so on a phone
+   * the grip was either invisible or inert. Two controls where one of them
+   * silently does nothing is worse than one that always works.
    *
    * Position is not stored per row: saveAll writes position by array index, so
    * moving rows in this array IS the reorder. It takes effect on Save with
@@ -142,22 +137,6 @@ export function SessionSingersGrid(props: {
       next.splice(to, 0, moved);
       return next;
     });
-
-  const dropRow = (targetLocalId: string) => {
-    const sourceId = dragging;
-    setDragging(null);
-    setDragOver(null);
-    if (!sourceId || sourceId === targetLocalId) return;
-    setRows((prev) => {
-      const from = prev.findIndex((r) => r._localId === sourceId);
-      const to = prev.findIndex((r) => r._localId === targetLocalId);
-      if (from < 0 || to < 0) return prev;
-      const next = [...prev];
-      const [moved] = next.splice(from, 1);
-      next.splice(to, 0, moved);
-      return next;
-    });
-  };
 
   const [bhSearch, setBhSearch] = useState<Record<string, BhSearchState>>({});
 
@@ -490,22 +469,7 @@ export function SessionSingersGrid(props: {
               return (
                 <tr
                   key={r._localId}
-                  onDragOver={
-                    props.canAssign
-                      ? (e) => {
-                          e.preventDefault();
-                          setDragOver(r._localId);
-                        }
-                      : undefined
-                  }
-                  onDrop={props.canAssign ? () => dropRow(r._localId) : undefined}
-                  className={[
-                    "border-b align-top",
-                    dragging === r._localId ? "opacity-40" : "",
-                    dragOver === r._localId && dragging && dragging !== r._localId
-                      ? "outline outline-2 -outline-offset-2 outline-brass"
-                      : "",
-                  ].join(" ")}
+                  className="border-b align-top"
                   style={tint ? { background: tint.row } : undefined}
                 >
                   {/* Singer */}
@@ -520,36 +484,42 @@ export function SessionSingersGrid(props: {
                     }
                   >
                     {props.canAssign ? (
-                      <div className="mb-1 flex items-center gap-1">
-                        {/*
-                          The grip is the drag target rather than the whole row:
-                          a row full of selects and text inputs cannot be
-                          draggable without stealing every click inside it.
-                        */}
-                        <span
-                          draggable
-                          onDragStart={() => setDragging(r._localId)}
-                          onDragEnd={() => {
-                            setDragging(null);
-                            setDragOver(null);
-                          }}
-                          title="Drag to reorder"
-                          aria-hidden
-                          className="hidden cursor-grab select-none px-1 text-on-surface-muted active:cursor-grabbing sm:inline"
-                        >
-                          ⠿
-                        </span>
-                        <span className="font-mono text-[11px] text-on-surface-muted">
+                      /*
+                        Number, singer, arrows on ONE line.
+                        
+                        The number and the arrows first sat on a line of their
+                        own above the select, which read as clutter in the
+                        stacked card view a phone gets in portrait — a whole
+                        extra row for two tiny buttons. Inline they cost no
+                        height at all, and the number sits where a position
+                        number belongs: in front of the person.
+                      */
+                      <div className="flex w-full min-w-0 items-center gap-1.5">
+                        <span className="w-3 shrink-0 font-mono text-[11px] text-on-surface-muted">
                           {rows.indexOf(r) + 1}
                         </span>
-                        <span className="ms-auto flex items-center gap-0.5">
+                        <select
+                          value={r.singerId || ""}
+                          onChange={(e) => onSingerChange(r._localId, e.target.value)}
+                          className="min-w-0 flex-1 rounded-[10px] border border-rule-surface bg-field px-2 py-1.5 text-[13px]"
+                        >
+                          <option value="">Select singer…</option>
+                          {props.singers.map((x) => (
+                            <option key={x.id} value={x.id}>
+                              {x.name}
+                            </option>
+                          ))}
+                        </select>
+
+                        {/* Stacked, so the pair is no taller than the select. */}
+                        <span className="flex shrink-0 flex-col gap-px">
                           <button
                             type="button"
                             onClick={() => moveRow(r._localId, -1)}
                             disabled={rows.indexOf(r) === 0}
-                            aria-label="Move up"
+                            aria-label={`Move ${r.singerName ?? "this row"} up`}
                             title="Move up"
-                            className="h-5 w-5 rounded border border-rule-surface bg-field text-[10px] leading-none text-on-surface-muted hover:border-brass/50 hover:text-on-surface disabled:opacity-30"
+                            className="h-[15px] w-5 rounded-t border border-rule-surface bg-field text-[8px] leading-none text-on-surface-muted hover:border-brass/50 hover:text-on-surface disabled:opacity-30"
                           >
                             ▲
                           </button>
@@ -557,29 +527,14 @@ export function SessionSingersGrid(props: {
                             type="button"
                             onClick={() => moveRow(r._localId, 1)}
                             disabled={rows.indexOf(r) === rows.length - 1}
-                            aria-label="Move down"
+                            aria-label={`Move ${r.singerName ?? "this row"} down`}
                             title="Move down"
-                            className="h-5 w-5 rounded border border-rule-surface bg-field text-[10px] leading-none text-on-surface-muted hover:border-brass/50 hover:text-on-surface disabled:opacity-30"
+                            className="h-[15px] w-5 rounded-b border border-rule-surface bg-field text-[8px] leading-none text-on-surface-muted hover:border-brass/50 hover:text-on-surface disabled:opacity-30"
                           >
                             ▼
                           </button>
                         </span>
                       </div>
-                    ) : null}
-
-                    {props.canAssign ? (
-                      <select
-                        value={r.singerId || ""}
-                        onChange={(e) => onSingerChange(r._localId, e.target.value)}
-                        className="w-full rounded-[10px] border border-rule-surface bg-field px-2 py-1.5 text-[13px]"
-                      >
-                        <option value="">Select singer…</option>
-                        {props.singers.map((x) => (
-                          <option key={x.id} value={x.id}>
-                            {x.name}
-                          </option>
-                        ))}
-                      </select>
                     ) : (
                       <div className="text-[14px] font-semibold">{r.singerName ?? "—"}</div>
                     )}

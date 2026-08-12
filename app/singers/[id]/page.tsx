@@ -105,12 +105,20 @@ export default async function SingerPage({
         </CardContent>
       </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent history</CardTitle>
-          <div className="mt-2 text-sm text-on-surface-muted">Latest 50.</div>
-        </CardHeader>
-        <CardContent>
+      {/*
+        Collapsed. The page carries what they have sung, fifty rows of history,
+        a pitch profile, a shruti ladder, a raga table and their whole list —
+        "too much to scroll through", and true. The search above answers the
+        common question; everything below is opened when it is wanted.
+      */}
+      <details className="rounded-[12px] border border-rule-surface bg-panel">
+        <summary className="flex cursor-pointer select-none items-baseline justify-between gap-3 px-4 py-3">
+          <span className="text-sm font-semibold">Recent history</span>
+          <span className="text-xs text-on-surface-muted">
+            {recent.length === 0 ? "none" : `latest ${recent.length}`}
+          </span>
+        </summary>
+        <div className="px-4 pb-4">
           <div className="grid gap-2">
             {recent.map((h) => (
               <Link
@@ -136,20 +144,27 @@ export default async function SingerPage({
               </Link>
             ))}
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </details>
 
       {/*
         The pitch analysis sits below the history now. It is the cleverer part
         of the page but the rarer question — you look up what someone sang far
         more often than you interrogate their median offset.
       */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Pitch profile</CardTitle>
-        </CardHeader>
+      <details className="rounded-[12px] border border-rule-surface bg-panel">
+        <summary className="flex cursor-pointer select-none items-baseline justify-between gap-3 px-4 py-3">
+          <span className="text-sm font-semibold">Pitch profile</span>
+          <span className="font-mono text-xs text-on-surface-muted">
+            {profile.overall.n === 0
+              ? "nothing recorded"
+              : `${profile.overall.n} records${
+                  latest ? "" : ""
+                }`}
+          </span>
+        </summary>
 
-        <CardContent className="grid gap-6">
+        <div className="grid gap-6 px-4 pb-4">
           {/* Offset profile */}
           <section className="grid gap-2">
             {profile.overall.n === 0 ? (
@@ -249,8 +264,8 @@ export default async function SingerPage({
               </div>
             </section>
           ) : null}
-        </CardContent>
-      </Card>
+        </div>
+      </details>
 
       <LearningList
         singerId={singer.id}

@@ -212,7 +212,18 @@ button {
 
   .stacked-table td {
     display: grid;
-    grid-template-columns: 8.5rem 1fr;
+    /*
+      6.5rem, not 8.5rem. On a 390px phone in portrait the old label column
+      took a third of the card and left the controls fighting over what was
+      left — the singer select, its position number and the reorder arrows did
+      not fit and the arrows overflowed off the right edge.
+
+      minmax(0, 1fr) rather than 1fr so the value track may actually shrink:
+      a grid item's automatic minimum is its content, so a select with long
+      option text pushes the track wider than the card and takes whatever sits
+      beside it out of view with it.
+    */
+    grid-template-columns: 6.5rem minmax(0, 1fr);
     align-items: center;
     gap: 0.5rem;
     border: 0 !important;
