@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
+import { defaultSessionOf, USUAL_START } from "@/lib/sessionsOfDay";
 
 const CopyRows = z.object({
   sessionId: z.string().min(1),
@@ -79,12 +80,18 @@ export async function copyRowsToDate(input: {
     // The earliest session that day. A day may hold more than one now, and
     // "copy these rows to Sunday" means the first one unless somebody says
     // otherwise.
-    const existing = await tx.session.findFirst({
+    // The evening session on that day — see lib/sessionsOfDay.ts.
+    const onThatDay = await tx.session.findMany({
       where: { date: day },
-      orderBy: [{ startsAt: "asc" }, { createdAt: "asc" }],
-      select: { id: true },
+      select: { id: true, startsAt: true },
     });
-    const target = existing ?? (await tx.session.create({ data: { date: day }, select: { id: true } }));
+    const existing = defaultSessionOf(onThatDay);
+    const target =
+      existing ??
+      (await tx.session.create({
+        data: { date: day, startsAt: USUAL_START },
+        select: { id: true },
+      }));
 
     const last = await tx.sessionSlot.findFirst({
       where: { sessionId: target.id },

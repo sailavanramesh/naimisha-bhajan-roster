@@ -83,6 +83,8 @@ export default async function RosterPage({
     select: {
       id: true,
       date: true,
+      startsAt: true,
+      category: { select: { name: true } },
       _count: { select: { slots: true } },
       slots: {
         select: {
@@ -101,20 +103,29 @@ export default async function RosterPage({
     orderBy: { date: "asc" },
   });
 
+  /*
+   * The same shape /roster/month returns: a day holds a LIST of sessions.
+   * Seeded here so the first paint of the calendar is not empty, then
+   * refreshed from the route as months are navigated.
+   */
   const dayInfo: Record<
     string,
     {
-      sessionId: string;
-      entries: number;
-      hasSession: boolean;
-      rows: { singer: string; bhajan: string | null; pitch: string | null }[];
+      sessions: {
+        id: string;
+        startsAt: string | null;
+        categoryName: string | null;
+        entries: number;
+        rows: { singer: string; bhajan: string | null; pitch: string | null }[];
+      }[];
     }
   > = {};
   for (const s of monthSessions) {
     const value = {
-      sessionId: s.id,
+      id: s.id,
+      startsAt: s.startsAt,
+      categoryName: s.category?.name ?? null,
       entries: s._count.slots ?? 0,
-      hasSession: true,
       rows: s.slots.map((x) => ({
         singer: x.singer?.name ?? "Unassigned",
         bhajan: x.bhajan?.title ?? x.bhajanTitle ?? x.festivalBhajanTitle ?? null,
@@ -125,8 +136,8 @@ export default async function RosterPage({
     const utcKey = toISODateUTC(s.date);
     const localKey = toISODateLocal(s.date);
 
-    dayInfo[utcKey] = value;
-    if (!dayInfo[localKey]) dayInfo[localKey] = value;
+    (dayInfo[utcKey] ??= { sessions: [] }).sessions.push(value);
+    if (localKey !== utcKey) dayInfo[localKey] ??= dayInfo[utcKey];
   }
 
   let listSessions:
