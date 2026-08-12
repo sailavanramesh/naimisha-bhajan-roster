@@ -7,6 +7,8 @@ import { notifyAboutSession } from "@/lib/notifySession";
 import { rosteredSingerIds, notifyRemovals } from "@/lib/notifyRemoval";
 import { defaultSessionOf, USUAL_START } from "@/lib/sessionsOfDay";
 import { recordSungAsKnown } from "@/lib/repertoireFromHistory";
+import { noteRosterChange } from "@/lib/rosterChange";
+import { announceRosterIfSettled } from "@/lib/announceRosters";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -41,6 +43,7 @@ export async function applyAssignments(formData: FormData): Promise<void> {
     throw new Error(`Could not apply: ${parsed.error.issues[0]?.message ?? "invalid input"}`);
   }
   const { sessionId, assignments } = parsed.data;
+  const rosteredBefore = await rosteredSingerIds(sessionId);
 
   // Same rule for the fairness pass: it proposes from a filtered list, but a
   // stale form could still post somebody who has since lost their voice field.
@@ -62,8 +65,10 @@ export async function applyAssignments(formData: FormData): Promise<void> {
     }
   });
 
+  await noteRosterChange(sessionId, rosteredBefore);
   await notifyAboutSession(sessionId);
   await recordSungAsKnown(sessionId);
+  await announceRosterIfSettled(sessionId);
 
   revalidatePath(`/roster/${sessionId}`);
   redirect(`/roster/${sessionId}`);
@@ -143,6 +148,7 @@ export async function addSingerSlot(input: {
     return { ok: false, error: `Could not add the singer: ${parsed.error.issues[0]?.message ?? "invalid input"}` };
   }
   const { sessionId, singerId, bhajanId, confirmedPitch } = parsed.data;
+  const rosteredBefore = await rosteredSingerIds(sessionId);
 
   /*
    * Somebody with no voice recorded is not a singer and cannot hold a slot:
@@ -200,8 +206,10 @@ export async function addSingerSlot(input: {
    * revalidation updates the list in place and the caller can show a pending
    * state on the exact control that was pressed.
    */
+  await noteRosterChange(sessionId, rosteredBefore);
   await notifyAboutSession(sessionId);
   await recordSungAsKnown(sessionId);
+  await announceRosterIfSettled(sessionId);
 
   revalidatePath(`/roster/${sessionId}`);
   revalidatePath(`/roster/${sessionId}/assign`);
@@ -254,6 +262,7 @@ export async function removeSingerSlot(input: {
   const before = await rosteredSingerIds(sessionId);
   await prisma.sessionSlot.delete({ where: { id: slotId } });
   await notifyRemovals(sessionId, before);
+  await noteRosterChange(sessionId, before);
 
   revalidatePath(`/roster/${sessionId}`);
   revalidatePath(`/roster/${sessionId}/assign`);
@@ -333,6 +342,7 @@ export async function autoAddFairestSingers(input: {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Could not do that." };
   }
   const { sessionId, count } = parsed.data;
+  const rosteredBefore = await rosteredSingerIds(sessionId);
 
   const session = await prisma.session.findUnique({
     where: { id: sessionId },
@@ -380,8 +390,10 @@ export async function autoAddFairestSingers(input: {
     }
   });
 
+  await noteRosterChange(sessionId, rosteredBefore);
   await notifyAboutSession(sessionId);
   await recordSungAsKnown(sessionId);
+  await announceRosterIfSettled(sessionId);
 
   revalidatePath(`/roster/${sessionId}`);
   revalidatePath(`/roster/${sessionId}/assign`);

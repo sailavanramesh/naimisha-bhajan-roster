@@ -5,6 +5,8 @@ import { rosterBlockReason } from "@/lib/rosterEligibility";
 import { notifyAboutSession } from "@/lib/notifySession";
 import { rosteredSingerIds, notifyRemovals } from "@/lib/notifyRemoval";
 import { recordSungAsKnown } from "@/lib/repertoireFromHistory";
+import { noteRosterChange } from "@/lib/rosterChange";
+import { announceRosterIfSettled } from "@/lib/announceRosters";
 import { requireCapability, can } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
@@ -84,6 +86,7 @@ export async function deleteSingerRow(id: string) {
   const before = await rosteredSingerIds(row.sessionId);
   await prisma.sessionSlot.delete({ where: { id } });
   await notifyRemovals(row.sessionId, before);
+  await noteRosterChange(row.sessionId, before);
 
   revalidatePath(`/roster/${row.sessionId}`);
 }
@@ -254,7 +257,11 @@ export async function upsertSessionSingerRows(sessionId: string, rows: SingerRow
   // Saving the grid can be the moment somebody is first rostered — or the
   // moment somebody is quietly replaced.
   await notifyRemovals(sessionId, rosteredBefore);
+  await noteRosterChange(sessionId, rosteredBefore);
   await notifyAboutSession(sessionId);
+  // Every save asks whether this roster has settled. Almost always no; when it
+  // is yes, the group hears about it now rather than at the next hourly tick.
+  await announceRosterIfSettled(sessionId);
   // Singing something is the strongest evidence there is that a person can
   // sing it, so a saved past session adds to their list.
   await recordSungAsKnown(sessionId);

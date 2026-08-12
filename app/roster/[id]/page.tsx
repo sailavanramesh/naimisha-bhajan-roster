@@ -14,6 +14,7 @@ import { SessionMetaPanel } from "./SessionMetaPanel";
 import { DeleteSessionButton } from "./DeleteSessionButton";
 import { NotifyPanel } from "./NotifyPanel";
 import { melbourneTodayISO } from "@/lib/dates";
+import { sortByStart, sessionLabel, hasSeveral } from "@/lib/sessionsOfDay";
 import { missingParts } from "@/lib/notify";
 import type { NotifyPerson } from "./NotifyPanel";
 
@@ -145,6 +146,33 @@ export default async function RosterSessionPage({
     orderBy: [{ order: "asc" }, { name: "asc" }],
     select: { id: true, name: true },
   });
+
+  /*
+   * The other sessions on this day.
+   *
+   * Nothing on this page said a day held more than one, so a morning session
+   * was reachable only from the calendar. Sailavan: "if a day has multiple
+   * sessions, shouldn't i be able to see them all once i go into that day?"
+   * Yes — and from the session itself, which is where you already are.
+   *
+   * Not rendered at all on an ordinary day.
+   */
+  const sameDay = sortByStart(
+    await prisma.session.findMany({
+      where: { date: session.date },
+      select: {
+        id: true,
+        startsAt: true,
+        category: { select: { name: true } },
+        _count: { select: { slots: true } },
+      },
+    }),
+  ).map((x) => ({
+    id: x.id,
+    startsAt: x.startsAt,
+    categoryName: x.category?.name ?? null,
+    entries: x._count.slots,
+  }));
 
   const canNotify = can(role, "notifySingers");
   const notifyPeople = canNotify ? await notifyCandidates(sessionId) : [];
@@ -306,6 +334,35 @@ export default async function RosterSessionPage({
               view keeps its own emphasis, because it is the one you reach for
               standing at the desk rather than while editing.
             */}
+            {hasSeveral(sameDay) ? (
+              <div className="flex flex-wrap items-center gap-1.5 text-xs">
+                <span className="text-on-surface-muted">
+                  {sameDay.length} sessions today:
+                </span>
+                {sameDay.map((x) => {
+                  const isCurrent = x.id === sessionId;
+                  return (
+                    <Link
+                      key={x.id}
+                      href={`/roster/${x.id}`}
+                      aria-current={isCurrent ? "page" : undefined}
+                      className={[
+                        "whitespace-nowrap rounded-full border px-3 py-1",
+                        isCurrent
+                          ? "border-brass bg-brass/15 font-semibold text-on-surface"
+                          : "border-rule-surface bg-field text-on-surface-muted hover:border-brass/50 hover:text-on-surface",
+                      ].join(" ")}
+                    >
+                      {sessionLabel(x)}
+                      <span className="ms-1.5 text-on-surface-muted">
+                        {x.entries === 0 ? "empty" : x.entries}
+                      </span>
+                    </Link>
+                  );
+                })}
+              </div>
+            ) : null}
+
             <div className="flex flex-wrap items-center gap-1.5">
               {/* No standing edit-mode pill: see app/roster/page.tsx. */}
               <Link href={backToRosterHref} className={PILL}>

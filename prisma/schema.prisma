@@ -269,14 +269,23 @@ model Session {
   categoryId String?
   /// What it was about: a festival name, a visiting speaker, a theme.
   topic      String?
-  type       SessionType   @default(Weekday)
-  status     SessionStatus @default(Published)
+
+  /// When the SET OF ROSTERED SINGERS last changed — not when anything on the
+  /// session was last touched.
+  ///
+  /// The difference is the whole point. "Is this roster settled?" must not be
+  /// reset by somebody filling in a pitch an hour later: the people are
+  /// decided, which is what the quiet "the roster is up" announces. Slot
+  /// updatedAt cannot answer it, because every pitch edit bumps that too.
+  rosterChangedAt DateTime?
+  type            SessionType   @default(Weekday)
+  status          SessionStatus @default(Published)
   /// Seed for the generator, so a generated set is reproducible and shareable.
-  seed       String?
-  templateId String?
-  notes      String?       @db.Text
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
+  seed            String?
+  templateId      String?
+  notes           String?       @db.Text
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
   template          SessionTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
   slots             SessionSlot[]
