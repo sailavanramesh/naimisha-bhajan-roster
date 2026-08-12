@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireCapability, getSignedInSinger, can, getRole } from "@/lib/auth";
 import { RepertoireKind } from "@prisma/client";
 import { revalidatePath } from "next/cache";
+import { historyCutoff } from "@/lib/dates";
 import { z } from "zod";
 
 /**
@@ -153,15 +154,25 @@ const STAGE_LABEL: Record<string, string> = {
  *
  * Refusing is not a dead end: the caller is told what stage it is already at,
  * so it can offer to move it as a deliberate second act.
+ *
+ * It also refuses to file something they have SUNG under a lesser stage
+ * without saying so. Sailavan added a bhajan he had sung twice — at the same
+ * shruti both times — and was told only "Added to list", because the list
+ * itself happened not to mention it. The roster knew and the list did not, and
+ * the app answered from the half that knew less. `force` is how the caller
+ * says it meant it.
  */
 export async function addToList(input: {
   singerId: string;
   title: string;
   kind: RepertoireKind;
   preferredPitch?: string;
+  /** Add it anyway, having been told what the roster says. */
+  force?: boolean;
 }): Promise<
   | { ok: true; title: string }
   | { ok: false; already: { kind: string; label: string; title: string; preferredPitch: string | null } }
+  | { ok: false; sung: { title: string; times: number; lastOn: string | null; pitch: string | null } }
   | { ok: false; error: string }
 > {
   await requireCapability("manageOwnLearning");
@@ -218,6 +229,37 @@ export async function addToList(input: {
         preferredPitch: existing.preferredPitch,
       },
     };
+  }
+
+  /*
+   * Not on their list — but the ROSTER may still know it, and the roster is
+   * the better witness: singing something is evidence, a list is a statement
+   * of intent. Filing a bhajan they have sung under "want to learn" without
+   * mentioning it is the app forgetting what it recorded itself.
+   */
+  if (bhajan && kind !== RepertoireKind.known && !input.force) {
+    const sung = await prisma.sessionSlot.findMany({
+      where: {
+        singerId,
+        bhajanId: bhajan.id,
+        session: { date: { lte: historyCutoff() } },
+      },
+      orderBy: { session: { date: "desc" } },
+      select: { confirmedPitch: true, session: { select: { date: true } } },
+    });
+
+    if (sung.length > 0) {
+      const withPitch = sung.find((x) => x.confirmedPitch);
+      return {
+        ok: false,
+        sung: {
+          title: resolvedTitle,
+          times: sung.length,
+          lastOn: sung[0]?.session.date.toISOString().slice(0, 10) ?? null,
+          pitch: withPitch?.confirmedPitch ?? null,
+        },
+      };
+    }
   }
 
   await prisma.singerRepertoire.create({

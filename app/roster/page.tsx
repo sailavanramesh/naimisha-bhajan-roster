@@ -75,6 +75,7 @@ export default async function RosterPage({
 }: {
   searchParams: Promise<{
     view?: string;
+    tile?: string;
     q?: string;
     from?: string;
     to?: string;
@@ -107,6 +108,9 @@ export default async function RosterPage({
         })
       )?.defaultRosterView ?? null
     : null;
+
+  /** Temporary: two ways of showing a session kind's picture, to choose from. */
+  const tile = sp.tile === "band" ? "band" : "badge";
 
   const view: "calendar" | "list" =
     sp.view === "list" || sp.view === "calendar"
@@ -190,7 +194,7 @@ export default async function RosterPage({
         date: Date;
         notes: string | null;
         startsAt: string | null;
-        category: { name: string } | null;
+        category: { name: string; image: string | null } | null;
         slots: {
           singer: { name: string } | null;
           bhajan: { title: string } | null;
@@ -249,7 +253,7 @@ export default async function RosterPage({
       orderBy: { date: "desc" },
       take: 200,
       include: {
-        category: { select: { name: true } },
+        category: { select: { name: true, image: true } },
         slots: {
           orderBy: [{ position: "asc" }],
           include: { singer: true, bhajan: { select: { title: true } } },
@@ -358,8 +362,15 @@ export default async function RosterPage({
                 <Button type="submit" className="col-span-2 sm:col-span-1">
                   Apply
                 </Button>
-                <p className="col-span-2 text-[11px] text-on-surface-muted sm:basis-full">
-                  Leave the dates blank to see every session.
+                <p className="col-span-2 flex flex-wrap items-center gap-x-3 text-[11px] text-on-surface-muted sm:basis-full">
+                  <span>Leave the dates blank to see every session.</span>
+                  {/* Temporary while the two picture treatments are compared. */}
+                  <Link
+                    href={`/roster?view=list${tile === "band" ? "" : "&tile=band"}`}
+                    className="underline underline-offset-2 hover:text-on-surface"
+                  >
+                    {tile === "band" ? "Try the badge instead" : "Try the picture band instead"}
+                  </Link>
                 </p>
                 <input type="hidden" name="view" value="list" />
               </form>
@@ -398,14 +409,42 @@ export default async function RosterPage({
                     Sunday of ten slots wrapped into an unreadable paragraph
                     and an empty session was an unexplained blank card.
                   */
-                  <Link
+                  <div
                     key={s.id}
-                    href={`/roster/${s.id}`}
-                    className="group rounded-[12px] border border-rule-surface bg-panel p-3 transition-colors hover:border-brass/40 hover:bg-panel-hover"
+                    /*
+                      A div, not a Link. The whole card used to be one anchor,
+                      which meant nothing inside it could be a link of its own —
+                      and Sailavan wants Live view here, as the calendar has.
+                      The date is the link to the session now.
+                    */
+                    className="group relative overflow-hidden rounded-[12px] border border-rule-surface bg-panel p-3 transition-colors hover:border-brass/40"
                   >
+                    {/*
+                      The BAND treatment: the kind's picture washed across the
+                      top of the card, behind everything, at low contrast.
+                      Shown only under ?tile=band while Sailavan compares it
+                      with the badge — one of the two will be deleted.
+                    */}
+                    {tile === "band" && s.category?.image ? (
+                      <span
+                        aria-hidden
+                        className="pointer-events-none absolute inset-x-0 top-0 h-16 opacity-[0.18]"
+                        style={{
+                          backgroundImage: `url(${s.category.image})`,
+                          backgroundSize: "cover",
+                          backgroundPosition: "center",
+                          maskImage: "linear-gradient(to bottom, black, transparent)",
+                          WebkitMaskImage: "linear-gradient(to bottom, black, transparent)",
+                        }}
+                      />
+                    ) : null}
+                    <div className="relative">
                     <div className="flex items-baseline justify-between gap-3">
                       <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                        <span className="font-display text-[15px]">
+                        <Link
+                          href={`/roster/${s.id}`}
+                          className="font-display text-[15px] underline-offset-2 hover:underline"
+                        >
                           {new Date(s.date).toLocaleDateString("en-AU", {
                             weekday: "short",
                             day: "numeric",
@@ -413,10 +452,18 @@ export default async function RosterPage({
                             year: "numeric",
                             timeZone: "UTC",
                           })}
-                        </span>
+                        </Link>
                         {/* What kind of session it was, where the eye already is. */}
                         {s.category ? (
-                          <span className="rounded-full border border-brass/40 bg-brass/[0.08] px-2 py-0.5 text-[10px] uppercase tracking-wide text-on-surface-muted">
+                          <span className="inline-flex items-center gap-1.5 rounded-full border border-brass/40 bg-brass/[0.08] py-0.5 pe-2 ps-0.5 text-[10px] uppercase tracking-wide text-on-surface-muted">
+                            {tile !== "band" && s.category.image ? (
+                              /* eslint-disable-next-line @next/next/no-img-element */
+                              <img
+                                src={s.category.image}
+                                alt=""
+                                className="h-4 w-4 rounded-full object-cover"
+                              />
+                            ) : null}
                             {s.category.name}
                           </span>
                         ) : null}
@@ -470,8 +517,25 @@ export default async function RosterPage({
                           notes: <Marked text={excerpt(s.notes ?? "", q)} query={q} />
                         </p>
                       ) : null}
+
+                      {/* Both ways in, as the calendar's day panel has. */}
+                      <p className="mt-1.5 flex flex-wrap items-baseline gap-x-3 gap-y-1 px-1.5 text-[12px]">
+                        <Link
+                          href={`/roster/${s.id}`}
+                          className="text-brass-ink underline underline-offset-2"
+                        >
+                          Open this session →
+                        </Link>
+                        <Link
+                          href={`/roster/${s.id}/live`}
+                          className="text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+                        >
+                          ▶ Live view
+                        </Link>
+                      </p>
                     </div>
-                  </Link>
+                    </div>
+                  </div>
                 ))}
               </div>
             </>
