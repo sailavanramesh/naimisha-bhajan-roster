@@ -21,6 +21,21 @@ export function AddToList({
 }) {
   const [open, setOpen] = useState(false);
   const [done, setDone] = useState(false);
+  /*
+   * What the server objected to.
+   *
+   * This form used to call the action and announce success regardless, which
+   * is how a bhajan somebody had sung twice went onto their "want to learn"
+   * list with a tick beside it. The action refuses now; this is the half that
+   * says so, and offers the two ways past it.
+   */
+  const [refused, setRefused] = useState<
+    | { kind: "already"; label: string; title: string }
+    | { kind: "sung"; title: string; times: number; lastOn: string | null; pitch: string | null }
+    | { kind: "error"; message: string }
+    | null
+  >(null);
+  const [pending, setPending] = useState(false);
 
   if (done) {
     return <span className="self-start text-xs text-brass-ink">Added to the list ✓</span>;
@@ -37,8 +52,24 @@ export function AddToList({
   return (
     <form
       action={async (fd) => {
-        await upsertLearning(fd);
-        setDone(true);
+        setPending(true);
+        setRefused(null);
+        try {
+          const res = await upsertLearning(fd);
+          if (res.ok) {
+            setDone(true);
+            return;
+          }
+          if ("already" in res) {
+            setRefused({ kind: "already", label: res.already.label, title: res.already.title });
+          } else if ("sung" in res) {
+            setRefused({ kind: "sung", ...res.sung });
+          } else {
+            setRefused({ kind: "error", message: res.error });
+          }
+        } finally {
+          setPending(false);
+        }
       }}
       className="grid w-full shrink-0 gap-1.5 sm:w-auto"
     >
@@ -70,9 +101,41 @@ export function AddToList({
         <option value={RepertoireKind.known}>Already know it</option>
       </select>
       <div className="flex gap-1">
-        <Button type="submit" variant="primary" className="h-9 text-xs">Add</Button>
+        <Button type="submit" variant="primary" className="h-9 text-xs" disabled={pending}>
+          {pending ? "Adding…" : "Add"}
+        </Button>
         <Button type="button" className="h-9 text-xs" onClick={() => setOpen(false)}>Cancel</Button>
       </div>
+
+      {refused ? (
+        <p className="max-w-xs rounded-[10px] border border-warn/40 bg-warn/[0.08] px-2 py-1.5 text-[11px]">
+          {refused.kind === "already" ? (
+            <>
+              Not added — <strong>{refused.title}</strong> is already on that list under{" "}
+              <strong>{refused.label}</strong>.
+            </>
+          ) : refused.kind === "sung" ? (
+            <>
+              Not added — <strong>{refused.title}</strong> has been sung {refused.times}
+              {"\u00d7"}
+              {refused.lastOn ? `, last on ${refused.lastOn}` : ""}
+              {refused.pitch ? ` at ${refused.pitch}` : ""}. Choose{" "}
+              <strong>Already know it</strong>, or{" "}
+              <button
+                type="submit"
+                name="force"
+                value="1"
+                className="underline underline-offset-2"
+              >
+                add it anyway
+              </button>
+              .
+            </>
+          ) : (
+            refused.message
+          )}
+        </p>
+      ) : null}
     </form>
   );
 }

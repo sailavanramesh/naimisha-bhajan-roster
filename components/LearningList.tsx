@@ -185,7 +185,15 @@ export async function LearningList({
                     {canEdit ? (
                       <div className="mt-2 flex flex-wrap items-center gap-1">
                         {STAGES.map((stage) => (
-                          <form key={stage.kind} action={upsertLearning}>
+                          <form
+                            key={stage.kind}
+                            action={async (fd) => {
+                              "use server";
+                              await upsertLearning(fd);
+                            }}
+                          >
+                            {/* A move, not an add — see upsertLearning. */}
+                            <input type="hidden" name="move" value="1" />
                             <input type="hidden" name="singerId" value={singerId} />
                             <input type="hidden" name="title" value={e.title} />
                             <input type="hidden" name="kind" value={stage.kind} />
@@ -217,7 +225,15 @@ export async function LearningList({
                         <summary className="cursor-pointer text-xs text-on-surface-muted hover:text-on-surface">
                           Notes, shruti and status
                         </summary>
-                        <form action={upsertLearning} className="mt-2 grid gap-2">
+                        <form
+                          action={async (fd) => {
+                            "use server";
+                            await upsertLearning(fd);
+                          }}
+                          className="mt-2 grid gap-2"
+                        >
+                          {/* Editing an entry that exists, not adding one. */}
+                          <input type="hidden" name="move" value="1" />
                           <input type="hidden" name="singerId" value={singerId} />
                           <input type="hidden" name="title" value={e.title} />
                           <div className="grid gap-2 sm:grid-cols-2">

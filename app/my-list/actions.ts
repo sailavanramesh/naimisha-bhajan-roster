@@ -49,7 +49,28 @@ const Upsert = z.object({
   preferredPitch: z.string().trim().max(64).optional(),
 });
 
-export async function upsertLearning(formData: FormData): Promise<void> {
+export type UpsertResult =
+  | { ok: true }
+  | { ok: false; already: { kind: string; label: string; title: string; preferredPitch: string | null } }
+  | { ok: false; sung: { title: string; times: number; lastOn: string | null; pitch: string | null } }
+  | { ok: false; error: string };
+
+/**
+ * Save an entry on somebody's list.
+ *
+ * Used for two different intentions, and it now tells them apart:
+ *
+ *   MOVING an entry between stages, or editing its note and shruti — which is
+ *   what the buttons on each entry do, and which always has an existing row.
+ *   Allowed, as it always was.
+ *
+ *   ADDING something new. Guarded, because the caller may not have checked:
+ *   the bhajan page and Explore both call this directly, and neither did.
+ *
+ * `move=1` in the form says the caller means the first, which is how an entry
+ * already on the list gets moved rather than refused.
+ */
+export async function upsertLearning(formData: FormData): Promise<UpsertResult> {
   await requireCapability("manageOwnLearning");
 
   const parsed = Upsert.safeParse({
@@ -59,9 +80,22 @@ export async function upsertLearning(formData: FormData): Promise<void> {
     note: String(formData.get("note") ?? ""),
     preferredPitch: String(formData.get("preferredPitch") ?? ""),
   });
-  if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Could not save.");
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Could not save." };
+  }
   const { title, kind, note, preferredPitch } = parsed.data;
   const singerId = await resolveSingerId(parsed.data.singerId);
+
+  /*
+   * A move says so. Anything else is an add, and an add is checked — this is
+   * the single place all three surfaces pass through.
+   */
+  const isMove = String(formData.get("move") ?? "") === "1";
+  const force = String(formData.get("force") ?? "") === "1";
+  if (!isMove && !force) {
+    const objection = await contradiction(singerId, title, kind);
+    if (objection) return { ok: false, ...objection };
+  }
 
   const bhajan = await prisma.bhajan.findFirst({
     where: { title: { equals: title, mode: "insensitive" } },
@@ -104,6 +138,7 @@ export async function upsertLearning(formData: FormData): Promise<void> {
 
   revalidatePath("/my-list");
   revalidatePath(`/singers/${singerId}`);
+  return { ok: true };
 }
 
 export async function removeLearning(formData: FormData): Promise<void> {
@@ -129,6 +164,85 @@ export async function removeLearning(formData: FormData): Promise<void> {
   });
   revalidatePath("/my-list");
   revalidatePath(`/singers/${gone.singerId}`);
+}
+
+/**
+ * Whether this add contradicts what the app already knows.
+ *
+ * THE GUARD LIVES HERE, not in a form. It was in a form, and that was the
+ * whole bug: components/AddToListForm checked before adding, and the two other
+ * ways in — the bhajan page and Explore, both through components/AddToList —
+ * did not, so the same bhajan went onto the same list unchecked from two of
+ * the three doors. A rule enforced by one caller is not a rule.
+ *
+ * Two contradictions:
+ *
+ *   ALREADY  it is on their list at some stage. Adding is not moving; the
+ *            three stage buttons on the entry are how it moves.
+ *   SUNG     the roster records them singing it, and this would file it under
+ *            something less than "know it". Singing is evidence; a list is a
+ *            statement of intent, and the evidence should win an argument it
+ *            was never told about.
+ *
+ * Returns null when there is nothing to object to. A MOVE never reaches the
+ * sung branch, because a move has an existing row and stops at the first.
+ */
+async function contradiction(
+  singerId: string,
+  title: string,
+  kind: RepertoireKind,
+): Promise<
+  | { already: { kind: string; label: string; title: string; preferredPitch: string | null } }
+  | { sung: { title: string; times: number; lastOn: string | null; pitch: string | null } }
+  | null
+> {
+  const bhajan = await prisma.bhajan.findFirst({
+    where: { title: { equals: title, mode: "insensitive" } },
+    select: { id: true, title: true },
+  });
+  const resolvedTitle = bhajan?.title ?? title;
+
+  const existing = await prisma.singerRepertoire.findFirst({
+    where: {
+      singerId,
+      kind: { in: [...LEARNABLE] },
+      OR: [
+        ...(bhajan ? [{ bhajanId: bhajan.id }] : []),
+        { title: { equals: resolvedTitle, mode: "insensitive" as const } },
+        { title: { equals: title, mode: "insensitive" as const } },
+      ],
+    },
+    select: { kind: true, title: true, preferredPitch: true },
+  });
+
+  if (existing) {
+    return {
+      already: {
+        kind: existing.kind,
+        label: STAGE_LABEL[existing.kind] ?? existing.kind,
+        title: existing.title,
+        preferredPitch: existing.preferredPitch,
+      },
+    };
+  }
+
+  if (!bhajan || kind === RepertoireKind.known) return null;
+
+  const sung = await prisma.sessionSlot.findMany({
+    where: { singerId, bhajanId: bhajan.id, session: { date: { lte: historyCutoff() } } },
+    orderBy: { session: { date: "desc" } },
+    select: { confirmedPitch: true, session: { select: { date: true } } },
+  });
+  if (sung.length === 0) return null;
+
+  return {
+    sung: {
+      title: resolvedTitle,
+      times: sung.length,
+      lastOn: sung[0]?.session.date.toISOString().slice(0, 10) ?? null,
+      pitch: sung.find((x) => x.confirmedPitch)?.confirmedPitch ?? null,
+    },
+  };
 }
 
 const STAGE_LABEL: Record<string, string> = {
@@ -196,71 +310,8 @@ export async function addToList(input: {
   });
   const resolvedTitle = bhajan?.title ?? title;
 
-  /*
-   * Matched on the bhajan OR the title, never just one of them.
-   *
-   * The first version matched on bhajanId when the incoming title resolved to
-   * the masterlist, and on the title only when it did not. That misses the
-   * case where the row already on their list is free text — no bhajanId — and
-   * the title they have just typed does resolve: the two are plainly the same
-   * bhajan, and the check would have let a duplicate straight through. Both
-   * conditions cost nothing to ask for together.
-   */
-  const existing = await prisma.singerRepertoire.findFirst({
-    where: {
-      singerId,
-      kind: { in: [...LEARNABLE] },
-      OR: [
-        ...(bhajan ? [{ bhajanId: bhajan.id }] : []),
-        { title: { equals: resolvedTitle, mode: "insensitive" as const } },
-        { title: { equals: title, mode: "insensitive" as const } },
-      ],
-    },
-    select: { kind: true, title: true, preferredPitch: true },
-  });
-
-  if (existing) {
-    return {
-      ok: false,
-      already: {
-        kind: existing.kind,
-        label: STAGE_LABEL[existing.kind] ?? existing.kind,
-        title: existing.title,
-        preferredPitch: existing.preferredPitch,
-      },
-    };
-  }
-
-  /*
-   * Not on their list — but the ROSTER may still know it, and the roster is
-   * the better witness: singing something is evidence, a list is a statement
-   * of intent. Filing a bhajan they have sung under "want to learn" without
-   * mentioning it is the app forgetting what it recorded itself.
-   */
-  if (bhajan && kind !== RepertoireKind.known && !input.force) {
-    const sung = await prisma.sessionSlot.findMany({
-      where: {
-        singerId,
-        bhajanId: bhajan.id,
-        session: { date: { lte: historyCutoff() } },
-      },
-      orderBy: { session: { date: "desc" } },
-      select: { confirmedPitch: true, session: { select: { date: true } } },
-    });
-
-    if (sung.length > 0) {
-      const withPitch = sung.find((x) => x.confirmedPitch);
-      return {
-        ok: false,
-        sung: {
-          title: resolvedTitle,
-          times: sung.length,
-          lastOn: sung[0]?.session.date.toISOString().slice(0, 10) ?? null,
-          pitch: withPitch?.confirmedPitch ?? null,
-        },
-      };
-    }
-  }
+  const objection = input.force ? null : await contradiction(singerId, title, kind);
+  if (objection) return { ok: false, ...objection };
 
   await prisma.singerRepertoire.create({
     data: {
