@@ -289,3 +289,26 @@ input[type="date"][data-empty="true"] {
   color: rgb(var(--on-surface-muted));
   opacity: 0.75;
 }
+
+/*
+  The layering, in one place.
+
+  A sticky table cell and the mobile navigation drawer were both z-50, so on a
+  phone in landscape the frozen Singer column showed straight through the open
+  menu. Equal z-index in different stacking contexts is decided by document
+  order, which is not something to leave to chance.
+
+  Nothing here is enforced by CSS — Tailwind classes carry the numbers — but
+  the scale is:
+
+     10-20   sticky table cells and panel headers, which need only to sit
+             above the ordinary content beside them
+     60      the mobile navigation drawer and its trigger
+     100     the live view, which covers the app including the navigation
+     120     the words sheet, which covers the live view
+     9999    the bhajan search dropdown, a body-level portal that must clear
+             whatever it is anchored inside
+
+  Anything new picks a band; nothing new invents a number above 120 unless it
+  genuinely has to cover the live view.
+*/
