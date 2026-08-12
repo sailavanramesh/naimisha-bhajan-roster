@@ -216,6 +216,50 @@ export function SessionSingersGrid(props: {
 
   const bhInputRef = useRef<Record<string, HTMLInputElement | null>>({});
 
+  /*
+   * Which suggestion the arrow keys are on.
+   *
+   * The list was mouse-only: typing a title and pressing Down moved the text
+   * caret instead of the highlight, so on a keyboard there was no way to take
+   * a suggestion without reaching for the mouse. -1 means "none yet", so the
+   * first Down lands on the first result rather than the second.
+   */
+  const [bhActive, setBhActive] = useState(-1);
+  const bhOptionRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+
+  const onBhajanKeyDown = (localId: string) => (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!bhPortal.open || bhPortal.localId !== localId) return;
+    const n = bhPortal.items.length;
+
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (n === 0) return;
+      // Otherwise the caret jumps to the end of the text as well.
+      e.preventDefault();
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      setBhActive((prev) => {
+        const next = prev < 0 ? (step === 1 ? 0 : n - 1) : (prev + step + n) % n;
+        bhOptionRefs.current[next]?.scrollIntoView({ block: "nearest" });
+        return next;
+      });
+      return;
+    }
+
+    if (e.key === "Enter") {
+      if (bhActive < 0 || !bhPortal.items[bhActive]) return;
+      // Only swallow Enter when it is actually choosing something, so the key
+      // still does whatever it did before in a row with no list open.
+      e.preventDefault();
+      onPickBhajan(localId, bhPortal.items[bhActive].id);
+      setBhActive(-1);
+      return;
+    }
+
+    if (e.key === "Escape") {
+      setBhPortal((prev) => ({ ...prev, open: false }));
+      setBhActive(-1);
+    }
+  };
+
   // Reposition portal on scroll/resize
   useEffect(() => {
     function onMove() {
@@ -438,6 +482,11 @@ export function SessionSingersGrid(props: {
     });
   }
 
+  // A new set of results means the old highlight is meaningless.
+  useEffect(() => {
+    setBhActive(-1);
+  }, [bhPortal.items, bhPortal.localId]);
+
   const portalEl =
     bhPortal.open && bhPortal.anchorRect
       ? createPortal(
@@ -450,17 +499,31 @@ export function SessionSingersGrid(props: {
               maxHeight: Math.min(320, window.innerHeight - (bhPortal.anchorRect.bottom + 16)),
               zIndex: 9999,
             }}
+            id="bhajan-suggestions"
+            role="listbox"
             className="overflow-auto rounded-[12px] border border-rule-surface bg-panel shadow-xl"
           >
             {bhPortal.loading ? <div className="px-2 py-1.5 text-xs text-on-surface-muted">Searching…</div> : null}
             {bhPortal.items.length === 0 && !bhPortal.loading ? (
               <div className="px-2 py-1.5 text-xs text-on-surface-muted">No matches.</div>
             ) : null}
-            {bhPortal.items.map((it) => (
+            {bhPortal.items.map((it, i) => (
               <button
                 key={it.id}
                 type="button"
-                className="w-full text-left px-3 py-2 text-sm hover:bg-panel-hover"
+                ref={(el) => {
+                  bhOptionRefs.current[i] = el;
+                }}
+                /* role=option so aria-selected means something: inside a
+                   listbox a bare <button> announces nothing about which one
+                   the arrow keys are on. */
+                role="option"
+                aria-selected={i === bhActive}
+                className={[
+                  "w-full px-3 py-2 text-left text-sm hover:bg-panel-hover",
+                  i === bhActive ? "bg-panel-hover ring-1 ring-inset ring-brass/50" : "",
+                ].join(" ")}
+                onMouseEnter={() => setBhActive(i)}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onPickBhajan(bhPortal.localId!, it.id)}
               >
@@ -665,6 +728,10 @@ export function SessionSingersGrid(props: {
                         value={r._bhajanQuery ?? ""}
                         placeholder="Search masterlist…"
                         onChange={(e) => onBhajanQueryChange(r._localId, e.target.value)}
+                        onKeyDown={onBhajanKeyDown(r._localId)}
+                        role="combobox"
+                        aria-expanded={bhPortal.open && bhPortal.localId === r._localId}
+                        aria-controls="bhajan-suggestions"
                         onFocus={() => {
                           const q = (r._bhajanQuery || "").trim();
                           if (!q) return;
