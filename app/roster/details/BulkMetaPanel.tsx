@@ -15,6 +15,7 @@ export type BulkSession = {
   categoryId: string | null;
   categoryName: string | null;
   topic: string | null;
+  location: string | null;
   entries: number;
 };
 
@@ -33,9 +34,11 @@ export type BulkSession = {
 export function BulkMetaPanel({
   sessions,
   categories,
+  places,
 }: {
   sessions: BulkSession[];
   categories: { id: string; name: string }[];
+  places: string[];
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -43,6 +46,8 @@ export function BulkMetaPanel({
   const [startsAt, setStartsAt] = useState<string>("");
   const [topic, setTopic] = useState<string>("");
   const [touchTopic, setTouchTopic] = useState(false);
+  const [location, setLocation] = useState<string>("");
+  const [touchLocation, setTouchLocation] = useState(false);
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -77,6 +82,7 @@ export function BulkMetaPanel({
         ...(categoryId === "" ? {} : { categoryId: categoryId === "__clear__" ? "" : categoryId }),
         ...(startsAt === "" ? {} : { startsAt }),
         ...(touchTopic ? { topic } : {}),
+        ...(touchLocation ? { location } : {}),
       });
       if (!res.ok) {
         setResult({ ok: false, text: res.error });
@@ -122,7 +128,33 @@ export function BulkMetaPanel({
             />
           </label>
 
-          <label className="grid min-w-[14rem] flex-1 gap-1 text-[11px] text-on-surface-muted">
+          <label className="grid min-w-[11rem] flex-1 gap-1 text-[11px] text-on-surface-muted">
+            <span className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={touchLocation}
+                onChange={(e) => setTouchLocation(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              Also set where
+            </span>
+            <input
+              type="text"
+              list="bulk-places"
+              value={location}
+              disabled={!touchLocation}
+              placeholder="Same place for all of them"
+              onChange={(e) => setLocation(e.target.value)}
+              className="h-9 w-full rounded-[10px] border border-rule-surface bg-field px-2 text-sm text-on-surface disabled:opacity-50"
+            />
+            <datalist id="bulk-places">
+              {places.map((x) => (
+                <option key={x} value={x} />
+              ))}
+            </datalist>
+          </label>
+
+          <label className="grid min-w-[11rem] flex-1 gap-1 text-[11px] text-on-surface-muted">
             <span className="flex items-center gap-2">
               <input
                 type="checkbox"
@@ -210,7 +242,7 @@ export function BulkMetaPanel({
                   {timeLabel(s.startsAt) || "—"}
                 </span>
                 <span className="hidden truncate text-xs text-on-surface-muted sm:block">
-                  {s.topic ?? ""}
+                  {[s.location, s.topic].filter(Boolean).join(" · ")}
                 </span>
                 <span className="hidden text-right text-xs text-on-surface-muted sm:block">
                   <Link

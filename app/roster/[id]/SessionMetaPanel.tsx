@@ -7,6 +7,7 @@ import { updateSessionMeta } from "./metaActions";
 export type SessionMeta = {
   categoryId: string | null;
   topic: string | null;
+  location: string | null;
   /** "HH:MM" or null. */
   startsAt: string | null;
 };
@@ -23,11 +24,14 @@ export type SessionMeta = {
 export function SessionMetaPanel({
   sessionId,
   categories,
+  places,
   initial,
   canEdit,
 }: {
   sessionId: string;
   categories: { id: string; name: string }[];
+  /** Venues already used, offered as suggestions rather than a fixed list. */
+  places: string[];
   initial: SessionMeta;
   canEdit: boolean;
 }) {
@@ -45,6 +49,7 @@ export function SessionMetaPanel({
         sessionId,
         categoryId: value.categoryId ?? "",
         topic: value.topic ?? "",
+        location: value.location ?? "",
         startsAt: value.startsAt ?? "",
       });
       if (res.ok) setSaved(value);
@@ -92,6 +97,23 @@ export function SessionMetaPanel({
             />
           </label>
 
+          <label className="grid min-w-[10rem] flex-1 gap-1 text-[11px] text-on-surface-muted">
+            Where
+            <input
+              type="text"
+              list="session-places"
+              value={value.location ?? ""}
+              placeholder="The centre, a home, a hall…"
+              onChange={(e) => setValue((v) => ({ ...v, location: e.target.value }))}
+              className="h-9 w-full rounded-[10px] border border-rule-surface bg-field px-2 text-sm text-on-surface placeholder:text-on-surface-muted"
+            />
+            <datalist id="session-places">
+              {places.map((x) => (
+                <option key={x} value={x} />
+              ))}
+            </datalist>
+          </label>
+
           <label className="grid min-w-[12rem] flex-1 gap-1 text-[11px] text-on-surface-muted">
             Topic
             <input
@@ -118,11 +140,12 @@ export function SessionMetaPanel({
   );
 }
 
-/** "Routine Thursday · 7:00pm · Guru Purnima", skipping whatever is absent. */
+/** "Routine Thursday · 7pm · the centre · Guru Purnima", skipping what is absent. */
 function describe(meta: SessionMeta, categories: { id: string; name: string }[]): string {
   const parts = [
     categories.find((c) => c.id === meta.categoryId)?.name,
     meta.startsAt ? clock(meta.startsAt) : null,
+    meta.location,
     meta.topic,
   ].filter(Boolean);
   return parts.join(" · ");

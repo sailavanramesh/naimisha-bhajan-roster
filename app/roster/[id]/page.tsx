@@ -147,6 +147,19 @@ export default async function RosterSessionPage({
     select: { id: true, name: true },
   });
 
+  // Venues already used, so the field suggests rather than asks people to
+  // retype "Naimisha Sai Centre" every week.
+  const sessionPlaces = (
+    await prisma.session.findMany({
+      where: { location: { not: null } },
+      distinct: ["location"],
+      select: { location: true },
+      orderBy: { location: "asc" },
+    })
+  )
+    .map((x) => x.location!)
+    .filter(Boolean);
+
   /*
    * The other sessions on this day.
    *
@@ -445,10 +458,12 @@ export default async function RosterSessionPage({
           <SessionMetaPanel
             sessionId={sessionId}
             categories={sessionCategories}
+            places={sessionPlaces}
             canEdit={can(role, "editSessionNotes")}
             initial={{
               categoryId: session.categoryId,
               topic: session.topic,
+              location: session.location,
               startsAt: session.startsAt,
             }}
           />

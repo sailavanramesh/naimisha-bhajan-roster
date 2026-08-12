@@ -282,6 +282,13 @@ model Session {
   /// What it was about: a festival name, a visiting speaker, a theme.
   topic      String?
 
+  /// Where it was held — the centre, somebody's home, a hall.
+  ///
+  /// Free text rather than a table, unlike the category. Venues are a long
+  /// tail with a handful of repeats, and the form offers what has been used
+  /// before, so a list to maintain would cost more than it saves.
+  location String?
+
   /// When the SET OF ROSTERED SINGERS last changed — not when anything on the
   /// session was last touched.
   ///
