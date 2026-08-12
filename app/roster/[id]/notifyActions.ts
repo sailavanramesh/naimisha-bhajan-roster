@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth";
 import { pushToSingers, pushConfigured } from "@/lib/push";
 import { missingParts, nudgeNotification, rosteredNotification } from "@/lib/notify";
+import { melbourneTodayISO, melbourneHour } from "@/lib/dates";
 
 const Input = z.object({
   sessionId: z.string().min(1),
@@ -93,6 +94,10 @@ export async function sendManualNotice(input: {
         missing: gap.missing,
         bhajanTitle: gap.title,
         confirmedPitch: gap.pitch,
+        // A hand-sent reminder can be about any session, so it has to say
+        // WHICH day. The automatic one only ever goes out on the day itself.
+        todayISO: melbourneTodayISO(),
+        atHour: melbourneHour(),
       })
     : rosteredNotification({ sessionId, dateISO, bhajanTitles: titles });
 
