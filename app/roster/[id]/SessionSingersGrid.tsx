@@ -51,6 +51,51 @@ function pickRecommendedPitch(singerGender: string | null | undefined, b?: Bhaja
 
 type BhSearchState = { q: string; items: { id: string; title: string }[]; open: boolean; loading: boolean };
 
+/**
+ * Where the suggestion list goes, given the field it belongs to.
+ *
+ * Measured against the VISUAL viewport, so a phone keyboard shrinking the
+ * visible area is accounted for rather than ignored.
+ *
+ * Two things the old version got wrong on a phone. Its height was
+ * `viewportHeight - fieldBottom`, which collapses to nothing — or below
+ * nothing — when the field sits low on the screen, which it does as soon as
+ * the keyboard is up. And it always opened downwards, into the keyboard. It
+ * flips above the field when there is more room there, and never renders
+ * shorter than a couple of options.
+ */
+function dropdownBox(rect: DOMRect): {
+  left: number;
+  top: number;
+  width: number;
+  maxHeight: number;
+} {
+  const vv = typeof window !== "undefined" ? window.visualViewport : null;
+  const viewTop = vv?.offsetTop ?? 0;
+  const viewLeft = vv?.offsetLeft ?? 0;
+  const viewHeight = vv?.height ?? window.innerHeight;
+  const viewWidth = vv?.width ?? window.innerWidth;
+
+  const GAP = 6;
+  const MARGIN = 8;
+  const MIN = 120;
+  const MAX = 320;
+
+  const roomBelow = viewTop + viewHeight - rect.bottom - GAP - MARGIN;
+  const roomAbove = rect.top - viewTop - GAP - MARGIN;
+  const flip = roomBelow < MIN && roomAbove > roomBelow;
+
+  const maxHeight = Math.max(MIN, Math.min(MAX, flip ? roomAbove : roomBelow));
+  const width = Math.min(rect.width, viewWidth - MARGIN * 2);
+
+  return {
+    left: Math.max(viewLeft + MARGIN, Math.min(rect.left, viewLeft + viewWidth - MARGIN - width)),
+    top: flip ? rect.top - GAP - maxHeight : rect.bottom + GAP,
+    width,
+    maxHeight,
+  };
+}
+
 /** Cache key for a singer-and-bhajan pair. */
 function hintKey(singerId: string, bhajanId: string): string {
   return `${singerId}|${bhajanId}`;
@@ -328,7 +373,15 @@ export function SessionSingersGrid(props: {
     }
   };
 
-  // Reposition portal on scroll/resize
+  /*
+   * Keep the suggestion list stuck to its field.
+   *
+   * The visualViewport listeners are the ones that matter on a phone: opening
+   * the keyboard changes the VISUAL viewport without changing the layout
+   * viewport, and a position:fixed list is placed against the layout one — so
+   * the list drifted away from the field it belonged to and appeared to start
+   * somewhere above it.
+   */
   useEffect(() => {
     function onMove() {
       if (!bhPortal.open || !bhPortal.localId) return;
@@ -338,9 +391,13 @@ export function SessionSingersGrid(props: {
     }
     window.addEventListener("scroll", onMove, true);
     window.addEventListener("resize", onMove);
+    window.visualViewport?.addEventListener("resize", onMove);
+    window.visualViewport?.addEventListener("scroll", onMove);
     return () => {
       window.removeEventListener("scroll", onMove, true);
       window.removeEventListener("resize", onMove);
+      window.visualViewport?.removeEventListener("resize", onMove);
+      window.visualViewport?.removeEventListener("scroll", onMove);
     };
   }, [bhPortal.open, bhPortal.localId]);
 
@@ -561,10 +618,7 @@ export function SessionSingersGrid(props: {
           <div
             style={{
               position: "fixed",
-              left: Math.max(8, Math.min(window.innerWidth - 8, bhPortal.anchorRect.left)),
-              top: bhPortal.anchorRect.bottom + 6,
-              width: Math.min(bhPortal.anchorRect.width, window.innerWidth - 16),
-              maxHeight: Math.min(320, window.innerHeight - (bhPortal.anchorRect.bottom + 16)),
+              ...dropdownBox(bhPortal.anchorRect),
               zIndex: 9999,
             }}
             id="bhajan-suggestions"
