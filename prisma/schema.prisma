@@ -185,6 +185,9 @@ model Bhajan {
   instrumental             String?
   extra                    String?
 
+  /// Fields the group has corrected since the import. See BhajanFieldEdit.
+  fieldEdits BhajanFieldEdit[]
+
   /// See BhajanOrigin. Defaults to masterlist so the 3,607 imported rows are
   /// unaffected by this column being added.
   origin     BhajanOrigin @default(masterlist)
@@ -302,6 +305,37 @@ model SessionCategory {
   updatedAt DateTime @updatedAt
 
   sessions Session[]
+}
+
+/// One field of one bhajan that the group has changed since the import.
+///
+/// The masterlist is a copy of somebody else's spreadsheet — 3,613 rows the
+/// centre does not own — and `data/roster.xlsx` is never written back to. So
+/// when the group corrects a raga or fills in a missing pitch, two things have
+/// to stay true: the correction wins everywhere, and it is still possible to
+/// see that it IS a correction and what the source said.
+///
+/// One row per (bhajan, field), written the FIRST time that field is changed.
+/// `sourceValue` is therefore what the masterlist had, not the previous edit —
+/// correcting a correction does not lose the original.
+model BhajanFieldEdit {
+  id       String @id @default(cuid())
+  bhajanId String
+  /// The Prisma field name, e.g. "raga". Whitelisted — see lib/bhajanFields.ts.
+  field    String
+
+  /// What it was before the group touched it. Null when the source was blank,
+  /// which is the common case: 565 bhajans have no raga recorded.
+  sourceValue String? @db.Text
+
+  editedBy  String?
+  editedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bhajan Bhajan @relation(fields: [bhajanId], references: [id], onDelete: Cascade)
+
+  @@unique([bhajanId, field])
+  @@index([bhajanId])
 }
 
 model SessionSlot {

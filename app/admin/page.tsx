@@ -13,6 +13,7 @@ import {
   setSingerAccess,
 } from "./actions";
 import { googleSignInConfigured } from "@/lib/authConfig";
+import { SessionCategories } from "./SessionCategories";
 
 import { getRole, can } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
@@ -49,6 +50,13 @@ export default async function AdminPage({
   // Reaching here already required manageAllocations; the sub-forms follow it
   // rather than re-deriving permission from the legacy cookie.
   const canEdit = can(role, "manageAllocations");
+
+  const sessionCategories = (
+    await prisma.sessionCategory.findMany({
+      orderBy: [{ order: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, _count: { select: { sessions: true } } },
+    })
+  ).map((c) => ({ id: c.id, name: c.name, sessions: c._count.sessions }));
 
   const [singers, eligibility, instrumentPeople] = await Promise.all([
     prisma.singer.findMany({ orderBy: { name: "asc" } }),
@@ -249,6 +257,43 @@ export default async function AdminPage({
         </Card>
 
       ) : null}
+
+
+      <Card>
+
+
+        <CardHeader>
+
+
+          <CardTitle>Session categories</CardTitle>
+
+
+          <p className="mt-1 text-sm text-on-surface-muted">
+
+
+            What kinds of session the centre runs. Set one on a session from its own page;
+
+
+            removing a category here leaves its sessions alone, merely uncategorised.
+
+
+          </p>
+
+
+        </CardHeader>
+
+
+        <CardContent>
+
+
+          <SessionCategories categories={sessionCategories} canEdit={canEdit} />
+
+
+        </CardContent>
+
+
+      </Card>
+
 
 
       {/* ---- Instrument eligibility ---- */}
