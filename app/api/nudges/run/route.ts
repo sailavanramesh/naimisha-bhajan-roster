@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runNudges } from "@/lib/nudgeRun";
+import { announceSettledRosters } from "@/lib/announceRosters";
 
 export const dynamic = "force-dynamic";
 
@@ -7,10 +8,14 @@ export const dynamic = "force-dynamic";
  * POST /api/nudges/run — the clock's way in.
  *
  * Called hourly by .github/workflows/nudge.yml. The schedule is deliberately
- * dumber than the rule: the workflow just says "it is the top of an hour", and
- * runNudges decides whether that hour is 3pm or 5pm in Melbourne. Daylight
- * saving then costs nothing, and a cron tick that arrives late or twice is
- * harmless.
+ * dumber than the rules: the workflow just says "it is the top of an hour",
+ * and the app decides what is due. Daylight saving then costs nothing, and a
+ * cron tick that arrives late or twice is harmless.
+ *
+ * Two jobs. `runNudges` chases people who have not filled their row in on the
+ * day. `announceSettledRosters` tells the group about a roster once it has
+ * stopped changing — it used to be sent from the save and announced "1 singer
+ * rostered" while the coordinator was still adding the other two.
  *
  * Guarded by a shared secret rather than by a session, because there is no
  * person here. Without NUDGE_SECRET set the endpoint refuses outright — an
@@ -29,8 +34,11 @@ export async function POST(req: NextRequest) {
   }
 
   try {
-    const result = await runNudges();
-    return NextResponse.json({ ok: true, ...result });
+    const [nudges, announcements] = await Promise.all([
+      runNudges(),
+      announceSettledRosters(),
+    ]);
+    return NextResponse.json({ ok: true, ...nudges, ...announcements });
   } catch (e) {
     console.error("runNudges failed", e);
     return NextResponse.json({ ok: false, error: "failed" }, { status: 500 });

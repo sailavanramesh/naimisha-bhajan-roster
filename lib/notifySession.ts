@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { pushToSingers, pushConfigured } from "@/lib/push";
-import { rosteredNotification, publishedNotification, shouldNotifyForSession } from "@/lib/notify";
+import { rosteredNotification, shouldNotifyForSession } from "@/lib/notify";
 import { melbourneTodayISO } from "@/lib/dates";
 
 /**
@@ -19,6 +19,17 @@ import { melbourneTodayISO } from "@/lib/dates";
  *    newly added.
  * 3. NEVER BLOCKS THE SAVE. Any failure here is swallowed. A coordinator saving
  *    a roster must not see an error because a push service was down.
+ *
+ * ONLY THE ALERTING KIND IS SENT HERE. The quiet "the roster is up" used to go
+ * out from this function too, and it went out THREE SECONDS after the first
+ * singer was added — so it announced "1 singer rostered" while the coordinator
+ * was still typing, and the once-per-person rule meant nobody ever got the
+ * corrected version. Adding singers one at a time is the normal workflow, so
+ * it was wrong nearly every time.
+ *
+ * It moved to lib/announceRosters.ts, which waits for the roster to stop
+ * changing. A notice nobody is waiting for can afford to be late; it cannot
+ * afford to be wrong.
  */
 export async function notifyAboutSession(sessionId: string): Promise<{
   rostered: number;
@@ -82,27 +93,9 @@ export async function notifyAboutSession(sessionId: string): Promise<{
       rostered += res.sent;
     }
 
-    // 2. Everybody else — one quiet notice that the roster is up.
-    const others = await prisma.singer.findMany({
-      where: { id: { notIn: [...byRosteredSinger.keys()] } },
-      select: { id: true },
-    });
-    const toTell = others.filter((o) => !told.has(`${o.id}:published`)).map((o) => o.id);
-
-    let published = 0;
-    if (toTell.length > 0) {
-      const res = await pushToSingers(
-        toTell,
-        publishedNotification({ sessionId, dateISO, singerCount: byRosteredSinger.size }),
-      );
-      await prisma.sessionNotice.createMany({
-        data: toTell.map((singerId) => ({ sessionId, singerId, kind: "published" as const })),
-        skipDuplicates: true,
-      });
-      published = res.sent;
-    }
-
-    return { rostered, published };
+    // The quiet notice is not sent here — see the note above and
+    // lib/announceRosters.ts.
+    return { rostered, published: 0 };
   } catch (e) {
     // Never let a notification failure break the thing that triggered it.
     console.error("notifyAboutSession failed", e);
