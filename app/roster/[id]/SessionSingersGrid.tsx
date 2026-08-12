@@ -116,12 +116,22 @@ export function SessionSingersGrid(props: {
    * Order carries meaning here — CLAUDE.md: "the set builds; it does not start
    * fast" — so moving a bhajan up or down is a real editing action.
    *
-   * Arrows, and only arrows. This shipped with an HTML5 drag handle as well,
-   * and Sailavan could not find it in portrait (it was hidden below 640px,
-   * where the table becomes cards) and could not make it work in landscape
-   * either: HTML5 drag-and-drop does not fire for touch at all, so on a phone
-   * the grip was either invisible or inert. Two controls where one of them
-   * silently does nothing is worse than one that always works.
+   * Two ways: the arrows, and the grip.
+   *
+   * The grip is POINTER events, not HTML5 drag-and-drop. The first attempt used
+   * the drag API, which does not fire for touch at all — so on a phone the grip
+   * was either hidden or inert, which is what Sailavan hit. Pointer events are
+   * one API for touch, mouse and stylus, so the same handful of lines works
+   * everywhere and there is nothing left that only works on a desktop.
+   *
+   * The row is reordered as the finger crosses it rather than dragged as a
+   * floating ghost: the row itself moves under the pointer, so what you see
+   * during the drag is what you will have when you let go. Because the moved
+   * row follows the pointer, the pointer stays over it and the next crossing is
+   * measured from where it now is.
+   *
+   * The arrows stay. They are what a keyboard reaches, and what you want when
+   * the thing you are moving is one place out.
    *
    * Position is not stored per row: saveAll writes position by array index, so
    * moving rows in this array IS the reorder. It takes effect on Save with
@@ -137,6 +147,58 @@ export function SessionSingersGrid(props: {
       next.splice(to, 0, moved);
       return next;
     });
+
+  /** The row elements, so a drag can ask which one the pointer is over. */
+  const rowEls = useRef<Record<string, HTMLTableRowElement | null>>({});
+  const draggingRef = useRef<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+
+  const onGripDown = (localId: string) => (e: React.PointerEvent<HTMLElement>) => {
+    // Capture so the drag survives the pointer leaving the little grip, which
+    // it does immediately — the grip is 20px tall and rows are not.
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId);
+    } catch {
+      // Synthetic events in tests have no real pointer to capture. Harmless.
+    }
+    draggingRef.current = localId;
+    setDraggingId(localId);
+  };
+
+  const onGripMove = (e: React.PointerEvent<HTMLElement>) => {
+    const id = draggingRef.current;
+    if (!id) return;
+    // Without this the page scrolls under the finger instead of the row moving.
+    e.preventDefault();
+    const y = e.clientY;
+
+    setRows((prev) => {
+      const from = prev.findIndex((r) => r._localId === id);
+      if (from < 0) return prev;
+
+      let to = from;
+      for (let i = 0; i < prev.length; i++) {
+        const el = rowEls.current[prev[i]._localId];
+        if (!el) continue;
+        const rect = el.getBoundingClientRect();
+        if (y >= rect.top && y <= rect.bottom) {
+          to = i;
+          break;
+        }
+      }
+      if (to === from) return prev;
+
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
+  };
+
+  const onGripUp = () => {
+    draggingRef.current = null;
+    setDraggingId(null);
+  };
 
   const [bhSearch, setBhSearch] = useState<Record<string, BhSearchState>>({});
 
@@ -436,19 +498,35 @@ export function SessionSingersGrid(props: {
       </div>
 
       <div className="overflow-x-auto rounded-[12px] border border-rule-surface bg-panel">
-        <table className="stacked-table w-full min-w-[720px] text-[13px]">
+        {/*
+          table-fixed, not auto.
+          
+          Auto layout ignores the declared widths and sizes every column by its
+          content, so on a phone in landscape the singer select and the row of
+          pitch buttons took what they wanted — Singer 204px, Confirmed 184px —
+          and the bhajan, the one column whose content is a long name, was left
+          with 102px. Fixed layout honours the header widths and gives the
+          leftover to the bhajan, which is the column that can use it.
+        */}
+        <table className="stacked-table w-full min-w-[720px] table-fixed text-[13px]">
           <thead className="bg-panel">
             <tr className="border-b border-rule-surface">
-              <th className="sticky left-0 z-50 bg-panel px-3 py-2 text-left font-semibold w-[132px] border-r shadow-sm">
+              {/* Widths are real now that the table is fixed. Everything the
+                  bhajan does not need is spent here, and it gets the rest. */}
+              <th className="sticky left-0 z-50 w-[152px] border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
                 Singer
               </th>
-              <th className="sticky left-[132px] z-40 bg-panel px-3 py-2 text-left font-semibold w-[280px] border-r shadow-sm">
+              <th className="sticky left-[152px] z-40 border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
                 Bhajan
               </th>
-              <th className="px-2 py-1.5 text-left font-semibold w-[132px]">Confirmed</th>
-              <th className="whitespace-nowrap px-2 py-1.5 text-left font-semibold">Recommended</th>
-              <th className="whitespace-nowrap px-2 py-1.5 text-left font-semibold">Tabla</th>
-              {props.canEdit ? <th className="px-2 py-1.5 text-right font-semibold" /> : null}
+              <th className="w-[150px] px-2 py-1.5 text-left font-semibold">Confirmed</th>
+              <th className="w-[112px] whitespace-nowrap px-2 py-1.5 text-left font-semibold">
+                Recommended
+              </th>
+              <th className="w-[56px] whitespace-nowrap px-2 py-1.5 text-left font-semibold">
+                Tabla
+              </th>
+              {props.canEdit ? <th className="w-[84px] px-2 py-1.5 text-right font-semibold" /> : null}
             </tr>
           </thead>
 
@@ -469,7 +547,15 @@ export function SessionSingersGrid(props: {
               return (
                 <tr
                   key={r._localId}
-                  className="border-b align-top"
+                  ref={(el) => {
+                    rowEls.current[r._localId] = el;
+                  }}
+                  className={[
+                    "border-b align-top",
+                    draggingId === r._localId
+                      ? "outline outline-2 -outline-offset-2 outline-brass"
+                      : "",
+                  ].join(" ")}
                   style={tint ? { background: tint.row } : undefined}
                 >
                   {/* Singer */}
@@ -495,6 +581,27 @@ export function SessionSingersGrid(props: {
                         number belongs: in front of the person.
                       */
                       <div className="flex w-full min-w-0 items-center gap-1.5">
+                        {/*
+                          The grip, on every screen this time.
+                          
+                          touch-action: none is the line that makes it work on
+                          a phone: without it the browser claims the gesture for
+                          scrolling before any pointermove reaches us.
+                        */}
+                        <span
+                          onPointerDown={onGripDown(r._localId)}
+                          onPointerMove={onGripMove}
+                          onPointerUp={onGripUp}
+                          onPointerCancel={onGripUp}
+                          style={{ touchAction: "none" }}
+                          role="button"
+                          tabIndex={-1}
+                          aria-hidden
+                          title="Drag to reorder"
+                          className="-ms-1 shrink-0 cursor-grab select-none px-1 py-1 text-[13px] leading-none text-on-surface-muted active:cursor-grabbing"
+                        >
+                          ⠿
+                        </span>
                         <span className="w-3 shrink-0 font-mono text-[11px] text-on-surface-muted">
                           {rows.indexOf(r) + 1}
                         </span>
