@@ -265,6 +265,42 @@ export async function addSessionCategory(
 }
 
 /**
+ * Give a category an image, or take it away.
+ *
+ * The browser shrinks the picture to 256px before it arrives, so what lands
+ * here is a few tens of kilobytes. The size check is a backstop against a
+ * caller that did not — a data URL is a string, and nothing stops somebody
+ * posting a four-megabyte one.
+ */
+export async function setCategoryImage(input: {
+  id: string;
+  /** A data URL, or null to clear it. */
+  image: string | null;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireCapability("manageAllocations");
+  if (!input.id) return { ok: false, error: "No category." };
+
+  if (input.image !== null) {
+    if (!/^data:image\/(png|jpeg|webp);base64,/.test(input.image)) {
+      return { ok: false, error: "That does not look like an image." };
+    }
+    // ~400KB of base64. A 256px picture is far under this.
+    if (input.image.length > 400_000) {
+      return { ok: false, error: "That image is too large even after shrinking." };
+    }
+  }
+
+  await prisma.sessionCategory.update({
+    where: { id: input.id },
+    data: { image: input.image },
+  });
+
+  revalidatePath("/admin");
+  revalidatePath("/roster");
+  return { ok: true };
+}
+
+/**
  * Remove a category.
  *
  * The sessions that used it keep existing and become uncategorised — the

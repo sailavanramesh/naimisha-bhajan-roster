@@ -329,6 +329,16 @@ model SessionCategory {
   /// Sort order in the picker. Lower first.
   order Int    @default(0)
 
+  /// A small square image for this kind of session, as a data URL.
+  ///
+  /// In the database rather than a file store because there are a handful of
+  /// categories, not thousands of photos: the browser shrinks each one to
+  /// 256px before it is ever uploaded, so a row costs a few tens of kilobytes
+  /// and travels with the ordinary backups. If this ever grows into session
+  /// photographs it wants Azure Blob Storage instead — that is a different
+  /// feature, not this one grown large.
+  image String? @db.Text
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
