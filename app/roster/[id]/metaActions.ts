@@ -182,6 +182,58 @@ export async function bulkUpdateSessionMeta(input: {
   return { ok: true, updated: res.count, fields };
 }
 
+/**
+ * Delete several sessions at once.
+ *
+ * The single delete already refuses anything holding a confirmed pitch, and so
+ * does this — per session, not for the batch. Selecting forty empty sessions
+ * and one that turns out to hold history should remove the forty and say why
+ * the last one stayed, rather than refusing the lot or, far worse, taking the
+ * history with it.
+ */
+export async function bulkDeleteSessions(
+  sessionIds: string[],
+): Promise<{ ok: true; deleted: number; kept: { date: string; reason: string }[] } | { ok: false; error: string }> {
+  await requireCapability("buildSessions");
+  if (!Array.isArray(sessionIds) || sessionIds.length === 0) {
+    return { ok: false, error: "Nothing selected." };
+  }
+  if (sessionIds.length > 500) return { ok: false, error: "Too many at once." };
+
+  const sessions = await prisma.session.findMany({
+    where: { id: { in: sessionIds } },
+    select: {
+      id: true,
+      date: true,
+      slots: { select: { confirmedPitch: true } },
+    },
+  });
+
+  const kept: { date: string; reason: string }[] = [];
+  const removable: string[] = [];
+
+  for (const s of sessions) {
+    const withPitch = s.slots.filter((x) => x.confirmedPitch).length;
+    if (withPitch > 0) {
+      kept.push({
+        date: s.date.toISOString().slice(0, 10),
+        reason: `${withPitch} confirmed pitch${withPitch === 1 ? "" : "es"}`,
+      });
+      continue;
+    }
+    removable.push(s.id);
+  }
+
+  const res =
+    removable.length > 0
+      ? await prisma.session.deleteMany({ where: { id: { in: removable } } })
+      : { count: 0 };
+
+  revalidatePath("/roster/details");
+  revalidatePath("/roster");
+  return { ok: true, deleted: res.count, kept };
+}
+
 const CategoryInput = z.object({ name: z.string().trim().min(1).max(60) });
 
 /**

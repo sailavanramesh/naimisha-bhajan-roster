@@ -26,7 +26,15 @@ const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Frida
 export default async function SessionDetailsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ from?: string; to?: string; kind?: string }>;
+  searchParams: Promise<{
+    from?: string;
+    to?: string;
+    kind?: string;
+    rows?: string;
+    when?: string;
+    place?: string;
+    day?: string;
+  }>;
 }) {
   const role = await getRole();
   if (!can(role, "editSessionNotes")) {
@@ -51,6 +59,17 @@ export default async function SessionDetailsPage({
           : {}),
         ...(sp.kind === "none" ? { categoryId: null } : {}),
         ...(sp.kind && sp.kind !== "none" ? { categoryId: sp.kind } : {}),
+        // How full it is — "empty" is the one that started this: finding every
+        // session with nothing on it in order to clear them out.
+        ...(sp.rows === "empty" ? { slots: { none: {} } } : {}),
+        ...(sp.rows === "any" ? { slots: { some: {} } } : {}),
+        ...(sp.rows === "nopitch" ? { slots: { some: {}, none: { confirmedPitch: { not: null } } } } : {}),
+        ...(sp.when === "morning" ? { startsAt: { lt: "12:00" } } : {}),
+        ...(sp.when === "evening"
+          ? { OR: [{ startsAt: { gte: "12:00" } }, { startsAt: null }] }
+          : {}),
+        ...(sp.place === "none" ? { location: null } : {}),
+        ...(sp.place && sp.place !== "none" ? { location: sp.place } : {}),
       },
       orderBy: [{ date: "desc" }, { startsAt: "asc" }],
       select: {
@@ -148,6 +167,50 @@ export default async function SessionDetailsPage({
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="grid gap-1 text-on-surface-muted">
+              Rows
+              <select
+                name="rows"
+                defaultValue={sp.rows ?? ""}
+                className="h-8 rounded-[10px] border border-rule-surface bg-field px-2 text-sm text-on-surface"
+              >
+                <option value="">any</option>
+                <option value="empty">none at all</option>
+                <option value="any">at least one</option>
+                <option value="nopitch">rows, no confirmed pitch</option>
+              </select>
+            </label>
+
+            <label className="grid gap-1 text-on-surface-muted">
+              Time
+              <select
+                name="when"
+                defaultValue={sp.when ?? ""}
+                className="h-8 rounded-[10px] border border-rule-surface bg-field px-2 text-sm text-on-surface"
+              >
+                <option value="">any</option>
+                <option value="morning">morning</option>
+                <option value="evening">evening</option>
+              </select>
+            </label>
+
+            <label className="grid gap-1 text-on-surface-muted">
+              Where
+              <select
+                name="place"
+                defaultValue={sp.place ?? ""}
+                className="h-8 rounded-[10px] border border-rule-surface bg-field px-2 text-sm text-on-surface"
+              >
+                <option value="">any</option>
+                <option value="none">not set yet</option>
+                {places.map((x) => (
+                  <option key={x} value={x}>
+                    {x}
                   </option>
                 ))}
               </select>

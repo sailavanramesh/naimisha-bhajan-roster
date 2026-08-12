@@ -146,11 +146,13 @@ export async function LearningList({
                             {e.title} <Badge tone="warn">not in the masterlist</Badge>
                           </span>
                         )}
-                        {e.isFestival ? (
-                          <span className="ms-2 rounded-full border border-brass/50 px-2 py-0.5 text-[10px] uppercase tracking-wide text-on-surface-muted">
-                            festival
-                          </span>
-                        ) : null}
+                        {/*
+                          No "festival" tag. It was worth showing while the
+                          festival/known duplicates were being untangled — it
+                          said which rows had come from the festival sheet —
+                          and now that every row is at exactly one stage it is
+                          a label nobody acts on. The flag is still stored.
+                        */}
                         {e.preferredPitch ? (
                           <div className="mt-1 font-mono text-xs tabular text-on-surface-muted">
                             shruti {e.preferredPitch}

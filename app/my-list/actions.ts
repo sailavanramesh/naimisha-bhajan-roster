@@ -129,3 +129,97 @@ export async function removeLearning(formData: FormData): Promise<void> {
   revalidatePath("/my-list");
   revalidatePath(`/singers/${gone.singerId}`);
 }
+
+const STAGE_LABEL: Record<string, string> = {
+  known: "Know it",
+  learning: "Learning",
+  wantToLearn: "Want to learn",
+  festival: "Know it",
+};
+
+/**
+ * Add a bhajan to a list, refusing one that is already on it.
+ *
+ * `upsertLearning` deliberately MOVES a bhajan between stages — that is what
+ * the three buttons on each entry are for. Adding is a different intention,
+ * and treating the two as one thing is how Sailavan came to add a bhajan
+ * Ashwin already knows and be told only "Added to list": nothing appeared to
+ * happen because, correctly, almost nothing did.
+ *
+ * The form warns as soon as you pick a bhajan it recognises, but that warning
+ * can be walked straight past by typing the whole title and pressing Add —
+ * which is exactly what happened. A check in the browser is a courtesy; this
+ * is the one that cannot be bypassed.
+ *
+ * Refusing is not a dead end: the caller is told what stage it is already at,
+ * so it can offer to move it as a deliberate second act.
+ */
+export async function addToList(input: {
+  singerId: string;
+  title: string;
+  kind: RepertoireKind;
+  preferredPitch?: string;
+}): Promise<
+  | { ok: true; title: string }
+  | { ok: false; already: { kind: string; label: string; title: string; preferredPitch: string | null } }
+  | { ok: false; error: string }
+> {
+  await requireCapability("manageOwnLearning");
+
+  const parsed = Upsert.safeParse({
+    singerId: input.singerId,
+    title: input.title,
+    kind: input.kind,
+    note: "",
+    preferredPitch: input.preferredPitch ?? "",
+  });
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Could not add that." };
+  }
+  const { title, kind, preferredPitch } = parsed.data;
+  const singerId = await resolveSingerId(parsed.data.singerId);
+
+  const bhajan = await prisma.bhajan.findFirst({
+    where: { title: { equals: title, mode: "insensitive" } },
+    select: { id: true, title: true },
+  });
+  const resolvedTitle = bhajan?.title ?? title;
+
+  // Matched on the bhajan when it resolves, and on the title when it does not
+  // — the same pair the rest of the app treats as "this bhajan for this
+  // person".
+  const existing = await prisma.singerRepertoire.findFirst({
+    where: {
+      singerId,
+      kind: { in: [...LEARNABLE] },
+      ...(bhajan ? { bhajanId: bhajan.id } : { title: { equals: title, mode: "insensitive" } }),
+    },
+    select: { kind: true, title: true, preferredPitch: true },
+  });
+
+  if (existing) {
+    return {
+      ok: false,
+      already: {
+        kind: existing.kind,
+        label: STAGE_LABEL[existing.kind] ?? existing.kind,
+        title: existing.title,
+        preferredPitch: existing.preferredPitch,
+      },
+    };
+  }
+
+  await prisma.singerRepertoire.create({
+    data: {
+      singerId,
+      kind,
+      title: resolvedTitle,
+      bhajanId: bhajan?.id ?? null,
+      preferredPitch: preferredPitch || null,
+    },
+  });
+
+  revalidatePath("/my-list");
+  revalidatePath(`/singers/${singerId}`);
+  return { ok: true, title: resolvedTitle };
+}

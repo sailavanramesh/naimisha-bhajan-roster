@@ -4,7 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
-import { bulkUpdateSessionMeta } from "@/app/roster/[id]/metaActions";
+import { bulkUpdateSessionMeta, bulkDeleteSessions } from "@/app/roster/[id]/metaActions";
 import { timeLabel } from "@/lib/sessionsOfDay";
 
 export type BulkSession = {
@@ -50,6 +50,7 @@ export function BulkMetaPanel({
   const [touchLocation, setTouchLocation] = useState(false);
   const [pending, startTransition] = useTransition();
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
+  const [armed, setArmed] = useState(false);
 
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -91,6 +92,36 @@ export function BulkMetaPanel({
       setResult({
         ok: true,
         text: `Set ${res.fields.join(" and ")} on ${res.updated} session${res.updated === 1 ? "" : "s"}.`,
+      });
+      setSelected(new Set());
+      router.refresh();
+    });
+
+  /**
+   * Deleting the selection.
+   *
+   * Two steps, and the server refuses any session holding a confirmed pitch —
+   * per session, not for the batch, so selecting forty empties and one that
+   * turns out to hold history removes the forty and says why the last stayed.
+   */
+  const removeSelected = () =>
+    startTransition(async () => {
+      const res = await bulkDeleteSessions([...selected]);
+      setArmed(false);
+      if (!res.ok) {
+        setResult({ ok: false, text: res.error });
+        return;
+      }
+      const kept =
+        res.kept.length === 0
+          ? ""
+          : ` Kept ${res.kept.length}: ${res.kept
+              .slice(0, 3)
+              .map((k) => `${k.date} (${k.reason})`)
+              .join(", ")}${res.kept.length > 3 ? "…" : ""}.`;
+      setResult({
+        ok: true,
+        text: `Deleted ${res.deleted} session${res.deleted === 1 ? "" : "s"}.${kept}`,
       });
       setSelected(new Set());
       router.refresh();
@@ -197,6 +228,13 @@ export function BulkMetaPanel({
           >
             uncategorised
           </button>
+          <button
+            type="button"
+            onClick={() => selectWhere((s) => s.entries === 0)}
+            className="underline underline-offset-2"
+          >
+            empty ones
+          </button>
           {weekdays.map((w) => (
             <button
               key={w}
@@ -208,6 +246,42 @@ export function BulkMetaPanel({
             </button>
           ))}
         </div>
+
+        {/* Deleting lives on its own line, away from the fields that change
+            a label, and asks before it does anything. */}
+        {selected.size > 0 ? (
+          armed ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-warn/40 bg-warn/[0.08] px-3 py-2 text-xs">
+              <span>
+                Delete {selected.size} session{selected.size === 1 ? "" : "s"}? Any holding a
+                confirmed pitch will be kept.
+              </span>
+              <button
+                type="button"
+                onClick={removeSelected}
+                disabled={pending}
+                className="h-7 rounded-[8px] border border-warn/60 bg-warn/15 px-2 font-semibold"
+              >
+                {pending ? "Deleting…" : "Yes, delete"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setArmed(false)}
+                className="underline underline-offset-2"
+              >
+                Keep them
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setArmed(true)}
+              className="justify-self-start text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-warn"
+            >
+              Delete the {selected.size} selected
+            </button>
+          )
+        ) : null}
 
         {result ? (
           <p role="status" className={result.ok ? "text-xs text-brass-ink" : "text-xs text-warn"}>
