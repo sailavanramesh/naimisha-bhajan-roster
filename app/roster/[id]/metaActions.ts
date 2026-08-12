@@ -56,6 +56,56 @@ export async function updateSessionMeta(input: {
   return { ok: true };
 }
 
+/**
+ * Delete a session.
+ *
+ * There was no way to do this at all until 2026-08-12, which showed: 17
+ * sessions existed with nothing on them, two of them on the same day. Tapping
+ * a day creates a session, so mis-taps accumulate, and until now the only
+ * cure was the database.
+ *
+ * REFUSES A SESSION THAT HOLDS A CONFIRMED PITCH. That is the one piece of
+ * genuinely irreplaceable data in this app — what somebody actually sang, at
+ * what shruti — and it exists nowhere else. The same rule already governs
+ * removing a single row from the assign panel, so this is consistent rather
+ * than new.
+ *
+ * Everything else cascades: slots without pitches, instruments, notices,
+ * per-session notification rules. Those are all plans or bookkeeping.
+ */
+export async function deleteSession(
+  sessionId: string,
+): Promise<{ ok: true; date: string } | { ok: false; error: string }> {
+  await requireCapability("buildSessions");
+  if (!sessionId) return { ok: false, error: "Nothing to delete." };
+
+  const session = await prisma.session.findUnique({
+    where: { id: sessionId },
+    select: {
+      date: true,
+      slots: { select: { confirmedPitch: true, singer: { select: { name: true } } } },
+    },
+  });
+  if (!session) return { ok: false, error: "That session is already gone." };
+
+  const withPitch = session.slots.filter((s) => s.confirmedPitch);
+  if (withPitch.length > 0) {
+    const names = [...new Set(withPitch.map((s) => s.singer?.name).filter(Boolean))];
+    return {
+      ok: false,
+      error:
+        `This session has ${withPitch.length} confirmed pitch${withPitch.length === 1 ? "" : "es"} on it` +
+        `${names.length ? ` (${names.join(", ")})` : ""} — that is a record of what was actually sung, ` +
+        `and it exists nowhere else. Clear those rows first if you really mean to lose it.`,
+    };
+  }
+
+  await prisma.session.delete({ where: { id: sessionId } });
+
+  revalidatePath("/roster");
+  return { ok: true, date: session.date.toISOString().slice(0, 10) };
+}
+
 const CategoryInput = z.object({ name: z.string().trim().min(1).max(60) });
 
 /**
