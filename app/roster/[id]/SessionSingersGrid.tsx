@@ -592,7 +592,7 @@ export function SessionSingersGrid(props: {
               <th className="sticky left-[190px] z-40 border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
                 Bhajan
               </th>
-              <th className="w-[168px] px-2 py-1.5 text-left font-semibold">Confirmed</th>
+              <th className="w-[168px] px-2 py-1.5 text-left font-semibold">Pitch</th>
               <th className="w-[108px] whitespace-nowrap px-2 py-1.5 text-left font-semibold">
                 Recommended
               </th>
@@ -790,7 +790,7 @@ export function SessionSingersGrid(props: {
                   </td>
 
                   {/* Confirmed Pitch */}
-                  <td data-label="Confirmed" data-key="1" className="px-2 py-1.5">
+                  <td data-label="Pitch" data-key="1" className="px-2 py-1.5">
                     {props.canEdit ? (
                       /* Both wrappers constrained: the inner one was w-full of
                          an outer that sized to its content, so the input still
@@ -803,7 +803,7 @@ export function SessionSingersGrid(props: {
                         <input
                           type="text"
                           value={pu.q}
-                          placeholder="Confirmed"
+                          placeholder="Pitch"
                           onChange={(e) => setPitchQuery(r._localId, e.target.value)}
                           onFocus={() => setPitchUI((prev) => ({ ...prev, [r._localId]: { q: pu.q, open: true } }))}
                           onBlur={() => setTimeout(() => closePitch(r._localId), 120)}
