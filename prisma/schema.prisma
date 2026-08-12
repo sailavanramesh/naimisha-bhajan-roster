@@ -48,6 +48,12 @@ enum SessionStatus {
 /// are the personal list: a singer moves a bhajan along until they are
 /// confident, and graduating it to `known` makes it count in the session
 /// builder's repertoire scoring with no other wiring.
+/// Which way a person likes to see the roster.
+enum RosterView {
+  calendar
+  list
+}
+
 enum RepertoireKind {
   known
   /// DEAD as of 2026-08-12 — see SingerRepertoire.isFestival. No row should
@@ -134,15 +140,21 @@ enum RuleScope {
 }
 
 model Singer {
-  id        String   @id @default(cuid())
-  name      String   @unique
-  gender    Gender?
+  id     String  @id @default(cuid())
+  name   String  @unique
+  gender Gender?
   /// Google account address, set by a coordinator. Sign-in never creates a
   /// singer; an unlisted address gets viewer access only (SPEC §9.5).
-  email     String?  @unique
-  role      Role     @default(singer)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  email  String? @unique
+  role   Role    @default(singer)
+
+  /// Calendar or list, whichever they asked for. Null means they have not
+  /// said, and the calendar is what they get. Stored on the person rather
+  /// than in a cookie so it follows them from phone to laptop — everybody
+  /// signs in, so there is somebody to store it against.
+  defaultRosterView RosterView?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
 
   slots             SessionSlot[]
   repertoire        SingerRepertoire[]
