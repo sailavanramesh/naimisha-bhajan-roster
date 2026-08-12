@@ -5,6 +5,7 @@ import { requireCapability } from "@/lib/auth";
 import { rosterBlockReason } from "@/lib/rosterEligibility";
 import { notifyAboutSession } from "@/lib/notifySession";
 import { rosteredSingerIds, notifyRemovals } from "@/lib/notifyRemoval";
+import { defaultSessionOf, USUAL_START } from "@/lib/sessionsOfDay";
 import { recordSungAsKnown } from "@/lib/repertoireFromHistory";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
@@ -285,13 +286,18 @@ export async function goToSessionForDate(formData: FormData): Promise<void> {
   }
   const day = new Date(`${parsed.data.date}T00:00:00.000Z`);
 
-  const existing = await prisma.session.findFirst({
+  // "Go to Thursday" means the usual evening session, not whatever happens to
+  // start earliest — a 9am festival session must not capture the jump.
+  const onThatDay = await prisma.session.findMany({
     where: { date: day },
-    orderBy: [{ startsAt: "asc" }, { createdAt: "asc" }],
-    select: { id: true },
+    select: { id: true, startsAt: true },
   });
   const session =
-    existing ?? (await prisma.session.create({ data: { date: day }, select: { id: true } }));
+    defaultSessionOf(onThatDay) ??
+    (await prisma.session.create({
+      data: { date: day, startsAt: USUAL_START },
+      select: { id: true, startsAt: true },
+    }));
 
   revalidatePath(`/roster/${session.id}/assign`);
   redirect(`/roster/${session.id}/assign`);

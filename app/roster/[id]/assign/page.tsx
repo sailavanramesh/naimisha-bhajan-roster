@@ -7,6 +7,7 @@ import { applyAssignments, setAvailability } from "./actions";
 import { AddSingerPanel } from "./AddSingerPanel";
 import { buildSuggestions } from "./suggestions";
 import { getRole, can } from "@/lib/auth";
+import { sortByStart, sessionLabel, hasSeveral } from "@/lib/sessionsOfDay";
 import { NoAccess } from "@/components/RequireRole";
 
 export const dynamic = "force-dynamic";
@@ -162,8 +163,62 @@ export default async function AssignPage({
     .filter((a) => a.singer)
     .map((a) => ({ position: a.position, singerId: a.singer!.id }));
 
+  /*
+   * The other sessions on this day.
+   *
+   * Assign lands on the 7pm one by every route in — the calendar, "go to
+   * date", the landing page — because that is what "Thursday" means. On the
+   * rare day that holds more, the others are one tap away rather than
+   * unreachable, and the row simply is not there on an ordinary day.
+   */
+  const sameDay = session
+    ? sortByStart(
+        await prisma.session.findMany({
+          where: { date: session.date },
+          select: {
+            id: true,
+            startsAt: true,
+            category: { select: { name: true } },
+            _count: { select: { slots: true } },
+          },
+        }),
+      ).map((x) => ({
+        id: x.id,
+        startsAt: x.startsAt,
+        categoryName: x.category?.name ?? null,
+        entries: x._count.slots,
+      }))
+    : [];
+
   return (
     <div className="grid gap-4">
+      {hasSeveral(sameDay) ? (
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="text-on-surface-muted">This day has {sameDay.length} sessions:</span>
+          {sameDay.map((x) => {
+            const isCurrent = x.id === sessionId;
+            return (
+              <Link
+                key={x.id}
+                href={`/roster/${x.id}/assign`}
+                aria-current={isCurrent ? "page" : undefined}
+                className={[
+                  "rounded-full border px-3 py-1",
+                  isCurrent
+                    ? "border-brass bg-brass/15 font-semibold text-on-surface"
+                    : "border-rule-surface bg-field text-on-surface-muted hover:border-brass/50 hover:text-on-surface",
+                ].join(" ")}
+              >
+                {sessionLabel(x)}
+                <span className="ms-1.5 text-on-surface-muted">
+                  {x.entries === 0 ? "empty" : x.entries}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      ) : null}
+
       <Card>
         <CardHeader>
           <CardTitle>Add a singer</CardTitle>

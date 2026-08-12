@@ -6,13 +6,26 @@ import { useRouter } from "next/navigation";
 import { SessionRows } from "@/components/SessionRows";
 import { Button, Input } from "@/components/ui";
 import { fetchMonthInfo, createSessionForDate } from "./calendarActions";
+import { sortByStart, sessionLabel, hasSeveral, USUAL_START } from "@/lib/sessionsOfDay";
 
-type DayInfo = {
-  hasSession: boolean;
+type DaySession = {
+  id: string;
+  startsAt: string | null;
+  categoryName: string | null;
   entries: number;
-  sessionId?: string;
   rows?: { singer: string; bhajan: string | null; pitch: string | null }[];
 };
+
+/**
+ * A day is a LIST of sessions.
+ *
+ * It used to be one, because Session.date was unique. Sailavan, 2026-08-12:
+ * "some days there are 3 sessions" — so the cell says how many and the panel
+ * below lays each of them out separately, with its own time, kind and rows.
+ * Nothing is hidden behind a default here: a day that holds three sessions
+ * should not read as a day that holds one busy one.
+ */
+type DayInfo = { sessions: DaySession[] };
 
 function toISODate(d: Date) {
   return d.toISOString().slice(0, 10);
@@ -93,12 +106,15 @@ export default function RosterCalendarClient(props: {
     setSelected(dateISO);
     setJumpDate(dateISO);
 
-    const info = dayInfo[dateISO];
-    const existing = info?.sessionId;
-    if (existing) {
-      router.push(`/roster/${existing}`);
+    const existing = sortByStart(dayInfo[dateISO]?.sessions ?? []);
+    // One session: go straight there, as tapping a day always did.
+    if (existing.length === 1) {
+      router.push(`/roster/${existing[0].id}`);
       return;
     }
+    // Several: there is a choice to make, so make it visible instead of
+    // guessing. The panel below now lists them.
+    if (existing.length > 1) return;
 
     if (!canEdit) {
       // Was a silent no-op, which reads as the app being broken. Now that the
@@ -112,8 +128,36 @@ export default function RosterCalendarClient(props: {
       const created = await createSessionForDate(dateISO);
       setDayInfo((prev) => ({
         ...prev,
-        [dateISO]: { hasSession: true, entries: 0, sessionId: created.id, rows: [] },
+        [dateISO]: {
+          sessions: [
+            {
+              id: created.id,
+              startsAt: USUAL_START,
+              categoryName: null,
+              entries: 0,
+              rows: [],
+            },
+          ],
+        },
       }));
+      router.push(`/roster/${created.id}`);
+    });
+  }
+
+  /**
+   * A second (or third) session on the selected day.
+   *
+   * Deliberately not part of tapping the day: adding one is rare and
+   * irreversible-ish, and a tap that sometimes opens a session and sometimes
+   * creates one is the kind of control people stop trusting.
+   */
+  function addSessionOnSelectedDay() {
+    if (!canEdit) {
+      setDenied("Only an editor can add a session.");
+      return;
+    }
+    startTransition(async () => {
+      const created = await createSessionForDate(selected, { another: true });
       router.push(`/roster/${created.id}`);
     });
   }
@@ -147,8 +191,9 @@ export default function RosterCalendarClient(props: {
     month: "long",
     day: "numeric",
   });
-  const selectedHasSession = !!selectedInfo?.sessionId;
-  const selectedEntries = selectedInfo?.entries ?? 0;
+  const selectedSessions = sortByStart(selectedInfo?.sessions ?? []);
+  const selectedHasSession = selectedSessions.length > 0;
+  const selectedEntries = selectedSessions.reduce((n, x) => n + x.entries, 0);
 
   return (
     <div className="grid gap-3">
@@ -179,9 +224,8 @@ export default function RosterCalendarClient(props: {
           const inMonth = d.getUTCMonth() === monthDate.getUTCMonth();
           const isSelected = date === selected;
 
-          const info = dayInfo[date];
-          const hasSession = !!info?.sessionId || !!info?.hasSession;
-          const entries = info?.entries ?? 0;
+          const daySessions = sortByStart(dayInfo[date]?.sessions ?? []);
+          const hasSession = daySessions.length > 0;
 
           return (
             <button
@@ -196,15 +240,28 @@ export default function RosterCalendarClient(props: {
             >
               <div className="text-xs">{d.getUTCDate()}</div>
               {hasSession ? (
-                <div className="absolute bottom-1 left-1/2 -translate-x-1/2">
-                  {entries > 0 ? (
-                    <div className={[
-                      "h-1.5 w-6 rounded-full",
-                      entries >= 8 ? "bg-indigo-600/50" : entries >= 4 ? "bg-indigo-600/35" : "bg-indigo-600/20",
-                    ].join(" ")} />
-                  ) : (
-                    <div className="h-1.5 w-1.5 rounded-full border border-black/15 bg-white/80" />
-                  )}
+                /*
+                  One bar per session, side by side, each shaded by how full it
+                  is. A single total would say a day is busy without saying it
+                  is busy twice — and twice is the part that changes what you
+                  do about it.
+                */
+                <div className="absolute bottom-1 left-1/2 flex -translate-x-1/2 gap-0.5">
+                  {daySessions.slice(0, 3).map((ds) => (
+                    <div
+                      key={ds.id}
+                      title={sessionLabel(ds)}
+                      className={[
+                        "h-1.5 rounded-full",
+                        daySessions.length > 1 ? "w-2.5" : "w-6",
+                        ds.entries >= 8
+                          ? "bg-indigo-600/50"
+                          : ds.entries >= 4
+                            ? "bg-indigo-600/35"
+                            : "bg-indigo-600/20",
+                      ].join(" ")}
+                    />
+                  ))}
                 </div>
               ) : null}
             </button>
@@ -229,36 +286,59 @@ export default function RosterCalendarClient(props: {
         </div>
 
         {selectedHasSession ? (
-          <>
-            <SessionRows
-              rows={selectedInfo?.rows ?? []}
-              total={selectedEntries}
-              emptyLabel="Session created, nothing rostered on it yet."
-            />
-            {selectedInfo?.sessionId ? (
-              /*
-                Two ways in, because they are two different jobs. "Open" is for
-                editing — pitches, bhajans, who is on. Live view is for the
-                session itself, and whoever is at the sound desk should not
-                have to open the editable page and find the toggle to get
-                there.
-              */
-              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[12px]">
-                <Link
-                  href={`/roster/${selectedInfo.sessionId}`}
-                  className="text-brass-ink underline underline-offset-2"
-                >
-                  Open this session →
-                </Link>
-                <Link
-                  href={`/roster/${selectedInfo.sessionId}/live`}
-                  className="text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
-                >
-                  ▶ Live view
-                </Link>
+          /*
+            One block per session. On the ordinary day there is exactly one and
+            this reads as it always did; on a day with a morning and an evening
+            it reads as two things, which is what it is. The heading only
+            appears when it earns its line.
+          */
+          <div className="grid gap-3">
+            {selectedSessions.map((ds) => (
+              <div key={ds.id} className="grid gap-1">
+                {hasSeveral(selectedSessions) ? (
+                  <div className="flex items-baseline justify-between gap-2 border-b border-rule-surface pb-1">
+                    <span className="text-[12px] font-semibold">{sessionLabel(ds)}</span>
+                    <span className="text-[11px] text-on-surface-muted">
+                      {ds.entries} row{ds.entries === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                ) : null}
+
+                <SessionRows
+                  rows={ds.rows ?? []}
+                  total={ds.entries}
+                  emptyLabel="Session created, nothing rostered on it yet."
+                />
+
+                <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[12px]">
+                  <Link
+                    href={`/roster/${ds.id}`}
+                    className="text-brass-ink underline underline-offset-2"
+                  >
+                    Open this session →
+                  </Link>
+                  <Link
+                    href={`/roster/${ds.id}/live`}
+                    className="text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+                  >
+                    ▶ Live view
+                  </Link>
+                </div>
               </div>
+            ))}
+
+            {canEdit ? (
+              // Quiet, because a second session on a day is the exception.
+              <button
+                type="button"
+                onClick={() => addSessionOnSelectedDay()}
+                disabled={isPending}
+                className="justify-self-start text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+              >
+                Add another session on this day
+              </button>
             ) : null}
-          </>
+          </div>
         ) : (
           <p className="text-on-surface-muted">
             {canEdit

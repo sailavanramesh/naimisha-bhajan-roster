@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { melbourneTodayISO } from "@/lib/dates";
+import { defaultSessionOf } from "@/lib/sessionsOfDay";
 
 /**
  * The front door opens on the session people are about to sing.
@@ -27,7 +28,7 @@ import { melbourneTodayISO } from "@/lib/dates";
 export default async function Home() {
   const today = new Date(`${melbourneTodayISO()}T00:00:00.000Z`);
 
-  const next = await prisma.session.findFirst({
+  const candidates = await prisma.session.findMany({
     where: {
       date: { gte: today },
       slots: {
@@ -42,8 +43,16 @@ export default async function Home() {
       },
     },
     orderBy: { date: "asc" },
-    select: { id: true },
+    select: { id: true, date: true, startsAt: true },
   });
+
+  /*
+   * The nearest day that has something on it, then the usual evening session
+   * within that day — a 9am festival session on the same date should not be
+   * what the app opens on.
+   */
+  const firstDate = candidates[0]?.date.getTime();
+  const next = defaultSessionOf(candidates.filter((c) => c.date.getTime() === firstDate));
 
   // Nothing planned yet — the calendar, where the next thing to do is plan one.
   redirect(next ? `/roster/${next.id}` : "/roster");

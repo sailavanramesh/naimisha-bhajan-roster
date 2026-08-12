@@ -862,9 +862,24 @@ never overwrites a pitch somebody chose.
 existing sessions were set to 19:00, which is a DEFAULT AND NOT A FACT; the SQL
 to change them all is at the bottom of `scripts/seedSessionMeta.ts`.
 
-`Session.date` is **no longer unique** — some days have three sessions. The four
-places that looked a session up by date now take the first of that day by start
-time.
+`Session.date` is **no longer unique** — some days have three sessions.
+
+**Which one does "Thursday" mean?** The evening one. `lib/sessionsOfDay.ts` is
+the single answer: `defaultSessionOf` picks the session closest to 19:00, ties
+going to the earlier. Not the first of the day, which is what the code briefly
+did and which would have handed a 9am festival session every link meant for the
+usual 7pm. Used by the landing page, "go to date" in Assign, copy-rows-to-a-day
+and `/api/roster/ensure`.
+
+**Nothing is hidden behind that default.** The calendar cell draws one bar per
+session, the day panel lists each with its own time, kind, rows and links, and
+Assign shows a pill row for the day's sessions when there is more than one.
+Tapping a day with several no longer navigates — there is a choice to make, so
+it is made visible. "Add another session on this day" is the only way a second
+session is created, deliberately separate from tapping.
+
+`/api/roster/ensure` creates sessions and had **no capability check at all**;
+it requires `buildSessions` now.
 
 ### Correcting the masterlist
 

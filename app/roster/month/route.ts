@@ -36,6 +36,22 @@ function isoDateLocal(d: Date) {
  */
 type DayRow = { singer: string; bhajan: string | null; pitch: string | null };
 
+/**
+ * A day holds a LIST of sessions now, not one.
+ *
+ * Session.date stopped being unique on 2026-08-12 — "some days there are 3
+ * sessions" — so the calendar carries each one with its own time, kind and
+ * rows. Collapsing them to a total would say a day is busy without saying it
+ * is busy twice, which is the thing worth knowing.
+ */
+type DaySession = {
+  id: string;
+  startsAt: string | null;
+  categoryName: string | null;
+  entries: number;
+  rows: DayRow[];
+};
+
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const m = url.searchParams.get("m") || "";
@@ -52,6 +68,8 @@ export async function GET(req: NextRequest) {
     select: {
       id: true,
       date: true,
+      startsAt: true,
+      category: { select: { name: true } },
       _count: { select: { slots: true } },
       slots: {
         select: {
@@ -69,10 +87,7 @@ export async function GET(req: NextRequest) {
     orderBy: { date: "asc" },
   });
 
-  const dayInfo: Record<
-    string,
-    { sessionId: string; entries: number; rows: DayRow[] }
-  > = {};
+  const dayInfo: Record<string, { sessions: DaySession[] }> = {};
   for (const s of sessions) {
     /*
      * A session record can outlive its contents: build one, empty it, and the
@@ -84,8 +99,10 @@ export async function GET(req: NextRequest) {
      * creating a second one — it simply stops being advertised.
      */
     if ((s._count.slots ?? 0) === 0) continue;
-    const value = {
-      sessionId: s.id,
+    const value: DaySession = {
+      id: s.id,
+      startsAt: s.startsAt,
+      categoryName: s.category?.name ?? null,
       entries: s._count.slots ?? 0,
       rows: s.slots.map((x) => ({
         singer: x.singer?.name ?? "Unassigned",
@@ -96,8 +113,10 @@ export async function GET(req: NextRequest) {
     const utcKey = isoDateUTC(s.date);
     const localKey = isoDateLocal(s.date);
 
-    dayInfo[utcKey] = value;
-    if (!dayInfo[localKey]) dayInfo[localKey] = value;
+    (dayInfo[utcKey] ??= { sessions: [] }).sessions.push(value);
+    // The local key exists because a browser east or west of UTC can read the
+    // same date differently; it points at the same day's sessions.
+    if (localKey !== utcKey) dayInfo[localKey] ??= dayInfo[utcKey];
   }
 
 
