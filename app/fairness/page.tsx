@@ -4,6 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle, Badge, Figure, SectionTitle }
 import { summariseLoad, staleKnownBhajans, countBy, LOAD_TOLERANCE } from "@/lib/fairness";
 
 import { getRole, can } from "@/lib/auth";
+import { melbourneTodayISO } from "@/lib/dates";
+import {
+  parseFilters,
+  filtersToQuery,
+  describeFilters,
+  PRESETS,
+  MORNING_BEFORE,
+} from "@/lib/fairnessFilters";
+import { FairnessRange } from "./FairnessRange";
 import { NoAccess } from "@/components/RequireRole";
 
 export const dynamic = "force-dynamic";
@@ -13,16 +22,43 @@ const DAY = 24 * 60 * 60 * 1000;
 export default async function FairnessPage({
   searchParams,
 }: {
-  searchParams: Promise<{ days?: string }>;
+  searchParams: Promise<{
+    days?: string;
+    from?: string;
+    to?: string;
+    cat?: string;
+    when?: string;
+  }>;
 }) {
   const role = await getRole();
   if (!can(role, "viewAllPages")) return <NoAccess what="The fairness dashboard" role={role} />;
 
   const sp = await searchParams;
-  const windowDays = Number(sp.days ?? 365) || 365;
-  const since = new Date(Date.now() - windowDays * DAY);
+  const todayISO = melbourneTodayISO();
+  const filters = parseFilters(sp, todayISO);
 
-  const [singers, slots, allSlots] = await Promise.all([
+  /*
+   * Fairness compares people against each other, so what it is measured over
+   * has to be sayable. A singer who does every festival and no weekdays looks
+   * over-used against one who does the reverse, when neither is — hence the
+   * kind-of-session and part-of-day filters, not just a window length.
+   */
+  const sessionWhere = {
+    date: {
+      gte: new Date(`${filters.fromISO}T00:00:00.000Z`),
+      lte: new Date(`${filters.toISO}T00:00:00.000Z`),
+    },
+    ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
+    ...(filters.partOfDay === "morning" ? { startsAt: { lt: MORNING_BEFORE } } : {}),
+    // Null startsAt means the usual evening (Session.startsAt), so "evenings"
+    // has to include it — otherwise a session nobody gave a time to vanishes
+    // from a filter it plainly belongs in.
+    ...(filters.partOfDay === "evening"
+      ? { OR: [{ startsAt: { gte: MORNING_BEFORE } }, { startsAt: null }] }
+      : {}),
+  };
+
+  const [singers, slots, allSlots, categories] = await Promise.all([
     /*
      * Only people with a recorded voice. Somebody with none is not a singer
      * (lib/rosterEligibility.ts), so including them here showed a permanent
@@ -31,7 +67,7 @@ export default async function FairnessPage({
      */
     prisma.singer.findMany({ where: { gender: { not: null } }, orderBy: { name: "asc" } }),
     prisma.sessionSlot.findMany({
-      where: { session: { date: { gte: since } } },
+      where: { session: sessionWhere },
       select: {
         singerId: true,
         bhajan: { select: { deities: { select: { deity: { select: { name: true } } } }, raga: true } },
@@ -41,7 +77,13 @@ export default async function FairnessPage({
       where: { bhajanId: { not: null } },
       select: { bhajanId: true, bhajan: { select: { title: true } }, session: { select: { date: true } } },
     }),
+    prisma.sessionCategory.findMany({
+      orderBy: [{ order: "asc" }, { name: "asc" }],
+      select: { id: true, name: true },
+    }),
   ]);
+
+  const categoryName = categories.find((c) => c.id === filters.categoryId)?.name ?? null;
 
   const counts = new Map<string, number>();
   for (const s of slots) if (s.singerId) counts.set(s.singerId, (counts.get(s.singerId) ?? 0) + 1);
@@ -83,24 +125,75 @@ export default async function FairnessPage({
         <CardHeader>
           <CardTitle>Fairness</CardTitle>
           <div className="mt-1 text-sm text-on-surface-muted">
-            {total} slots across the last {windowDays} days · group mean {mean.toFixed(1)} each.
-            Anyone more than {Math.round(LOAD_TOLERANCE * 100)}% either side of the mean is
-            called out.
+            {total} slots over {describeFilters(filters, categoryName, todayISO)} · group mean{" "}
+            {mean.toFixed(1)} each. Anyone more than {Math.round(LOAD_TOLERANCE * 100)}% either
+            side of the mean is called out.
           </div>
-          <div className="mt-2 flex flex-wrap gap-2 text-sm">
-            {[90, 180, 365, 3650].map((d) => (
-              <Link
-                key={d}
-                href={`/fairness?days=${d}`}
-                className={
-                  d === windowDays
-                    ? "rounded-full border border-brass/60 bg-brass/15 px-3 py-1"
-                    : "rounded-full border border-rule-surface px-3 py-1 hover:bg-panel-hover"
-                }
-              >
-                {d === 3650 ? "All time" : `${d} days`}
-              </Link>
-            ))}
+
+          {/* Each row changes one thing and keeps the rest — see filtersToQuery. */}
+          <div className="mt-3 grid gap-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              {PRESETS.map((preset) => (
+                <Link
+                  key={preset.days}
+                  href={`/fairness${filtersToQuery(filters, { days: preset.days, from: null, to: null })}`}
+                  className={
+                    preset.days === filters.presetDays
+                      ? "rounded-full border border-brass/60 bg-brass/15 px-3 py-1"
+                      : "rounded-full border border-rule-surface px-3 py-1 hover:bg-panel-hover"
+                  }
+                >
+                  {preset.label}
+                </Link>
+              ))}
+              <FairnessRange filters={filters} />
+            </div>
+
+            {categories.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-xs text-on-surface-muted">Kind:</span>
+                <Link
+                  href={`/fairness${filtersToQuery(filters, { cat: null })}`}
+                  className={
+                    filters.categoryId === null
+                      ? "rounded-full border border-brass/60 bg-brass/15 px-3 py-0.5 text-xs"
+                      : "rounded-full border border-rule-surface px-3 py-0.5 text-xs hover:bg-panel-hover"
+                  }
+                >
+                  All
+                </Link>
+                {categories.map((c) => (
+                  <Link
+                    key={c.id}
+                    href={`/fairness${filtersToQuery(filters, { cat: c.id })}`}
+                    className={
+                      filters.categoryId === c.id
+                        ? "rounded-full border border-brass/60 bg-brass/15 px-3 py-0.5 text-xs"
+                        : "rounded-full border border-rule-surface px-3 py-0.5 text-xs hover:bg-panel-hover"
+                    }
+                  >
+                    {c.name}
+                  </Link>
+                ))}
+              </div>
+            ) : null}
+
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs text-on-surface-muted">Time:</span>
+              {(["any", "morning", "evening"] as const).map((w) => (
+                <Link
+                  key={w}
+                  href={`/fairness${filtersToQuery(filters, { when: w })}`}
+                  className={
+                    filters.partOfDay === w
+                      ? "rounded-full border border-brass/60 bg-brass/15 px-3 py-0.5 text-xs"
+                      : "rounded-full border border-rule-surface px-3 py-0.5 text-xs hover:bg-panel-hover"
+                  }
+                >
+                  {w === "any" ? "Any" : w === "morning" ? "Mornings" : "Evenings"}
+                </Link>
+              ))}
+            </div>
           </div>
         </CardHeader>
 
