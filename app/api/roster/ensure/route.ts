@@ -16,8 +16,9 @@ export async function POST(req: NextRequest) {
   const dt = parseISODateUTC(date);
   if (!dt) return NextResponse.json({ error: "Invalid date" }, { status: 400 });
 
-  const existing = await prisma.session.findUnique({
+  const existing = await prisma.session.findFirst({
     where: { date: dt },
+    orderBy: [{ startsAt: "asc" }, { createdAt: "asc" }],
     select: { id: true },
   });
 

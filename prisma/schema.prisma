@@ -246,9 +246,26 @@ model BhajanTag {
 }
 
 model Session {
-  id         String        @id @default(cuid())
+  id   String   @id @default(cuid())
   /// A session date, not a timestamp. Handled in Australia/Melbourne.
-  date       DateTime      @unique @db.Date
+  ///
+  /// NO LONGER UNIQUE. It was, on the assumption of one session a day, and
+  /// Sailavan 2026-08-12: "some days there are 3 sessions". Anywhere that used
+  /// to findUnique by date now takes the first by start time.
+  date DateTime @db.Date
+
+  /// Roughly when it starts, "HH:MM" in Melbourne. Null means the usual
+  /// evening. Stored as a string rather than a DateTime because it is a time
+  /// of day, not an instant — a DateTime would carry a date and a zone with it
+  /// and invite exactly the UTC-shifts-the-day bug the date column avoids.
+  startsAt String?
+
+  /// What kind of session — "Routine Thursday", "Festival". A table rather
+  /// than an enum because the centre owns the vocabulary and will change it
+  /// without a deploy.
+  categoryId String?
+  /// What it was about: a festival name, a visiting speaker, a theme.
+  topic      String?
   type       SessionType   @default(Weekday)
   status     SessionStatus @default(Published)
   /// Seed for the generator, so a generated set is reproducible and shareable.
@@ -265,12 +282,28 @@ model Session {
   notices           SessionNotice[]
   notificationRules NotificationRule[]
 
+  category SessionCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
   @@index([templateId])
   @@index([date])
+  @@index([categoryId])
 }
 
 /// One ordered slot in a session: a singer, a bhajan, and the pitch they sang.
 /// Renamed from v1's `SessionSinger`; `slot Int?` became `position Int`.
+/// The kinds of session the centre runs. Owned by the group, not by the code.
+model SessionCategory {
+  id    String @id @default(cuid())
+  name  String @unique
+  /// Sort order in the picker. Lower first.
+  order Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions Session[]
+}
+
 model SessionSlot {
   id        String  @id @default(cuid())
   sessionId String

@@ -285,7 +285,11 @@ export async function goToSessionForDate(formData: FormData): Promise<void> {
   }
   const day = new Date(`${parsed.data.date}T00:00:00.000Z`);
 
-  const existing = await prisma.session.findUnique({ where: { date: day }, select: { id: true } });
+  const existing = await prisma.session.findFirst({
+    where: { date: day },
+    orderBy: [{ startsAt: "asc" }, { createdAt: "asc" }],
+    select: { id: true },
+  });
   const session =
     existing ?? (await prisma.session.create({ data: { date: day }, select: { id: true } }));
 

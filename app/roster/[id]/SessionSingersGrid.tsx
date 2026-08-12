@@ -576,17 +576,17 @@ export function SessionSingersGrid(props: {
             <tr className="border-b border-rule-surface">
               {/* Widths are real now that the table is fixed. Everything the
                   bhajan does not need is spent here, and it gets the rest. */}
-              <th className="sticky left-0 z-50 w-[152px] border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
+              <th className="sticky left-0 z-50 w-[190px] border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
                 Singer
               </th>
-              <th className="sticky left-[152px] z-40 border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
+              <th className="sticky left-[190px] z-40 border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
                 Bhajan
               </th>
-              <th className="w-[150px] px-2 py-1.5 text-left font-semibold">Confirmed</th>
-              <th className="w-[112px] whitespace-nowrap px-2 py-1.5 text-left font-semibold">
+              <th className="w-[168px] px-2 py-1.5 text-left font-semibold">Confirmed</th>
+              <th className="w-[108px] whitespace-nowrap px-2 py-1.5 text-left font-semibold">
                 Recommended
               </th>
-              <th className="w-[56px] whitespace-nowrap px-2 py-1.5 text-left font-semibold">
+              <th className="w-[52px] whitespace-nowrap px-2 py-1.5 text-left font-semibold">
                 Tabla
               </th>
               {props.canEdit ? <th className="w-[84px] px-2 py-1.5 text-right font-semibold" /> : null}
@@ -782,13 +782,18 @@ export function SessionSingersGrid(props: {
                   {/* Confirmed Pitch */}
                   <td data-label="Confirmed" data-key="1" className="px-2 py-1.5">
                     {props.canEdit ? (
-                      <div className="relative">
-                        <div className="relative w-fit">
+                      /* Both wrappers constrained: the inner one was w-full of
+                         an outer that sized to its content, so the input still
+                         overhung the column by the cell's own padding. */
+                      <div className="relative w-full min-w-0">
+                        {/* w-full, not w-fit with size={16}: a fixed-layout
+                            column gives the cell its width, and anything that
+                            insists on its own spills over the next column. */}
+                        <div className="relative w-full">
                         <input
                           type="text"
                           value={pu.q}
                           placeholder="Confirmed"
-                          size={16}
                           onChange={(e) => setPitchQuery(r._localId, e.target.value)}
                           onFocus={() => setPitchUI((prev) => ({ ...prev, [r._localId]: { q: pu.q, open: true } }))}
                           onBlur={() => setTimeout(() => closePitch(r._localId), 120)}
@@ -804,7 +809,9 @@ export function SessionSingersGrid(props: {
    clear button. At 15ch it was clipped even before the button existed —
    the harmonium player reads this field, so a cut-off "#" is a real
    misread waiting to happen. */
-                          className={`w-[20ch] rounded-[10px] border-2 border-brass/45 bg-field py-1.5 pl-2 text-[14px] font-semibold leading-5 ${pu.q ? "pr-7" : "pr-2"}`}
+                          /* w-full, not w-[20ch]: 20 characters is wider than the column
+                             and was the last 8px of overhang into Recommended. */
+                          className={`w-full min-w-0 rounded-[10px] border-2 border-brass/45 bg-field py-1.5 pl-2 text-[14px] font-semibold leading-5 ${pu.q ? "pr-7" : "pr-2"}`}
                         />
                         {/* Clear sits inside the field, the way a search box
                             clears. onMouseDown is prevented so the input does
