@@ -101,6 +101,7 @@ export default async function RosterSessionPage({
   const session = await prisma.session.findUnique({
     where: { id: sessionId },
     include: {
+      category: { select: { name: true } },
       slots: {
         include: {
           singer: true,
@@ -330,7 +331,26 @@ export default async function RosterSessionPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>{dateLabel}</CardTitle>
+          <CardTitle>
+            {dateLabel}
+            {/*
+              What kind of session it was, beside the date rather than only in
+              the details panel at the foot of the page — a member never opens
+              that panel, and this is the part they benefit from knowing. The
+              time is deliberately not here: it belongs to the people planning,
+              and the panel already carries it.
+            */}
+            {session.category ? (
+              <span className="ms-2 align-middle rounded-full border border-brass/40 bg-brass/[0.08] px-2 py-0.5 text-[11px] font-normal uppercase tracking-wide text-on-surface-muted">
+                {session.category.name}
+              </span>
+            ) : null}
+            {session.topic ? (
+              <span className="ms-2 align-middle text-sm font-normal italic text-on-surface-muted">
+                {session.topic}
+              </span>
+            ) : null}
+          </CardTitle>
 
           <div className="mt-2 grid gap-2 text-sm">
             {/*

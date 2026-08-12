@@ -550,9 +550,19 @@ export function SessionSingersGrid(props: {
 
       <div className="flex items-center justify-between gap-3">
         <div className="text-sm font-semibold">Roster entries</div>
-        {props.canAssign ? (
+        {/*
+          Saving belongs to anybody who may edit anything, not only to whoever
+          may move singers around.
+
+          This whole toolbar was gated on canAssign, so a member — who may
+          change which bhajan is in a slot, and nothing else — could type a
+          bhajan in and had no way at all to keep it. Their work vanished on
+          the next page load with nothing on screen having suggested it would.
+          Adding a row is still an assign-level act; saving is not.
+        */}
+        {props.canEdit || props.canAssign ? (
           <div className="flex items-center gap-2">
-            <Button onClick={addRow}>Add row</Button>
+            {props.canAssign ? <Button onClick={addRow}>Add row</Button> : null}
             <Button onClick={saveAll} variant="primary">
               {isPending ? "Saving…" : "Save changes"}
             </Button>
