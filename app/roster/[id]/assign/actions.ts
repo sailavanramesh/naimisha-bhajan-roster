@@ -5,6 +5,7 @@ import { requireCapability } from "@/lib/auth";
 import { rosterBlockReason } from "@/lib/rosterEligibility";
 import { notifyAboutSession } from "@/lib/notifySession";
 import { rosteredSingerIds, notifyRemovals } from "@/lib/notifyRemoval";
+import { recordSungAsKnown } from "@/lib/repertoireFromHistory";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -61,6 +62,7 @@ export async function applyAssignments(formData: FormData): Promise<void> {
   });
 
   await notifyAboutSession(sessionId);
+  await recordSungAsKnown(sessionId);
 
   revalidatePath(`/roster/${sessionId}`);
   redirect(`/roster/${sessionId}`);
@@ -198,6 +200,7 @@ export async function addSingerSlot(input: {
    * state on the exact control that was pressed.
    */
   await notifyAboutSession(sessionId);
+  await recordSungAsKnown(sessionId);
 
   revalidatePath(`/roster/${sessionId}`);
   revalidatePath(`/roster/${sessionId}/assign`);
@@ -282,7 +285,11 @@ export async function goToSessionForDate(formData: FormData): Promise<void> {
   }
   const day = new Date(`${parsed.data.date}T00:00:00.000Z`);
 
-  const existing = await prisma.session.findUnique({ where: { date: day }, select: { id: true } });
+  const existing = await prisma.session.findFirst({
+    where: { date: day },
+    orderBy: [{ startsAt: "asc" }, { createdAt: "asc" }],
+    select: { id: true },
+  });
   const session =
     existing ?? (await prisma.session.create({ data: { date: day }, select: { id: true } }));
 
@@ -368,6 +375,7 @@ export async function autoAddFairestSingers(input: {
   });
 
   await notifyAboutSession(sessionId);
+  await recordSungAsKnown(sessionId);
 
   revalidatePath(`/roster/${sessionId}`);
   revalidatePath(`/roster/${sessionId}/assign`);

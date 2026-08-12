@@ -216,6 +216,50 @@ export function SessionSingersGrid(props: {
 
   const bhInputRef = useRef<Record<string, HTMLInputElement | null>>({});
 
+  /*
+   * Which suggestion the arrow keys are on.
+   *
+   * The list was mouse-only: typing a title and pressing Down moved the text
+   * caret instead of the highlight, so on a keyboard there was no way to take
+   * a suggestion without reaching for the mouse. -1 means "none yet", so the
+   * first Down lands on the first result rather than the second.
+   */
+  const [bhActive, setBhActive] = useState(-1);
+  const bhOptionRefs = useRef<Record<number, HTMLButtonElement | null>>({});
+
+  const onBhajanKeyDown = (localId: string) => (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!bhPortal.open || bhPortal.localId !== localId) return;
+    const n = bhPortal.items.length;
+
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      if (n === 0) return;
+      // Otherwise the caret jumps to the end of the text as well.
+      e.preventDefault();
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      setBhActive((prev) => {
+        const next = prev < 0 ? (step === 1 ? 0 : n - 1) : (prev + step + n) % n;
+        bhOptionRefs.current[next]?.scrollIntoView({ block: "nearest" });
+        return next;
+      });
+      return;
+    }
+
+    if (e.key === "Enter") {
+      if (bhActive < 0 || !bhPortal.items[bhActive]) return;
+      // Only swallow Enter when it is actually choosing something, so the key
+      // still does whatever it did before in a row with no list open.
+      e.preventDefault();
+      onPickBhajan(localId, bhPortal.items[bhActive].id);
+      setBhActive(-1);
+      return;
+    }
+
+    if (e.key === "Escape") {
+      setBhPortal((prev) => ({ ...prev, open: false }));
+      setBhActive(-1);
+    }
+  };
+
   // Reposition portal on scroll/resize
   useEffect(() => {
     function onMove() {
@@ -438,6 +482,11 @@ export function SessionSingersGrid(props: {
     });
   }
 
+  // A new set of results means the old highlight is meaningless.
+  useEffect(() => {
+    setBhActive(-1);
+  }, [bhPortal.items, bhPortal.localId]);
+
   const portalEl =
     bhPortal.open && bhPortal.anchorRect
       ? createPortal(
@@ -450,17 +499,31 @@ export function SessionSingersGrid(props: {
               maxHeight: Math.min(320, window.innerHeight - (bhPortal.anchorRect.bottom + 16)),
               zIndex: 9999,
             }}
+            id="bhajan-suggestions"
+            role="listbox"
             className="overflow-auto rounded-[12px] border border-rule-surface bg-panel shadow-xl"
           >
             {bhPortal.loading ? <div className="px-2 py-1.5 text-xs text-on-surface-muted">Searching…</div> : null}
             {bhPortal.items.length === 0 && !bhPortal.loading ? (
               <div className="px-2 py-1.5 text-xs text-on-surface-muted">No matches.</div>
             ) : null}
-            {bhPortal.items.map((it) => (
+            {bhPortal.items.map((it, i) => (
               <button
                 key={it.id}
                 type="button"
-                className="w-full text-left px-3 py-2 text-sm hover:bg-panel-hover"
+                ref={(el) => {
+                  bhOptionRefs.current[i] = el;
+                }}
+                /* role=option so aria-selected means something: inside a
+                   listbox a bare <button> announces nothing about which one
+                   the arrow keys are on. */
+                role="option"
+                aria-selected={i === bhActive}
+                className={[
+                  "w-full px-3 py-2 text-left text-sm hover:bg-panel-hover",
+                  i === bhActive ? "bg-panel-hover ring-1 ring-inset ring-brass/50" : "",
+                ].join(" ")}
+                onMouseEnter={() => setBhActive(i)}
                 onMouseDown={(e) => e.preventDefault()}
                 onClick={() => onPickBhajan(bhPortal.localId!, it.id)}
               >
@@ -513,17 +576,17 @@ export function SessionSingersGrid(props: {
             <tr className="border-b border-rule-surface">
               {/* Widths are real now that the table is fixed. Everything the
                   bhajan does not need is spent here, and it gets the rest. */}
-              <th className="sticky left-0 z-50 w-[152px] border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
+              <th className="sticky left-0 z-50 w-[190px] border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
                 Singer
               </th>
-              <th className="sticky left-[152px] z-40 border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
+              <th className="sticky left-[190px] z-40 border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
                 Bhajan
               </th>
-              <th className="w-[150px] px-2 py-1.5 text-left font-semibold">Confirmed</th>
-              <th className="w-[112px] whitespace-nowrap px-2 py-1.5 text-left font-semibold">
+              <th className="w-[168px] px-2 py-1.5 text-left font-semibold">Confirmed</th>
+              <th className="w-[108px] whitespace-nowrap px-2 py-1.5 text-left font-semibold">
                 Recommended
               </th>
-              <th className="w-[56px] whitespace-nowrap px-2 py-1.5 text-left font-semibold">
+              <th className="w-[52px] whitespace-nowrap px-2 py-1.5 text-left font-semibold">
                 Tabla
               </th>
               {props.canEdit ? <th className="w-[84px] px-2 py-1.5 text-right font-semibold" /> : null}
@@ -665,6 +728,10 @@ export function SessionSingersGrid(props: {
                         value={r._bhajanQuery ?? ""}
                         placeholder="Search masterlist…"
                         onChange={(e) => onBhajanQueryChange(r._localId, e.target.value)}
+                        onKeyDown={onBhajanKeyDown(r._localId)}
+                        role="combobox"
+                        aria-expanded={bhPortal.open && bhPortal.localId === r._localId}
+                        aria-controls="bhajan-suggestions"
                         onFocus={() => {
                           const q = (r._bhajanQuery || "").trim();
                           if (!q) return;
@@ -715,13 +782,18 @@ export function SessionSingersGrid(props: {
                   {/* Confirmed Pitch */}
                   <td data-label="Confirmed" data-key="1" className="px-2 py-1.5">
                     {props.canEdit ? (
-                      <div className="relative">
-                        <div className="relative w-fit">
+                      /* Both wrappers constrained: the inner one was w-full of
+                         an outer that sized to its content, so the input still
+                         overhung the column by the cell's own padding. */
+                      <div className="relative w-full min-w-0">
+                        {/* w-full, not w-fit with size={16}: a fixed-layout
+                            column gives the cell its width, and anything that
+                            insists on its own spills over the next column. */}
+                        <div className="relative w-full">
                         <input
                           type="text"
                           value={pu.q}
                           placeholder="Confirmed"
-                          size={16}
                           onChange={(e) => setPitchQuery(r._localId, e.target.value)}
                           onFocus={() => setPitchUI((prev) => ({ ...prev, [r._localId]: { q: pu.q, open: true } }))}
                           onBlur={() => setTimeout(() => closePitch(r._localId), 120)}
@@ -737,7 +809,9 @@ export function SessionSingersGrid(props: {
    clear button. At 15ch it was clipped even before the button existed —
    the harmonium player reads this field, so a cut-off "#" is a real
    misread waiting to happen. */
-                          className={`w-[20ch] rounded-[10px] border-2 border-brass/45 bg-field py-1.5 pl-2 text-[14px] font-semibold leading-5 ${pu.q ? "pr-7" : "pr-2"}`}
+                          /* w-full, not w-[20ch]: 20 characters is wider than the column
+                             and was the last 8px of overhang into Recommended. */
+                          className={`w-full min-w-0 rounded-[10px] border-2 border-brass/45 bg-field py-1.5 pl-2 text-[14px] font-semibold leading-5 ${pu.q ? "pr-7" : "pr-2"}`}
                         />
                         {/* Clear sits inside the field, the way a search box
                             clears. onMouseDown is prevented so the input does

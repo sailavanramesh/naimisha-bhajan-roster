@@ -9,6 +9,8 @@ import { predictForSinger } from "@/lib/singerProfile";
 import { semitoneDelta } from "@/lib/pitch";
 import { AddToList } from "@/components/AddToList";
 import { getRole, can, getSignedInSinger } from "@/lib/auth";
+import { EditBhajanPanel, EditedDot } from "./EditBhajanPanel";
+import { EDITABLE_FIELDS } from "@/lib/bhajanFields";
 
 export const dynamic = "force-dynamic";
 
@@ -80,7 +82,11 @@ export default async function BhajanPage({
 
   const bhajan = await prisma.bhajan.findUnique({
     where: { id },
-    include: { deities: { include: { deity: true } } },
+    include: {
+      deities: { include: { deity: true } },
+      // What the group has corrected, and what it replaced.
+      fieldEdits: { select: { field: true, sourceValue: true, editedBy: true } },
+    },
   });
 
   if (!bhajan) {
@@ -151,6 +157,9 @@ export default async function BhajanPage({
 
   const mostRecent = sungBy[0] ?? null;
 
+  /** The group's correction to one field, if there is one. */
+  const editOf = (field: string) => bhajan.fieldEdits.find((e) => e.field === field) ?? null;
+
   return (
     <div className="grid gap-4">
       <Card>
@@ -162,7 +171,12 @@ export default async function BhajanPage({
                 <CardTitle>{bhajan.title}</CardTitle>
               </div>
               <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-on-surface-muted">
-                <span>{bhajan.raga ? `Raga: ${bhajan.raga}` : "Raga: —"}</span>
+                <span>
+                  {bhajan.raga ? `Raga: ${bhajan.raga}` : "Raga: —"}
+                  {editOf("raga") ? (
+                    <EditedDot field="raga" sourceValue={editOf("raga")!.sourceValue} />
+                  ) : null}
+                </span>
                 {/* Deliberately quiet. The group should be able to tell its own
                     additions from the Sai Rhythms masterlist without the
                     distinction being shouted at them. */}
@@ -207,12 +221,28 @@ export default async function BhajanPage({
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="rounded-[12px] border border-rule-surface bg-panel p-3">
               <div className="text-xs font-semibold text-on-surface-muted">Gents pitch</div>
-              <div className="mt-1 text-sm">{bhajan.referenceGentsPitch ?? "—"}</div>
+              <div className="mt-1 text-sm">
+                {bhajan.referenceGentsPitch ?? "—"}
+                {editOf("referenceGentsPitch") ? (
+                  <EditedDot
+                    field="referenceGentsPitch"
+                    sourceValue={editOf("referenceGentsPitch")!.sourceValue}
+                  />
+                ) : null}
+              </div>
             </div>
 
             <div className="rounded-[12px] border border-rule-surface bg-panel p-3">
               <div className="text-xs font-semibold text-on-surface-muted">Ladies pitch</div>
-              <div className="mt-1 text-sm">{bhajan.referenceLadiesPitch ?? "—"}</div>
+              <div className="mt-1 text-sm">
+                {bhajan.referenceLadiesPitch ?? "—"}
+                {editOf("referenceLadiesPitch") ? (
+                  <EditedDot
+                    field="referenceLadiesPitch"
+                    sourceValue={editOf("referenceLadiesPitch")!.sourceValue}
+                  />
+                ) : null}
+              </div>
             </div>
           </div>
 
@@ -245,6 +275,19 @@ export default async function BhajanPage({
               </div>
             </article>
           </section>
+
+          {can(role, "addBhajan") ? (
+            <EditBhajanPanel
+              bhajanId={bhajan.id}
+              edits={bhajan.fieldEdits}
+              values={Object.fromEntries(
+                EDITABLE_FIELDS.map((f) => [
+                  f.name,
+                  (bhajan as unknown as Record<string, string | null>)[f.name] ?? null,
+                ]),
+              )}
+            />
+          ) : null}
 
           {/* Who has sung it */}
           <section className="grid gap-2">

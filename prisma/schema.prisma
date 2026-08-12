@@ -185,6 +185,9 @@ model Bhajan {
   instrumental             String?
   extra                    String?
 
+  /// Fields the group has corrected since the import. See BhajanFieldEdit.
+  fieldEdits BhajanFieldEdit[]
+
   /// See BhajanOrigin. Defaults to masterlist so the 3,607 imported rows are
   /// unaffected by this column being added.
   origin     BhajanOrigin @default(masterlist)
@@ -246,9 +249,26 @@ model BhajanTag {
 }
 
 model Session {
-  id         String        @id @default(cuid())
+  id   String   @id @default(cuid())
   /// A session date, not a timestamp. Handled in Australia/Melbourne.
-  date       DateTime      @unique @db.Date
+  ///
+  /// NO LONGER UNIQUE. It was, on the assumption of one session a day, and
+  /// Sailavan 2026-08-12: "some days there are 3 sessions". Anywhere that used
+  /// to findUnique by date now takes the first by start time.
+  date DateTime @db.Date
+
+  /// Roughly when it starts, "HH:MM" in Melbourne. Null means the usual
+  /// evening. Stored as a string rather than a DateTime because it is a time
+  /// of day, not an instant — a DateTime would carry a date and a zone with it
+  /// and invite exactly the UTC-shifts-the-day bug the date column avoids.
+  startsAt String?
+
+  /// What kind of session — "Routine Thursday", "Festival". A table rather
+  /// than an enum because the centre owns the vocabulary and will change it
+  /// without a deploy.
+  categoryId String?
+  /// What it was about: a festival name, a visiting speaker, a theme.
+  topic      String?
   type       SessionType   @default(Weekday)
   status     SessionStatus @default(Published)
   /// Seed for the generator, so a generated set is reproducible and shareable.
@@ -265,12 +285,59 @@ model Session {
   notices           SessionNotice[]
   notificationRules NotificationRule[]
 
+  category SessionCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
   @@index([templateId])
   @@index([date])
+  @@index([categoryId])
 }
 
 /// One ordered slot in a session: a singer, a bhajan, and the pitch they sang.
 /// Renamed from v1's `SessionSinger`; `slot Int?` became `position Int`.
+/// The kinds of session the centre runs. Owned by the group, not by the code.
+model SessionCategory {
+  id    String @id @default(cuid())
+  name  String @unique
+  /// Sort order in the picker. Lower first.
+  order Int    @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions Session[]
+}
+
+/// One field of one bhajan that the group has changed since the import.
+///
+/// The masterlist is a copy of somebody else's spreadsheet — 3,613 rows the
+/// centre does not own — and `data/roster.xlsx` is never written back to. So
+/// when the group corrects a raga or fills in a missing pitch, two things have
+/// to stay true: the correction wins everywhere, and it is still possible to
+/// see that it IS a correction and what the source said.
+///
+/// One row per (bhajan, field), written the FIRST time that field is changed.
+/// `sourceValue` is therefore what the masterlist had, not the previous edit —
+/// correcting a correction does not lose the original.
+model BhajanFieldEdit {
+  id       String @id @default(cuid())
+  bhajanId String
+  /// The Prisma field name, e.g. "raga". Whitelisted — see lib/bhajanFields.ts.
+  field    String
+
+  /// What it was before the group touched it. Null when the source was blank,
+  /// which is the common case: 565 bhajans have no raga recorded.
+  sourceValue String? @db.Text
+
+  editedBy  String?
+  editedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bhajan Bhajan @relation(fields: [bhajanId], references: [id], onDelete: Cascade)
+
+  @@unique([bhajanId, field])
+  @@index([bhajanId])
+}
+
 model SessionSlot {
   id        String  @id @default(cuid())
   sessionId String

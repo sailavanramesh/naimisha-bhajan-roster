@@ -10,6 +10,7 @@ import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { planTablas } from "@/lib/tablaPlan";
 import { TablaPanel } from "./TablaPanel";
 import { CopyRowsPanel } from "./CopyRowsPanel";
+import { SessionMetaPanel } from "./SessionMetaPanel";
 import { NotifyPanel } from "./NotifyPanel";
 import { melbourneTodayISO } from "@/lib/dates";
 import { missingParts } from "@/lib/notify";
@@ -138,6 +139,12 @@ export default async function RosterSessionPage({
    * round trips on a page that already makes several, and a viewer would be
    * paying for a control they never see.
    */
+  // Cheap: four rows the centre owns, and the session already has its own.
+  const sessionCategories = await prisma.sessionCategory.findMany({
+    orderBy: [{ order: "asc" }, { name: "asc" }],
+    select: { id: true, name: true },
+  });
+
   const canNotify = can(role, "notifySingers");
   const notifyPeople = canNotify ? await notifyCandidates(sessionId) : [];
 
@@ -376,6 +383,17 @@ export default async function RosterSessionPage({
           ) : null}
 
           {canNotify ? <NotifyPanel sessionId={sessionId} people={notifyPeople} /> : null}
+
+          <SessionMetaPanel
+            sessionId={sessionId}
+            categories={sessionCategories}
+            canEdit={can(role, "editSessionNotes")}
+            initial={{
+              categoryId: session.categoryId,
+              topic: session.topic,
+              startsAt: session.startsAt,
+            }}
+          />
 
           {/* Collapsible: Instruments */}
           <details className="rounded-[12px] border border-rule-surface bg-panel">

@@ -839,6 +839,42 @@ Original notes, kept because they explain the shape:
 - "Rostered for that session" is knowable the moment `applyAssignments` writes
   `singerId`, which is the natural trigger point.
 
+### The repertoire model, 2026-08-12
+
+`festival` used to be a value of `RepertoireKind`, so a bhajan somebody does at
+festivals AND knows appeared twice on their page — 72 of 413 (singer, bhajan)
+pairs were doubled. Being a festival bhajan describes the SONG; wanting to
+learn it, learning it and knowing it are stages, and a song is at one of them.
+So `SingerRepertoire.isFestival` is a flag and there are three stages. The
+`festival` enum value is dead and no row carries it.
+
+**The roster feeds the lists.** 388 of the 512 (singer, bhajan) pairs that had
+actually been sung were on nobody's list. `scripts/mergeRepertoire.ts` (one-off,
+already run) backfilled them as `known` with the pitch last sung, and
+`lib/repertoireFromHistory.ts` keeps it true for every session saved since —
+including the historical ones being typed in. It never downgrades a stage and
+never overwrites a pitch somebody chose.
+
+### Sessions carry more than a date now
+
+`categoryId` (a table the group owns, four seeded), `topic`, and `startsAt` as
+"HH:MM" — a time of day, not an instant, so no zone can shift it. All 214
+existing sessions were set to 19:00, which is a DEFAULT AND NOT A FACT; the SQL
+to change them all is at the bottom of `scripts/seedSessionMeta.ts`.
+
+`Session.date` is **no longer unique** — some days have three sessions. The four
+places that looked a session up by date now take the first of that day by start
+time.
+
+### Correcting the masterlist
+
+`BhajanFieldEdit` holds one row per (bhajan, field) the group has changed, with
+`sourceValue` = what the MASTERLIST said, written on the first edit only. So
+correcting a correction does not lose the original, and any field can be put
+back. Editable fields are whitelisted in `lib/bhajanFields.ts` — `deity` is
+deliberately absent because it is denormalised into join tables that every
+filter queries, and editing the raw string would leave the two disagreeing.
+
 ### Also worth knowing
 
 - `data/roster.xlsx` was replaced with the newer export from `~/Downloads`

@@ -76,7 +76,14 @@ export async function copyRowsToDate(input: {
   }
 
   const targetId = await prisma.$transaction(async (tx) => {
-    const existing = await tx.session.findUnique({ where: { date: day }, select: { id: true } });
+    // The earliest session that day. A day may hold more than one now, and
+    // "copy these rows to Sunday" means the first one unless somebody says
+    // otherwise.
+    const existing = await tx.session.findFirst({
+      where: { date: day },
+      orderBy: [{ startsAt: "asc" }, { createdAt: "asc" }],
+      select: { id: true },
+    });
     const target = existing ?? (await tx.session.create({ data: { date: day }, select: { id: true } }));
 
     const last = await tx.sessionSlot.findFirst({

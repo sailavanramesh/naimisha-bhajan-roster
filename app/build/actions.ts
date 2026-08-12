@@ -66,8 +66,9 @@ export async function saveDraftSession(formData: FormData): Promise<void> {
 
   const sessionDate = new Date(`${date}T00:00:00.000Z`);
 
-  const existing = await prisma.session.findUnique({
+  const existing = await prisma.session.findFirst({
     where: { date: sessionDate },
+    orderBy: [{ startsAt: "asc" }, { createdAt: "asc" }],
     include: { slots: { select: { id: true, confirmedPitch: true, singerId: true } } },
   });
 
