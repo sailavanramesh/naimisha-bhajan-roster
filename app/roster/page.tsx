@@ -280,7 +280,9 @@ export default async function RosterPage({
                   Session kinds in bulk
                 </Link>
               ) : null}
-              <DefaultViewToggle view={view} defaultView={savedView} />
+              {/* Nothing to save against without a signed-in person, so nothing to
+                  offer either. */}
+              {me ? <DefaultViewToggle view={view} defaultView={savedView} /> : null}
               <Link
                 className="rounded-[12px] border px-3 py-2 text-sm hover:bg-panel-hover"
                 href={`/roster?view=${view === "calendar" ? "list" : "calendar"}`}
@@ -324,25 +326,49 @@ export default async function RosterPage({
                 they were for. Wrapping lets each control keep a usable width
                 and drop to the next line instead of shrinking.
               */}
-              <form className="flex flex-wrap items-end gap-2">
-                <label className="grid min-w-[14rem] flex-1 gap-1 text-[11px] text-on-surface-muted">
+              {/*
+                A phone gets one field per line; from sm up they sit in a row.
+                
+                Wrapping alone was not enough: the date inputs carry their own
+                intrinsic width, so on a 390px screen "From" pushed past the
+                card's edge and "To" ended up underneath Apply. Explicit
+                full-width basis on small screens is the only thing that makes
+                a date input behave.
+              */}
+              <form className="grid grid-cols-2 items-end gap-2 sm:flex sm:flex-wrap">
+                <label className="col-span-2 grid min-w-0 gap-1 text-[11px] text-on-surface-muted sm:min-w-[14rem] sm:flex-1">
                   Search
                   <Input
                     name="q"
                     defaultValue={q}
                     placeholder="Singer, bhajan or notes…"
                     aria-label="Search singer, bhajan or notes"
+                    className="w-full"
                   />
                 </label>
-                <label className="grid gap-1 text-[11px] text-on-surface-muted">
+                <label className="grid min-w-0 gap-1 text-[11px] text-on-surface-muted">
                   From
-                  <Input name="from" type="date" defaultValue={sp.from ?? ""} aria-label="From" />
+                  <Input
+                    name="from"
+                    type="date"
+                    defaultValue={sp.from ?? ""}
+                    aria-label="From"
+                    className="w-full"
+                  />
                 </label>
-                <label className="grid gap-1 text-[11px] text-on-surface-muted">
+                <label className="grid min-w-0 gap-1 text-[11px] text-on-surface-muted">
                   To
-                  <Input name="to" type="date" defaultValue={sp.to ?? ""} aria-label="To" />
+                  <Input
+                    name="to"
+                    type="date"
+                    defaultValue={sp.to ?? ""}
+                    aria-label="To"
+                    className="w-full"
+                  />
                 </label>
-                <Button type="submit">Apply</Button>
+                <Button type="submit" className="col-span-2 sm:col-span-1">
+                  Apply
+                </Button>
                 <input type="hidden" name="view" value="list" />
               </form>
 
