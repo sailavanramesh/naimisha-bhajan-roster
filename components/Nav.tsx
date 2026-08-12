@@ -138,9 +138,13 @@ export function Nav({ role = "viewer" }: { role?: string }) {
 
         <NavLinks collapsed={!expanded} />
 
-        <div className={clsx("mt-auto pt-3 text-xs text-on-ground-muted", expanded ? "opacity-100" : "opacity-0")}>
-          Tip: use the editable link to enable editing.
-        </div>
+        {/*
+          The "use the editable link to enable editing" tip is gone. It dated
+          from before Google sign-in, when access came from a shared link and
+          people genuinely had to be told; now everybody signs in and their
+          role arrives with them, so it was advice about a mechanism that no
+          longer applies, taking a line of every page to give it.
+        */}
       </aside>
 
       {/* Mobile top-left trigger */}
