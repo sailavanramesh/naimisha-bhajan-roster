@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { rosterBlockReason } from "@/lib/rosterEligibility";
 import { notifyAboutSession } from "@/lib/notifySession";
 import { rosteredSingerIds, notifyRemovals } from "@/lib/notifyRemoval";
+import { recordSungAsKnown } from "@/lib/repertoireFromHistory";
 import { requireCapability, can } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
@@ -254,6 +255,9 @@ export async function upsertSessionSingerRows(sessionId: string, rows: SingerRow
   // moment somebody is quietly replaced.
   await notifyRemovals(sessionId, rosteredBefore);
   await notifyAboutSession(sessionId);
+  // Singing something is the strongest evidence there is that a person can
+  // sing it, so a saved past session adds to their list.
+  await recordSungAsKnown(sessionId);
 
   revalidatePath(`/roster/${sessionId}`);
 }
