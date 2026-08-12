@@ -1,9 +1,10 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { RepertoireKind } from "@prisma/client";
-import { Button, Input, Textarea, Badge } from "@/components/ui";
+import { Button, Textarea, Badge } from "@/components/ui";
 import { DeitySymbols } from "@/components/DeitySymbol";
 import { upsertLearning, removeLearning } from "@/app/my-list/actions";
+import { AddToListForm } from "@/components/AddToListForm";
 
 /**
  * components/LearningList.tsx — one person's bhajans: wanted, learning, known.
@@ -94,38 +95,13 @@ export async function LearningList({
           <div className="grid gap-3 px-4 pb-4">
             <p className="max-w-2xl text-sm text-on-surface-muted">
               Move one to <strong>Know it</strong> and it starts counting in the session
-              builder, so it will be suggested.
+              builder, so it will be suggested. Find things to add on{" "}
+              <Link href="/explore" className="text-brass-ink underline underline-offset-2">
+                Explore
+              </Link>
+              .
             </p>
-            <form
-              action={upsertLearning}
-              className="grid gap-2 rounded-[12px] border border-rule-surface bg-panel p-3 sm:grid-cols-[1fr_auto_auto]"
-            >
-              <input type="hidden" name="singerId" value={singerId} />
-              <Input name="title" required placeholder="Bhajan title" aria-label="Bhajan title" />
-              <select
-                name="kind"
-                defaultValue={RepertoireKind.wantToLearn}
-                className="h-11 rounded-[10px] border border-rule-surface bg-field px-3 text-sm"
-                aria-label="Status"
-              >
-                {STAGES.map((s) => (
-                  <option key={s.kind} value={s.kind}>
-                    {s.title}
-                  </option>
-                ))}
-              </select>
-              <Button type="submit" variant="primary">
-                Add
-              </Button>
-              <p className="text-xs text-on-surface-muted sm:col-span-3">
-                A title that does not match the masterlist is still saved — it just will not
-                link through to a bhajan page. Find things to add on{" "}
-                <Link href="/explore" className="text-brass-ink underline underline-offset-2">
-                  Explore
-                </Link>
-                .
-              </p>
-            </form>
+            <AddToListForm singerId={singerId} />
           </div>
         </details>
       ) : null}
