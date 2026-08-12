@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { splitOnMatch } from "@/lib/highlight";
 
 export type SessionRow = {
   singer: string;
@@ -17,16 +18,23 @@ export type SessionRow = {
  *
  * Three columns: singer, bhajan, pitch. The pitch is the reason to look at a
  * past day at all, and it is the first thing wanted for a coming one.
+ *
+ * `query` marks what matched. The list already showed every session containing
+ * a hit, which answers "which days" and then leaves you scanning a ten-row
+ * session for the reason it is there.
  */
 export function SessionRows({
   rows,
   total,
   emptyLabel = "Nothing rostered yet.",
+  query,
 }: {
   rows: SessionRow[];
   /** The real count, which may exceed the rows shown. */
   total: number;
   emptyLabel?: string;
+  /** What was searched for, when these rows are search results. */
+  query?: string | null;
 }) {
   if (rows.length === 0) {
     return <p className="text-sm text-on-surface-muted">{emptyLabel}</p>;
@@ -40,8 +48,12 @@ export function SessionRows({
             key={i}
             className="grid grid-cols-[6.5rem_1fr] items-baseline gap-x-2 gap-y-0 rounded-[8px] px-1.5 py-1 text-[13px] odd:bg-surface/60 sm:grid-cols-[7rem_1fr_auto]"
           >
-            <span className="truncate font-medium">{r.singer}</span>
-            <span className="truncate text-on-surface-muted">{r.bhajan ?? "no bhajan yet"}</span>
+            <span className="truncate font-medium">
+              <Marked text={r.singer} query={query} />
+            </span>
+            <span className="truncate text-on-surface-muted">
+              {r.bhajan ? <Marked text={r.bhajan} query={query} /> : "no bhajan yet"}
+            </span>
             {/*
               On a phone the pitch drops to its own line under the two names
               rather than squeezing a third column into 6rem — it is short,
@@ -60,6 +72,30 @@ export function SessionRows({
         </p>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The matching part of a string, marked.
+ *
+ * A tinted background rather than the browser's default yellow <mark>, which
+ * on this page reads as a warning.
+ */
+export function Marked({ text, query }: { text: string; query?: string | null }) {
+  const pieces = splitOnMatch(text, query);
+  if (pieces.length === 1 && !pieces[0].hit) return <>{text}</>;
+  return (
+    <>
+      {pieces.map((p, i) =>
+        p.hit ? (
+          <mark key={i} className="rounded-[3px] bg-brass/25 px-0.5 text-on-surface">
+            {p.text}
+          </mark>
+        ) : (
+          <span key={i}>{p.text}</span>
+        ),
+      )}
+    </>
   );
 }
 

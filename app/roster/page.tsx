@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { SessionRows } from "@/components/SessionRows";
+import { SessionRows, Marked } from "@/components/SessionRows";
+import { matches, excerpt } from "@/lib/highlight";
 import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { startSessionOnDate } from "./viewActions";
@@ -9,6 +10,24 @@ import RosterCalendarClient from "./RosterCalendarClient";
 import { nextThursday, melbourneTodayISO } from "@/lib/dates";
 
 export const dynamic = "force-dynamic";
+
+/** Does this row contain the search text, in either the singer or the bhajan? */
+function rowMatches(
+  slot: {
+    singer: { name: string } | null;
+    bhajan: { title: string } | null;
+    bhajanTitle: string | null;
+    festivalBhajanTitle: string | null;
+  },
+  q: string,
+): boolean {
+  return (
+    matches(slot.singer?.name, q) ||
+    matches(slot.bhajan?.title, q) ||
+    matches(slot.bhajanTitle, q) ||
+    matches(slot.festivalBhajanTitle, q)
+  );
+}
 function toISODateUTC(d: Date) {
   return d.toISOString().slice(0, 10);
 }
@@ -197,10 +216,20 @@ export default async function RosterPage({
         slots: { some: {} },
         ...(q
           ? {
+              /*
+                Case-insensitive, and it searches the RESOLVED bhajan title.
+                
+                It did neither. `contains` is case-sensitive in Postgres, so
+                "rama" found 7 sessions where "Rama" found 50; and it looked
+                only at SessionSlot.bhajanTitle, the free-text fallback, not at
+                the masterlist title most rows actually carry. Between them,
+                a search for "rama" returned 7 of the 55 sessions containing it.
+              */
               OR: [
-                { notes: { contains: q } },
-                { slots: { some: { singer: { name: { contains: q } } } } },
-                { slots: { some: { bhajanTitle: { contains: q } } } },
+                { notes: { contains: q, mode: "insensitive" } },
+                { slots: { some: { singer: { name: { contains: q, mode: "insensitive" } } } } },
+                { slots: { some: { bhajanTitle: { contains: q, mode: "insensitive" } } } },
+                { slots: { some: { bhajan: { title: { contains: q, mode: "insensitive" } } } } },
               ],
             }
           : {}),
@@ -348,14 +377,41 @@ export default async function RosterPage({
 
                     <div className="mt-2">
                       <SessionRows
-                        rows={s.slots.slice(0, 6).map((x) => ({
-                          singer: x.singer?.name ?? "Unassigned",
-                          bhajan: x.bhajan?.title ?? x.bhajanTitle ?? x.festivalBhajanTitle,
-                          pitch: x.confirmedPitch,
-                        }))}
+                        rows={
+                          /*
+                            When searching, lead with the rows that matched.
+                            A ten-row Sunday shows six, and the one row you
+                            searched for could easily be the seventh.
+                          */
+                          (q
+                            ? [...s.slots].sort(
+                                (a, b) =>
+                                  Number(rowMatches(b, q)) - Number(rowMatches(a, q)),
+                              )
+                            : s.slots
+                          )
+                            .slice(0, 6)
+                            .map((x) => ({
+                              singer: x.singer?.name ?? "Unassigned",
+                              bhajan: x.bhajan?.title ?? x.bhajanTitle ?? x.festivalBhajanTitle,
+                              pitch: x.confirmedPitch,
+                            }))
+                        }
                         total={s.slots.length}
                         emptyLabel="Nothing rostered."
+                        query={q}
                       />
+
+                      {/*
+                        A session can match on its NOTES, in which case no row
+                        highlights and the card looks like it was returned for
+                        no reason. Show the matching part of the note instead.
+                      */}
+                      {q && matches(s.notes, q) ? (
+                        <p className="mt-1 px-1.5 text-[11px] italic text-on-surface-muted">
+                          notes: <Marked text={excerpt(s.notes ?? "", q)} query={q} />
+                        </p>
+                      ) : null}
                     </div>
                   </Link>
                 ))}
