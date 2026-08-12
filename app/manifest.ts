@@ -22,7 +22,17 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Bhajan suggestions, rostering and pitch for Naimisha",
     // Opens on the roster: what somebody actually came to look at. The
     // dashboard is a coordinator's overview and members no longer see it.
-    start_url: "/roster",
+    /*
+      The front door, not the calendar.
+      
+      "/" resolves to the nearest future session that has anything on it — see
+      app/page.tsx. Pointed at /roster, the installed app skipped that entirely
+      and always opened on the calendar, which is what Sailavan was seeing.
+      
+      An already-installed app may keep the old start_url until it is removed
+      from the Home Screen and added again; the in-app links are unaffected.
+    */
+    start_url: "/",
     scope: "/",
     display: "standalone",
     orientation: "any",

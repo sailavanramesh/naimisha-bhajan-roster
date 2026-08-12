@@ -236,12 +236,27 @@ export default function RosterCalendarClient(props: {
               emptyLabel="Session created, nothing rostered on it yet."
             />
             {selectedInfo?.sessionId ? (
-              <Link
-                href={`/roster/${selectedInfo.sessionId}`}
-                className="justify-self-start text-[12px] text-brass-ink underline underline-offset-2"
-              >
-                Open this session →
-              </Link>
+              /*
+                Two ways in, because they are two different jobs. "Open" is for
+                editing — pitches, bhajans, who is on. Live view is for the
+                session itself, and whoever is at the sound desk should not
+                have to open the editable page and find the toggle to get
+                there.
+              */
+              <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[12px]">
+                <Link
+                  href={`/roster/${selectedInfo.sessionId}`}
+                  className="text-brass-ink underline underline-offset-2"
+                >
+                  Open this session →
+                </Link>
+                <Link
+                  href={`/roster/${selectedInfo.sessionId}/live`}
+                  className="text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+                >
+                  ▶ Live view
+                </Link>
+              </div>
             ) : null}
           </>
         ) : (
