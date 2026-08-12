@@ -8,12 +8,12 @@ import { EnableEditForm } from "@/components/EnableEditForm";
 import { INSTRUMENTS } from "@/lib/instrumentScoring";
 import {
   setEligibilityForInstrument,
-  addRepertoireEntry,
   removeRepertoireEntry,
   setSingerAccess,
 } from "./actions";
 import { googleSignInConfigured } from "@/lib/authConfig";
 import { SessionCategories } from "./SessionCategories";
+import { AddRepertoireForm } from "./AddRepertoireForm";
 
 import { getRole, can } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
@@ -393,35 +393,7 @@ export default async function AdminPage({
           ) : (
             <>
               {canEdit ? (
-                <form
-                  action={addRepertoireEntry}
-                  className="grid gap-2 rounded-[12px] border border-rule-surface bg-panel p-3 sm:grid-cols-[1fr_auto_auto]"
-                >
-                  <input type="hidden" name="singerId" value={selectedSinger.id} />
-                  <Input
-                    name="title"
-                    placeholder="Bhajan title, exactly as in the masterlist"
-                    aria-label="Bhajan title"
-                  />
-                  <select
-                    name="kind"
-                    defaultValue={RepertoireKind.known}
-                    className="h-11 rounded-[12px] border border-rule-surface bg-field px-3 text-sm"
-                    aria-label="List"
-                  >
-                    {/* Three stages. "Festival" was never a stage — it
-                        describes the bhajan, and is a flag on the row now. */}
-                    <option value={RepertoireKind.known}>Knows it</option>
-                    <option value={RepertoireKind.learning}>Learning</option>
-                    <option value={RepertoireKind.wantToLearn}>Wants to learn</option>
-                  </select>
-                  <Button type="submit">Add</Button>
-                  <p className="text-xs text-on-surface-muted sm:col-span-3">
-                    A title that does not match the masterlist is still saved, as free text —
-                    ten roster titles do not resolve, and dropping them would lose real data.
-                    It simply will not link through to a bhajan page.
-                  </p>
-                </form>
+                <AddRepertoireForm singerId={selectedSinger.id} />
               ) : null}
 
               {repertoire.length === 0 ? (

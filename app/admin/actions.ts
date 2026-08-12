@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
+import { contradiction } from "@/lib/repertoireGuard";
 import { requireCapability, normaliseEmail } from "@/lib/auth";
 import { RepertoireKind } from "@prisma/client";
 import { revalidatePath } from "next/cache";
@@ -67,15 +68,57 @@ const RepertoireAdd = z.object({
   kind: z.nativeEnum(RepertoireKind),
 });
 
-export async function addRepertoireEntry(formData: FormData): Promise<void> {
+export type RepertoireAddResult =
+  | { ok: true; title: string }
+  | { ok: false; message: string };
+
+/**
+ * Add a bhajan to somebody's list, as a coordinator.
+ *
+ * Guarded by the same rule as every other way in — lib/repertoireGuard.ts.
+ * This one is a coordinator's tool rather than a member's, but a duplicate
+ * created here is exactly as wrong as one created anywhere else, and the
+ * unique key is on (singer, KIND, title), so adding at a second stage would
+ * happily produce two rows for the same bhajan.
+ *
+ * `force` in the form adds it regardless, because a coordinator correcting the
+ * record needs to be able to say "yes, I mean it".
+ */
+export async function addRepertoireEntry(formData: FormData): Promise<RepertoireAddResult> {
   await requireCapability("manageAllocations");
   const parsed = RepertoireAdd.safeParse({
     singerId: String(formData.get("singerId") ?? ""),
     title: String(formData.get("title") ?? "").trim(),
     kind: String(formData.get("kind") ?? "known"),
   });
-  if (!parsed.success) throw new Error("Could not add: a singer and a bhajan title are required.");
+  if (!parsed.success) {
+    return { ok: false, message: "A singer and a bhajan title are required." };
+  }
   const { singerId, title, kind } = parsed.data;
+
+  if (String(formData.get("force") ?? "") !== "1") {
+    const objection = await contradiction(singerId, title, kind);
+    if (objection) {
+      if ("already" in objection) {
+        return {
+          ok: false,
+          message:
+            `Not added — ${objection.already.title} is already on their list under ` +
+            `${objection.already.label}` +
+            (objection.already.preferredPitch ? ` at ${objection.already.preferredPitch}` : "") +
+            ".",
+        };
+      }
+      return {
+        ok: false,
+        message:
+          `Not added — ${objection.sung.title} has been sung ${objection.sung.times}\u00d7` +
+          (objection.sung.lastOn ? `, last on ${objection.sung.lastOn}` : "") +
+          (objection.sung.pitch ? ` at ${objection.sung.pitch}` : "") +
+          ". Add it as Knows it, or tick to add anyway.",
+      };
+    }
+  }
 
   // Resolve to a masterlist bhajan where possible, but keep the entry either
   // way — 10 roster titles do not resolve, and losing them would be worse.
@@ -91,6 +134,7 @@ export async function addRepertoireEntry(formData: FormData): Promise<void> {
   });
 
   revalidatePath("/admin");
+  return { ok: true, title: bhajan?.title ?? title };
 }
 
 export async function removeRepertoireEntry(formData: FormData): Promise<void> {
