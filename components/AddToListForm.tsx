@@ -181,6 +181,7 @@ export function AddToListForm({ singerId }: { singerId: string }) {
       form.set("kind", kind);
       form.set("note", "");
       form.set("preferredPitch", "");
+      form.set("move", "1");
       await upsertLearning(form);
       setRefused(null);
       setQuery("");
