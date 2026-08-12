@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
-import { upsertLearning } from "@/app/my-list/actions";
+import { addToList, upsertLearning } from "@/app/my-list/actions";
+import { RepertoireKind } from "@prisma/client";
 
 type Hit = { id: string; title: string };
 
@@ -67,6 +68,11 @@ export function AddToListForm({ singerId }: { singerId: string }) {
   const [searching, setSearching] = useState(false);
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<string | null>(null);
+  const [refused, setRefused] = useState<{
+    label: string;
+    title: string;
+    preferredPitch: string | null;
+  } | null>(null);
   const [insight, setInsight] = useState<Insight | null>(null);
   const [keepPitch, setKeepPitch] = useState(true);
   const seq = useRef(0);
@@ -125,23 +131,50 @@ export function AddToListForm({ singerId }: { singerId: string }) {
 
   const submit = (title: string) =>
     startTransition(async () => {
-      const form = new FormData();
-      form.set("singerId", singerId);
-      form.set("title", title);
-      form.set("kind", kind);
-      form.set("note", "");
-      // Only ever a suggestion the person accepted, never applied silently.
-      form.set(
-        "preferredPitch",
-        keepPitch && insight?.suggestion.pitch ? insight.suggestion.pitch : "",
-      );
-      await upsertLearning(form);
+      setMessage(null);
+      setRefused(null);
+      const res = await addToList({
+        singerId,
+        title,
+        kind: kind as RepertoireKind,
+        // Only ever a suggestion the person accepted, never applied silently.
+        preferredPitch: keepPitch && insight?.suggestion.pitch ? insight.suggestion.pitch : "",
+      });
+
+      if (!res.ok) {
+        if ("already" in res) {
+          // Already theirs. Say so and stop — moving it is a separate act.
+          setRefused(res.already);
+        } else {
+          setMessage(res.error);
+        }
+        return;
+      }
+
       setQuery("");
       setPicked(null);
       setHits([]);
       setInsight(null);
       setOpen(false);
-      setMessage(`Added ${title}.`);
+      setMessage(`Added ${res.title}.`);
+      router.refresh();
+    });
+
+  /** The explicit second act: move it, having been told where it already is. */
+  const moveAnyway = (title: string) =>
+    startTransition(async () => {
+      const form = new FormData();
+      form.set("singerId", singerId);
+      form.set("title", title);
+      form.set("kind", kind);
+      form.set("note", "");
+      form.set("preferredPitch", "");
+      await upsertLearning(form);
+      setRefused(null);
+      setQuery("");
+      setPicked(null);
+      setInsight(null);
+      setMessage(`Moved ${title} to ${kindLabel(kind)}.`);
       router.refresh();
     });
 
@@ -236,6 +269,26 @@ export function AddToListForm({ singerId }: { singerId: string }) {
           {pending ? "Adding…" : "Add"}
         </Button>
       </div>
+
+      {refused ? (
+        <p className="grid gap-2 rounded-[10px] border border-warn/40 bg-warn/[0.08] px-3 py-2 text-xs">
+          <span>
+            Not added — <strong>{refused.title}</strong> is already on this list under{" "}
+            <strong>{refused.label}</strong>
+            {refused.preferredPitch ? ` at ${refused.preferredPitch}` : ""}.
+          </span>
+          {refused.label !== kindLabel(kind) ? (
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => moveAnyway(refused.title)}
+              className="justify-self-start underline underline-offset-2 hover:text-on-surface"
+            >
+              Move it to {kindLabel(kind)} instead
+            </button>
+          ) : null}
+        </p>
+      ) : null}
 
       {picked && insight?.onList ? (
         <p className="rounded-[10px] border border-warn/40 bg-warn/[0.08] px-3 py-2 text-xs">

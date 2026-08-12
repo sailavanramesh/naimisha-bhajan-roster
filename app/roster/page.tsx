@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SessionRows, Marked } from "@/components/SessionRows";
 import { matches, excerpt } from "@/lib/highlight";
+import { timeLabel, USUAL_START } from "@/lib/sessionsOfDay";
 import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { startSessionOnDate } from "./viewActions";
@@ -187,6 +188,8 @@ export default async function RosterPage({
         id: string;
         date: Date;
         notes: string | null;
+        startsAt: string | null;
+        category: { name: string } | null;
         slots: {
           singer: { name: string } | null;
           bhajan: { title: string } | null;
@@ -245,6 +248,7 @@ export default async function RosterPage({
       orderBy: { date: "desc" },
       take: 200,
       include: {
+        category: { select: { name: true } },
         slots: {
           orderBy: [{ position: "asc" }],
           include: { singer: true, bhajan: { select: { title: true } } },
@@ -359,14 +363,27 @@ export default async function RosterPage({
                     className="group rounded-[12px] border border-rule-surface bg-panel p-3 transition-colors hover:border-brass/40 hover:bg-panel-hover"
                   >
                     <div className="flex items-baseline justify-between gap-3">
-                      <span className="font-display text-[15px]">
-                        {new Date(s.date).toLocaleDateString("en-AU", {
-                          weekday: "short",
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                          timeZone: "UTC",
-                        })}
+                      <span className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span className="font-display text-[15px]">
+                          {new Date(s.date).toLocaleDateString("en-AU", {
+                            weekday: "short",
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                            timeZone: "UTC",
+                          })}
+                        </span>
+                        {/* What kind of session it was, where the eye already is. */}
+                        {s.category ? (
+                          <span className="rounded-full border border-brass/40 bg-brass/[0.08] px-2 py-0.5 text-[10px] uppercase tracking-wide text-on-surface-muted">
+                            {s.category.name}
+                          </span>
+                        ) : null}
+                        {s.startsAt && s.startsAt !== USUAL_START ? (
+                          <span className="font-mono text-[11px] text-on-surface-muted">
+                            {timeLabel(s.startsAt)}
+                          </span>
+                        ) : null}
                       </span>
                       <span className="shrink-0 text-[11px] text-on-surface-muted">
                         {s.slots.length === 0
