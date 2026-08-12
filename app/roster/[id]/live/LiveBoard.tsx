@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { DeitySymbols } from "@/components/DeitySymbol";
 import { useMicCushions, cushionTint } from "@/components/MicCushions";
+import { useSessionVersion } from "@/components/useSessionVersion";
 import { MIC_COLOURS } from "@/lib/micCushion";
 
 export type LiveSlot = {
@@ -50,6 +51,15 @@ export function LiveBoard({
   instruments: LiveInstrument[];
 }) {
   const cushions = useMicCushions(sessionId);
+  /*
+   * The rest of the board, kept current too.
+   *
+   * Cushions have always polled. Everything else — bhajan, pitch, tabla, the
+   * running order — was read once at open, so a change made while this was up
+   * on a stand never arrived. This is the screen that has to be right during
+   * a session, so it is the last one that should be showing yesterday.
+   */
+  useSessionVersion(sessionId);
   /** Which card's words are open, by position. Null for none. */
   const [words, setWords] = useState<number | null>(null);
   const openSlot = words === null ? null : (slots.find((s) => s.position === words) ?? null);
