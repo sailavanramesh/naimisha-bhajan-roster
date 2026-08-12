@@ -163,10 +163,17 @@ export function nudgeNotification(input: {
    * on a 7am reminder for a 9am session is simply wrong — see lib/nudgeRules.
    */
   atHour?: number;
+  /**
+   * Today, in Melbourne. Without it the message assumes the session is today,
+   * which is true of the automatic reminder and NOT true of one an editor
+   * sends by hand — that is the bug Sailavan caught: a reminder about
+   * tomorrow's session that read "you are singing tonight".
+   */
+  todayISO?: string;
 }): Notification {
   const wantsBhajan = input.missing.includes("bhajan");
   const wantsPitch = input.missing.includes("pitch");
-  const when = whenWord(input.atHour);
+  const when = whenWord(input.dateISO, input.todayISO, input.atHour);
 
   let body: string;
   if (wantsBhajan && wantsPitch) {
@@ -182,7 +189,10 @@ export function nudgeNotification(input: {
   }
 
   return {
-    title: input.final ? `Last reminder — ${when}` : `Your bhajan for ${when}`,
+    // "on Sunday 16 August" is right in a sentence and wrong in a title.
+    title: input.final
+      ? `Last reminder — ${when.replace(/^on /, "")}`
+      : `Your bhajan for ${when.replace(/^on /, "")}`,
     body,
     url: `/roster/${input.sessionId}`,
     // Deliberately one tag for both, so the 5pm one REPLACES the 3pm one in
@@ -194,17 +204,33 @@ export function nudgeNotification(input: {
 }
 
 /**
- * "this morning", "today", "tonight" — from the hour the reminder goes out.
+ * When the session is, said the way a person would say it.
  *
- * A reminder sent at 7am is for a session later that morning; one sent at 3pm
- * is for the evening. Anything in between is "today", which is true whichever
- * it turns out to be.
+ * Two questions, in order. WHICH DAY first: the automatic reminder only ever
+ * goes out on the day, but an editor can send one by hand about any session,
+ * and "you are singing tonight" about tomorrow is worse than useless — it is
+ * the one that makes somebody turn up on the wrong evening.
+ *
+ * Then, for today only, WHEN today. A reminder sent at 7am is for a session
+ * later that morning; one sent at 3pm is for the evening. In between is
+ * "today", which is true whichever it turns out to be.
  */
-function whenWord(atHour?: number): string {
+export function whenWord(dateISO: string, todayISO?: string, atHour?: number): string {
+  if (todayISO && dateISO !== todayISO) {
+    if (dateISO === addDaysISO(todayISO, 1)) return "tomorrow";
+    return `on ${formatSessionDate(dateISO)}`;
+  }
   if (atHour === undefined) return "tonight";
   if (atHour < 11) return "this morning";
   if (atHour < 15) return "today";
   return "tonight";
+}
+
+/** ISO-string arithmetic, so no timezone can shift the day. */
+function addDaysISO(iso: string, days: number): string {
+  const d = new Date(`${iso}T12:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
 }
 
 /** 3pm, then 5pm. Melbourne hours. The fallback — see lib/nudgeRules.ts. */

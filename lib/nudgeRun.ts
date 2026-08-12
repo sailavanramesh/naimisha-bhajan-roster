@@ -123,6 +123,7 @@ export async function runNudges(now: Date = new Date()): Promise<NudgeRun> {
           confirmedPitch: gap.pitch,
           final: kind === "nudge_final",
           atHour: hour,
+          todayISO: date,
         }),
       );
 

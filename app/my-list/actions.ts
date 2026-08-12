@@ -88,6 +88,10 @@ export async function upsertLearning(formData: FormData): Promise<void> {
         bhajanId: bhajan?.id ?? null,
         note: note || null,
         preferredPitch: preferredPitch || null,
+        // Carried across the delete-and-create. Being a festival bhajan
+        // describes the song, so moving it from learning to known must not
+        // quietly stop it being one.
+        isFestival: existing?.isFestival ?? false,
       },
       update: {
         bhajanId: bhajan?.id ?? null,
@@ -98,6 +102,7 @@ export async function upsertLearning(formData: FormData): Promise<void> {
   });
 
   revalidatePath("/my-list");
+  revalidatePath(`/singers/${singerId}`);
 }
 
 export async function removeLearning(formData: FormData): Promise<void> {
@@ -117,6 +122,10 @@ export async function removeLearning(formData: FormData): Promise<void> {
     }
   }
 
-  await prisma.singerRepertoire.delete({ where: { id } });
+  const gone = await prisma.singerRepertoire.delete({
+    where: { id },
+    select: { singerId: true },
+  });
   revalidatePath("/my-list");
+  revalidatePath(`/singers/${gone.singerId}`);
 }

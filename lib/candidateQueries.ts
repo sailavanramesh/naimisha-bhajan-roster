@@ -237,7 +237,12 @@ export async function getSingersForBhajans(
     }),
     prisma.singerRepertoire.findMany({
       where: { bhajanId: { in: [...bhajanIds] } },
-      select: { bhajanId: true, kind: true, singer: { select: { id: true, name: true, gender: true } } },
+      select: {
+      bhajanId: true,
+      kind: true,
+      isFestival: true,
+      singer: { select: { id: true, name: true, gender: true } },
+    },
     }),
   ]);
 
@@ -266,7 +271,7 @@ export async function getSingersForBhajans(
 
   for (const r of sung) add(r.bhajanId, r.singer, 'sung', r.session.date);
   for (const r of repertoire) {
-    add(r.bhajanId, r.singer, r.kind === RepertoireKind.festival ? 'festival' : 'known');
+    add(r.bhajanId, r.singer, r.isFestival ? 'festival' : 'known');
   }
 
   for (const list of out.values()) {

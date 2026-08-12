@@ -170,6 +170,11 @@ export async function LearningList({
                             {e.title} <Badge tone="warn">not in the masterlist</Badge>
                           </span>
                         )}
+                        {e.isFestival ? (
+                          <span className="ms-2 rounded-full border border-brass/50 px-2 py-0.5 text-[10px] uppercase tracking-wide text-on-surface-muted">
+                            festival
+                          </span>
+                        ) : null}
                         {e.preferredPitch ? (
                           <div className="mt-1 font-mono text-xs tabular text-on-surface-muted">
                             shruti {e.preferredPitch}
@@ -189,6 +194,45 @@ export async function LearningList({
                         </form>
                       ) : null}
                     </div>
+
+                    {/*
+                      Moving between the three stages, in one tap.
+                      
+                      It was already possible, but only inside "Notes, shruti
+                      and status" — a disclosure most people would never open
+                      for something they do several times a session. Sailavan
+                      asked to be sure it was easy; behind a summary is not
+                      easy.
+                    */}
+                    {canEdit ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-1">
+                        {STAGES.map((stage) => (
+                          <form key={stage.kind} action={upsertLearning}>
+                            <input type="hidden" name="singerId" value={singerId} />
+                            <input type="hidden" name="title" value={e.title} />
+                            <input type="hidden" name="kind" value={stage.kind} />
+                            <input type="hidden" name="note" value={e.note ?? ""} />
+                            <input
+                              type="hidden"
+                              name="preferredPitch"
+                              value={e.preferredPitch ?? ""}
+                            />
+                            <button
+                              type="submit"
+                              disabled={e.kind === stage.kind}
+                              className={[
+                                "h-7 rounded-full border px-2.5 text-[11px]",
+                                e.kind === stage.kind
+                                  ? "border-brass bg-brass/15 font-semibold text-on-surface"
+                                  : "border-rule-surface bg-field text-on-surface-muted hover:border-brass/50 hover:text-on-surface",
+                              ].join(" ")}
+                            >
+                              {stage.title}
+                            </button>
+                          </form>
+                        ))}
+                      </div>
+                    ) : null}
 
                     {canEdit ? (
                       <details className="mt-2">

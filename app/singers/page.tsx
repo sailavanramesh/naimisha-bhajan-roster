@@ -34,7 +34,7 @@ export default async function SingersPage() {
   const known = new Map<string, number>();
   const learning = new Map<string, number>();
   for (const c of counts) {
-    if (c.kind === RepertoireKind.known || c.kind === RepertoireKind.festival) {
+    if (c.kind === RepertoireKind.known) {
       known.set(c.singerId, (known.get(c.singerId) ?? 0) + c._count._all);
     } else {
       learning.set(c.singerId, (learning.get(c.singerId) ?? 0) + c._count._all);

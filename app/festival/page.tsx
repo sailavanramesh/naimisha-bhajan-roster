@@ -1,5 +1,4 @@
 import { prisma } from "@/lib/db";
-import { RepertoireKind } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 
 import { getRole, can } from "@/lib/auth";
@@ -16,7 +15,7 @@ export default async function FestivalPage() {
     orderBy: { name: "asc" },
     include: {
       repertoire: {
-        where: { kind: RepertoireKind.festival },
+        where: { isFestival: true },
         orderBy: { order: "asc" },
       },
     },

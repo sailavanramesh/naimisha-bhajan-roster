@@ -144,3 +144,64 @@ describe("removedNotification", () => {
     expect(off.tag).not.toBe(on.tag);
   });
 });
+
+describe("which day the reminder is about", () => {
+  const base = { sessionId: "s1", missing: ["bhajan", "pitch"] as const };
+
+  it("says tonight only when the session is today", () => {
+    const n = nudgeNotification({
+      ...base,
+      missing: [...base.missing],
+      dateISO: "2026-08-12",
+      todayISO: "2026-08-12",
+      atHour: 15,
+    });
+    expect(n.body).toContain("You are singing tonight");
+  });
+
+  it("says tomorrow for tomorrow", () => {
+    // The bug Sailavan caught: a reminder sent by hand about the next day's
+    // session read "you are singing tonight", which is the one that makes
+    // somebody turn up on the wrong evening.
+    const n = nudgeNotification({
+      ...base,
+      missing: [...base.missing],
+      dateISO: "2026-08-13",
+      todayISO: "2026-08-12",
+      atHour: 13,
+    });
+    expect(n.body).toContain("You are singing tomorrow");
+    expect(n.body).not.toContain("tonight");
+    expect(n.title).toContain("tomorrow");
+  });
+
+  it("names the day for anything further out", () => {
+    const n = nudgeNotification({
+      ...base,
+      missing: [...base.missing],
+      dateISO: "2026-08-16",
+      todayISO: "2026-08-12",
+      atHour: 13,
+    });
+    expect(n.body).toContain("on Sunday 16 August");
+    expect(n.body).not.toContain("tonight");
+  });
+
+  it("still reads as today's session when no date is given", () => {
+    // The automatic reminder only ever goes out on the day, so it is allowed
+    // to leave todayISO off and mean today.
+    const n = nudgeNotification({ ...base, missing: [...base.missing], dateISO: "2026-08-12" });
+    expect(n.body).toContain("tonight");
+  });
+
+  it("keeps the morning wording for a morning session today", () => {
+    const n = nudgeNotification({
+      ...base,
+      missing: [...base.missing],
+      dateISO: "2026-08-12",
+      todayISO: "2026-08-12",
+      atHour: 7,
+    });
+    expect(n.body).toContain("this morning");
+  });
+});
