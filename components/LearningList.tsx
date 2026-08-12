@@ -1,17 +1,7 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { RepertoireKind } from "@prisma/client";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  Button,
-  Input,
-  Textarea,
-  Badge,
-  SectionTitle,
-} from "@/components/ui";
+import { Button, Input, Textarea, Badge } from "@/components/ui";
 import { DeitySymbols } from "@/components/DeitySymbol";
 import { upsertLearning, removeLearning } from "@/app/my-list/actions";
 
@@ -25,6 +15,14 @@ import { upsertLearning, removeLearning } from "@/app/my-list/actions";
  * the singer, so it lives on their page — under their pitch profile and their
  * history, which is the rest of the same story. /my-list is now a door to your
  * own page rather than a separate room.
+ *
+ * Collapsed by default. Combining the two pages put a pitch profile, a shruti
+ * ladder, a raga table, fifty rows of history and up to ninety list entries on
+ * one page — Sailavan, 2026-08-12: "too much data on the singers page bcos we
+ * combined it. they should be together, but better organised. too much to
+ * scroll through." Being together and being all visible at once are different
+ * things: each stage is a summary line with a count, and opens when it is the
+ * one you want.
  *
  * `canEdit` is what separates reading somebody's list from keeping your own.
  * The forms are simply absent without it — a member looking at another
@@ -83,17 +81,21 @@ export async function LearningList({
 
   return (
     <div id="list" className="grid gap-4">
+      <h2 className="mt-2 font-display text-lg font-semibold">{singerName}&rsquo;s list</h2>
+
       {canEdit ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>{singerName}&rsquo;s list</CardTitle>
-            <p className="mt-1 max-w-2xl text-sm text-on-surface-muted">
-              Bhajans wanted, being learnt, or known. Move one to <strong>Know it</strong> and
-              it starts counting in the session builder, so it will be suggested.
+        <details className="rounded-[12px] border border-rule-surface bg-panel">
+          <summary className="flex cursor-pointer select-none items-center justify-between px-4 py-3 text-sm font-semibold">
+            <span>Add a bhajan</span>
+            <span className="text-xs font-normal text-on-surface-muted">
+              wanted, learning, or known
+            </span>
+          </summary>
+          <div className="grid gap-3 px-4 pb-4">
+            <p className="max-w-2xl text-sm text-on-surface-muted">
+              Move one to <strong>Know it</strong> and it starts counting in the session
+              builder, so it will be suggested.
             </p>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <SectionTitle>Add a bhajan</SectionTitle>
             <form
               action={upsertLearning}
               className="grid gap-2 rounded-[12px] border border-rule-surface bg-panel p-3 sm:grid-cols-[1fr_auto_auto]"
@@ -124,8 +126,8 @@ export async function LearningList({
                 .
               </p>
             </form>
-          </CardContent>
-        </Card>
+          </div>
+        </details>
       ) : null}
 
       {STAGES.map((stage) => {
@@ -133,15 +135,15 @@ export async function LearningList({
         // Somebody else's empty stages are noise; your own are a prompt.
         if (rows.length === 0 && !canEdit) return null;
         return (
-          <Card key={stage.kind}>
-            <CardHeader className="pb-3">
-              <div className="flex items-baseline justify-between gap-3">
-                <CardTitle>{stage.title}</CardTitle>
-                <span className="text-xs text-on-surface-muted">{rows.length}</span>
-              </div>
-              <p className="mt-1 text-xs text-on-surface-muted">{stage.blurb}</p>
-            </CardHeader>
-            <CardContent className="grid gap-2">
+          <details key={stage.kind} className="rounded-[12px] border border-rule-surface bg-panel">
+            <summary className="flex cursor-pointer select-none items-baseline justify-between gap-3 px-4 py-3">
+              <span className="text-sm font-semibold">{stage.title}</span>
+              <span className="text-xs text-on-surface-muted">
+                {rows.length === 0 ? "none" : rows.length}
+              </span>
+            </summary>
+            <div className="grid gap-2 px-4 pb-4">
+              <p className="text-xs text-on-surface-muted">{stage.blurb}</p>
               {rows.length === 0 ? (
                 <p className="text-sm text-on-surface-muted">Nothing here yet.</p>
               ) : (
@@ -249,8 +251,8 @@ export async function LearningList({
                   </div>
                 ))
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </details>
         );
       })}
     </div>
