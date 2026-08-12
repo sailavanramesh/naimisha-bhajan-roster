@@ -814,6 +814,20 @@ Notification copy is time-aware now: "this morning" before 11, "today" before
 3pm, "tonight" after. A 7am reminder saying "tonight" is the kind of small
 wrongness that makes people stop reading them.
 
+**The quiet notice waits for the roster to settle.** It used to be sent from
+the save, and Sailavan caught it announcing "1 singer rostered" when three were
+on: the timestamps showed it went out three seconds after the FIRST singer was
+added, while he was still typing, and the once-per-person rule meant nobody
+received a corrected one. Adding singers one at a time is the normal workflow,
+so the count was wrong nearly every time.
+
+`lib/announceRosters.ts` now sends it from the hourly job, once a session's
+rows have been unchanged for `SETTLE_MINUTES` (20). Nobody is waiting for a
+silent notice addressed to people who are not singing — it can afford to be
+late, it cannot afford to be wrong. The alerting "you are rostered" is still
+immediate, because it asks somebody to act and it names their own rows, so it
+is right the moment it is sent.
+
 **Not repeated.** `SessionNotice` already existed with a unique key on
 (session, singer, kind); the two new enum values reuse it, so the once-each
 guarantee came for free with no new table. A notice is written even when the
