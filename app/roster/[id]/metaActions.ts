@@ -10,6 +10,7 @@ const Input = z.object({
   /** "" clears it. */
   categoryId: z.string(),
   topic: z.string().max(200),
+  location: z.string().max(120),
   /** "HH:MM", or "" for none. */
   startsAt: z.string().regex(/^$|^([01]\d|2[0-3]):[0-5]\d$/, "Use a time like 19:00."),
 });
@@ -28,6 +29,7 @@ export async function updateSessionMeta(input: {
   sessionId: string;
   categoryId: string;
   topic: string;
+  location: string;
   startsAt: string;
 }): Promise<{ ok: true } | { ok: false; error: string }> {
   await requireCapability("editSessionNotes");
@@ -36,7 +38,7 @@ export async function updateSessionMeta(input: {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Could not save." };
   }
-  const { sessionId, categoryId, topic, startsAt } = parsed.data;
+  const { sessionId, categoryId, topic, location, startsAt } = parsed.data;
 
   if (categoryId) {
     const exists = await prisma.sessionCategory.count({ where: { id: categoryId } });
@@ -48,6 +50,7 @@ export async function updateSessionMeta(input: {
     data: {
       categoryId: categoryId || null,
       topic: topic.trim() || null,
+      location: location.trim() || null,
       startsAt: startsAt || null,
     },
   });
@@ -112,6 +115,7 @@ const BulkInput = z.object({
   categoryId: z.string().nullish(),
   startsAt: z.string().regex(/^$|^([01]\d|2[0-3]):[0-5]\d$/).nullish(),
   topic: z.string().max(200).nullish(),
+  location: z.string().max(120).nullish(),
 });
 
 /**
@@ -132,6 +136,7 @@ export async function bulkUpdateSessionMeta(input: {
   categoryId?: string | null;
   startsAt?: string | null;
   topic?: string | null;
+  location?: string | null;
 }): Promise<{ ok: true; updated: number; fields: string[] } | { ok: false; error: string }> {
   await requireCapability("editSessionNotes");
 
@@ -159,6 +164,10 @@ export async function bulkUpdateSessionMeta(input: {
   if (v.topic !== undefined && v.topic !== null) {
     data.topic = v.topic.trim() || null;
     fields.push("topic");
+  }
+  if (v.location !== undefined && v.location !== null) {
+    data.location = v.location.trim() || null;
+    fields.push("location");
   }
 
   if (fields.length === 0) return { ok: false, error: "Nothing to change — fill in a field first." };

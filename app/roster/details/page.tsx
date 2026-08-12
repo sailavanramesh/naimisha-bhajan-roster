@@ -38,7 +38,7 @@ export default async function SessionDetailsPage({
   const from = sp.from && ISO.test(sp.from) ? sp.from : null;
   const to = sp.to && ISO.test(sp.to) ? sp.to : null;
 
-  const [rows, categories] = await Promise.all([
+  const [rows, categories, placeRows] = await Promise.all([
     prisma.session.findMany({
       where: {
         ...(from || to
@@ -58,6 +58,7 @@ export default async function SessionDetailsPage({
         date: true,
         startsAt: true,
         topic: true,
+        location: true,
         categoryId: true,
         category: { select: { name: true } },
         _count: { select: { slots: true } },
@@ -67,7 +68,15 @@ export default async function SessionDetailsPage({
       orderBy: [{ order: "asc" }, { name: "asc" }],
       select: { id: true, name: true },
     }),
+    prisma.session.findMany({
+      where: { location: { not: null } },
+      distinct: ["location"],
+      select: { location: true },
+      orderBy: { location: "asc" },
+    }),
   ]);
+
+  const places = placeRows.map((x) => x.location!).filter(Boolean);
 
   const sessions: BulkSession[] = rows.map((s) => {
     const dateISO = s.date.toISOString().slice(0, 10);
@@ -81,6 +90,7 @@ export default async function SessionDetailsPage({
       categoryId: s.categoryId,
       categoryName: s.category?.name ?? null,
       topic: s.topic,
+      location: s.location,
       entries: s._count.slots,
     };
   });
@@ -152,7 +162,7 @@ export default async function SessionDetailsPage({
         </CardHeader>
 
         <CardContent>
-          <BulkMetaPanel sessions={sessions} categories={categories} />
+          <BulkMetaPanel sessions={sessions} categories={categories} places={places} />
         </CardContent>
       </Card>
     </div>
