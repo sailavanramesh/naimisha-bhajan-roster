@@ -296,7 +296,21 @@ export function SessionSingersGrid(props: {
           // their list. "reference" and "predicted" are what the Recommended
           // column already says, more or less, and a second chip repeating it
           // is noise.
-          const useful = pitch && (source === "sung" || source === "list");
+          /*
+           * Three sources are worth a chip, and one is not.
+           *
+           * sung / list  what this person has actually done with this bhajan.
+           * predicted    their own median offset applied to the reference —
+           *              NOT the reference, which is the difference that makes
+           *              it worth showing. Sailavan: "you're already
+           *              calculating it in every bhajan, might as well bring
+           *              it in."
+           * reference    the bare masterlist value, which is exactly what the
+           *              Recommended column beside it already says. A chip
+           *              repeating the number next to it is noise.
+           */
+          const useful =
+            pitch && (source === "sung" || source === "list" || source === "predicted");
           setPitchHint((prev) => ({
             ...prev,
             [key]: useful
@@ -1017,31 +1031,59 @@ export function SessionSingersGrid(props: {
                             already in the field — a chip offering the value
                             you can see is just clutter.
                           */}
-                          {(() => {
-                            const hint =
-                              r.singerId && r.bhajanId
-                                ? pitchHint[hintKey(r.singerId, r.bhajanId)]
-                                : null;
-                            if (!hint || hint.pitch === r.confirmedPitch) return null;
-                            return (
-                              <button
-                                type="button"
-                                onClick={() => pickPitch(r._localId, hint.pitch)}
-                                title={
-                                  hint.source === "list"
+
+                        </div>
+
+                        {/*
+                          The suggestion sits on its own line under the
+                          controls rather than beside them. In the column it
+                          shares with the field, the minus, the plus and
+                          "= rec", it had nowhere to go but onto a second line
+                          mid-chip, which is what made the cell look broken.
+                        */}
+                        {(() => {
+                          const hint =
+                            r.singerId && r.bhajanId
+                              ? pitchHint[hintKey(r.singerId, r.bhajanId)]
+                              : null;
+                          if (!hint || hint.pitch === r.confirmedPitch) return null;
+
+                          const guessed = hint.source === "predicted";
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => pickPitch(r._localId, hint.pitch)}
+                              title={
+                                guessed
+                                  ? `${hint.pitch} — predicted from their own offset. They have not sung this one.`
+                                  : hint.source === "list"
                                     ? `${hint.pitch} — the shruti on their list`
                                     : `${hint.pitch} — sung ${hint.times}\u00d7${hint.lastOn ? `, last ${hint.lastOn}` : ""}`
-                                }
-                                className="inline-flex h-6 items-center gap-1 rounded-[8px] border border-brass/45 bg-brass/[0.08] px-1.5 text-[11px] leading-none text-on-surface hover:border-brass"
-                              >
-                                <span className="font-mono">{hint.pitch}</span>
-                                <span className="text-on-surface-muted">
-                                  {hint.source === "list" ? "list" : `sung${hint.times > 1 ? ` ${hint.times}\u00d7` : ""}`}
-                                </span>
-                              </button>
-                            );
-                          })()}
-                        </div>
+                              }
+                              className={[
+                                /* min-height rather than a fixed one, and a
+                                   tight leading: the column is 168px and a
+                                   long shruti plus a word will sometimes need
+                                   two lines rather than being clipped into
+                                   one. */
+                                "mt-1 inline-flex min-h-6 w-full flex-wrap items-center justify-center gap-x-1.5 rounded-[8px] border px-1.5 py-0.5 text-[11px] leading-tight",
+                                guessed
+                                  ? // Quieter, and dashed: a guess, not a record.
+                                    "border-dashed border-rule-surface bg-field text-on-surface-muted hover:border-brass/50 hover:text-on-surface"
+                                  : "border-brass/45 bg-brass/[0.08] text-on-surface hover:border-brass",
+                              ].join(" ")}
+                            >
+                              <span className="font-mono">{hint.pitch}</span>
+                              <span className={guessed ? "" : "text-on-surface-muted"}>
+                                {guessed
+                                  ? "predicted"
+                                  : hint.source === "list"
+                                    ? "list"
+                                    : `sung${hint.times > 1 ? ` ${hint.times}\u00d7` : ""}`}
+                              </span>
+                            </button>
+                          );
+                        })()}
                       </div>
                     ) : (
                       <div className="whitespace-nowrap text-[14px] font-semibold">{r.confirmedPitch ?? "—"}</div>
