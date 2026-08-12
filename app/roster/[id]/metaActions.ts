@@ -106,6 +106,73 @@ export async function deleteSession(
   return { ok: true, date: session.date.toISOString().slice(0, 10) };
 }
 
+const BulkInput = z.object({
+  sessionIds: z.array(z.string().min(1)).min(1).max(500),
+  /** Absent means leave alone. "" means clear it. */
+  categoryId: z.string().nullish(),
+  startsAt: z.string().regex(/^$|^([01]\d|2[0-3]):[0-5]\d$/).nullish(),
+  topic: z.string().max(200).nullish(),
+});
+
+/**
+ * Set the kind, time or topic on many sessions at once.
+ *
+ * Sailavan is backfilling what kind each of 214 sessions was from records kept
+ * outside the app, and doing that one session at a time is four clicks each.
+ * The sessions themselves are already right — this only touches the labels on
+ * them.
+ *
+ * ABSENT MEANS LEAVE ALONE, and that distinction is the whole design. Setting
+ * the kind on thirty Sundays must not blank thirty topics as a side effect, so
+ * a field that was not filled in is not in the update at all. Clearing is a
+ * separate, explicit choice.
+ */
+export async function bulkUpdateSessionMeta(input: {
+  sessionIds: string[];
+  categoryId?: string | null;
+  startsAt?: string | null;
+  topic?: string | null;
+}): Promise<{ ok: true; updated: number; fields: string[] } | { ok: false; error: string }> {
+  await requireCapability("editSessionNotes");
+
+  const parsed = BulkInput.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Could not save that." };
+  }
+  const v = parsed.data;
+
+  const data: Record<string, string | null> = {};
+  const fields: string[] = [];
+
+  if (v.categoryId !== undefined && v.categoryId !== null) {
+    if (v.categoryId !== "") {
+      const exists = await prisma.sessionCategory.count({ where: { id: v.categoryId } });
+      if (exists === 0) return { ok: false, error: "That category no longer exists." };
+    }
+    data.categoryId = v.categoryId || null;
+    fields.push("kind");
+  }
+  if (v.startsAt !== undefined && v.startsAt !== null) {
+    data.startsAt = v.startsAt || null;
+    fields.push("start time");
+  }
+  if (v.topic !== undefined && v.topic !== null) {
+    data.topic = v.topic.trim() || null;
+    fields.push("topic");
+  }
+
+  if (fields.length === 0) return { ok: false, error: "Nothing to change — fill in a field first." };
+
+  const res = await prisma.session.updateMany({
+    where: { id: { in: v.sessionIds } },
+    data,
+  });
+
+  revalidatePath("/roster/details");
+  revalidatePath("/roster");
+  return { ok: true, updated: res.count, fields };
+}
+
 const CategoryInput = z.object({ name: z.string().trim().min(1).max(60) });
 
 /**
