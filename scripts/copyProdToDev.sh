@@ -84,6 +84,16 @@ echo "Dumping production…"
 pg_dump --no-owner --no-privileges --clean --if-exists "$PROD_URL" > "$DUMP"
 echo "  $(wc -l < "$DUMP") lines"
 
+# Homebrew ships pg_dump 17; the server is PostgreSQL 16. A newer dumper
+# writes settings the older server has never heard of, and psql stops on the
+# first one:
+#
+#   ERROR: unrecognized configuration parameter "transaction_timeout"
+#
+# Dropped by name rather than by loosening ON_ERROR_STOP, which would hide
+# every other error too — and the errors are the reason this is worth running.
+sed -i.bak '/^SET transaction_timeout = /d' "$DUMP" && rm -f "$DUMP.bak"
+
 echo "Restoring into dev…"
 psql "$DEV_URL" -v ON_ERROR_STOP=1 -q -f "$DUMP"
 
