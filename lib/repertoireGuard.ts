@@ -1,6 +1,7 @@
 import { RepertoireKind } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { historyCutoff } from "@/lib/dates";
+import { hasBeenSung, melbourneNowLocal } from "@/lib/sungCutoff";
 
 /**
  * lib/repertoireGuard.ts — the one question every "add to a list" must ask.
@@ -89,11 +90,19 @@ export async function contradiction(
 
   if (!bhajan || kind === RepertoireKind.known) return null;
 
-  const sung = await prisma.sessionSlot.findMany({
+  const rows = await prisma.sessionSlot.findMany({
     where: { singerId, bhajanId: bhajan.id, session: { date: { lte: historyCutoff() } } },
     orderBy: { session: { date: "desc" } },
-    select: { confirmedPitch: true, session: { select: { date: true } } },
+    select: { confirmedPitch: true, session: { select: { date: true, startsAt: true } } },
   });
+
+  // The date filter still admits tonight, and telling somebody they have
+  // already sung this at a session that has not happened is the same lie in a
+  // different window. Two hours after the start, as everywhere else.
+  const nowLocal = melbourneNowLocal();
+  const sung = rows.filter((s) =>
+    hasBeenSung(s.session.date.toISOString().slice(0, 10), s.session.startsAt, nowLocal),
+  );
   if (sung.length === 0) return null;
 
   return {

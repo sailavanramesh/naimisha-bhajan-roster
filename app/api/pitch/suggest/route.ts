@@ -6,6 +6,7 @@ import { suggestPitch } from "@/lib/suggestedPitch";
 import { predictForSinger } from "@/lib/singerProfile";
 import { getPitchLabels, getSingerProfile } from "@/lib/pitchQueries";
 import { historyCutoff } from "@/lib/dates";
+import { hasBeenSung, melbourneNowLocal } from "@/lib/sungCutoff";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,15 +53,23 @@ export async function GET(req: Request) {
       select: { kind: true, preferredPitch: true, isFestival: true },
     }),
     // Only what has actually been sung: a pitch typed while planning a future
-    // session is not evidence of anything (lib/dates.ts, historyCutoff).
+    // session is not evidence of anything (lib/dates.ts, historyCutoff). The
+    // date filter is coarse and still admits tonight, so the two-hour rule
+    // below does the rest (lib/sungCutoff.ts).
     prisma.sessionSlot.findMany({
       where: { singerId, bhajanId, session: { date: { lte: historyCutoff() } } },
       orderBy: { session: { date: "desc" } },
-      select: { confirmedPitch: true, session: { select: { date: true } } },
+      select: { confirmedPitch: true, session: { select: { date: true, startsAt: true } } },
     }),
     getPitchLabels(),
     getSingerProfile(singerId, singer.name),
   ]);
+
+  // Tonight's session is a plan until two hours after it starts.
+  const nowLocal = melbourneNowLocal();
+  const sungRows = sung.filter((s) =>
+    hasBeenSung(s.session.date.toISOString().slice(0, 10), s.session.startsAt, nowLocal),
+  );
 
   const reference =
     singer.gender === Gender.Ladies ? bhajan.referenceLadiesPitch : bhajan.referenceGentsPitch;
@@ -74,12 +83,12 @@ export async function GET(req: Request) {
 
   const suggestion = suggestPitch({
     listPitch: listRow?.preferredPitch ?? null,
-    sungPitches: sung.map((s) => s.confirmedPitch),
+    sungPitches: sungRows.map((s) => s.confirmedPitch),
     predicted: predicted.predicted ? predicted.label : null,
     reference,
   });
 
-  const sungCount = sung.filter((s) => s.confirmedPitch).length;
+  const sungCount = sungRows.filter((s) => s.confirmedPitch).length;
 
   return NextResponse.json({
     singer: { id: singer.id, name: singer.name },
@@ -90,7 +99,7 @@ export async function GET(req: Request) {
       : null,
     sung: {
       times: sungCount,
-      lastOn: sung.find((s) => s.confirmedPitch)?.session.date.toISOString().slice(0, 10) ?? null,
+      lastOn: sungRows.find((s) => s.confirmedPitch)?.session.date.toISOString().slice(0, 10) ?? null,
     },
     suggestion,
     reference: reference ?? null,

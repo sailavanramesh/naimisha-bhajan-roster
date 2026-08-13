@@ -22,8 +22,6 @@ export type LiveSlot = {
   lyrics?: string | null;
 };
 
-export type LiveInstrument = { instrument: string; person: string | null };
-
 /**
  * Everything on a row that is worth noticing a change to — which is all of it.
  *
@@ -59,7 +57,6 @@ export function LiveBoard({
   categoryName,
   categoryImage,
   slots,
-  instruments,
 }: {
   sessionId: string;
   heading: string;
@@ -68,7 +65,6 @@ export function LiveBoard({
   categoryName?: string | null;
   categoryImage?: string | null;
   slots: LiveSlot[];
-  instruments: LiveInstrument[];
 }) {
   const cushions = useMicCushions(sessionId);
   /*
@@ -438,22 +434,6 @@ export function LiveBoard({
             </li>
           ) : null}
         </ol>
-
-        {instruments.length > 0 ? (
-          <section className="mt-5 rounded-[14px] border border-card-edge bg-surface p-4 sm:p-5">
-            <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-on-surface-muted">
-              Instruments
-            </h2>
-            <ul className="flex flex-wrap gap-x-8 gap-y-2">
-              {instruments.map((i, idx) => (
-                <li key={idx} className="text-lg">
-                  <span className="text-on-surface-muted">{i.instrument}</span>{" "}
-                  <span className="font-medium">{i.person ?? "—"}</span>
-                </li>
-              ))}
-            </ul>
-          </section>
-        ) : null}
       </div>
     </div>
 
