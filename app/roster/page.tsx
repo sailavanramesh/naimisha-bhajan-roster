@@ -238,6 +238,12 @@ export default async function RosterPage({
                 { slots: { some: { singer: { name: { contains: q, mode: "insensitive" } } } } },
                 { slots: { some: { bhajanTitle: { contains: q, mode: "insensitive" } } } },
                 { slots: { some: { bhajan: { title: { contains: q, mode: "insensitive" } } } } },
+                // The kind of session, and what it was about. Typing
+                // "festival" should find every festival, which is the fastest
+                // way to answer "what did we do last Guru Purnima".
+                { category: { name: { contains: q, mode: "insensitive" } } },
+                { topic: { contains: q, mode: "insensitive" } },
+                { location: { contains: q, mode: "insensitive" } },
               ],
             }
           : {}),
@@ -272,7 +278,7 @@ export default async function RosterPage({
               <div className="mt-1 text-sm text-on-surface-muted">
                 {view === "calendar"
                   ? "Tap a day to open the session (edit mode will create if missing)."
-                  : "List view. Search + date range available."}
+                  : "List view. Search singers, bhajans, session kinds, places and notes."}
               </div>
             </div>
 
@@ -346,8 +352,8 @@ export default async function RosterPage({
                   <Input
                     name="q"
                     defaultValue={q}
-                    placeholder="Singer, bhajan or notes…"
-                    aria-label="Search singer, bhajan or notes"
+                    placeholder="Singer, bhajan, kind, place or notes…"
+                    aria-label="Search singer, bhajan, kind, place or notes"
                     className="w-full"
                   />
                 </label>
@@ -464,7 +470,7 @@ export default async function RosterPage({
                                 className="h-4 w-4 rounded-full object-cover"
                               />
                             ) : null}
-                            {s.category.name}
+                            <Marked text={s.category.name} query={q} />
                           </span>
                         ) : null}
                         {s.startsAt && s.startsAt !== USUAL_START ? (

@@ -1,0 +1,64 @@
+# The v2 branch goes to dev; main goes to production (azure-deploy.yml).
+#
+# Same build, same runtime, different target — the point of a dev environment
+# is that the only difference is which database and which secrets it points at,
+# so a thing that works there works here.
+name: Deploy to dev
+
+on:
+  push:
+    branches: [v2]
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-dev
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The schema is generated from the checked-in schema.prisma; no database
+      # is contacted at build time.
+      - run: npx prisma generate
+
+      - run: npm run lint
+
+      - run: npx vitest run
+        env:
+          # The offset regression reads the DEV database, which is a copy of
+          # production — the canonical table must still reproduce there.
+          DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+
+      - run: npx next build
+        env:
+          NEXT_TELEMETRY_DISABLED: 1
+
+      - name: Assemble the standalone output
+        run: |
+          cp -r public .next/standalone/public
+          cp -r .next/static .next/standalone/.next/static
+
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: azure/webapps-deploy@v3
+        with:
+          app-name: naimisha-bhajan-roster-dev
+          package: .next/standalone
