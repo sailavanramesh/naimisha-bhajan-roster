@@ -230,8 +230,13 @@ export function SessionSingersGrid(props: {
   );
   const dirty = changes.length > 0;
 
-  /** Where somebody was trying to go when the dialog stopped them. */
-  const [leaveTo, setLeaveTo] = useState<string | null>(null);
+  /**
+   * Where somebody was trying to go when the dialog stopped them — a page, or
+   * backwards, which is not a page and has to be replayed differently.
+   */
+  const [leaveTo, setLeaveTo] = useState<{ kind: "href"; href: string } | { kind: "back" } | null>(
+    null,
+  );
   /** A draft found on the device, waiting to be accepted or thrown away. */
   const [offer, setOffer] = useState<StoredDraft | null>(null);
   /** Rows a restored draft did NOT put back, because somebody else had. */
@@ -351,11 +356,61 @@ export function SessionSingersGrid(props: {
 
       e.preventDefault();
       e.stopPropagation();
-      setLeaveTo(`${url.pathname}${url.search}${url.hash}`);
+      setLeaveTo({ kind: "href", href: `${url.pathname}${url.search}${url.hash}` });
     };
     document.addEventListener("click", onClick, true);
     return () => document.removeEventListener("click", onClick, true);
   }, [dirty]);
+
+  /*
+   * Going BACK — the swipe on a phone, the button on a laptop.
+   *
+   * Back is not a link, so nothing above catches it, and there is no way to
+   * cancel it once it has happened. The only thing that works is to be
+   * standing behind it: while there is unsaved work, one extra history entry
+   * for this same page is pushed, so the first Back lands on that instead of
+   * leaving. The entry is pushed again straight away and the dialog asks.
+   *
+   * Nothing moves on screen — same URL, same page — so somebody who came back
+   * on purpose sees only the question.
+   *
+   * The entry is taken away again the moment there is nothing to lose, so Back
+   * never needs pressing twice on a page that is up to date.
+   */
+  const guardsHistory = useRef(false);
+  useEffect(() => {
+    if (!props.canEdit) return;
+
+    if (!dirty) {
+      if (guardsHistory.current) {
+        guardsHistory.current = false;
+        // Only ours to remove, and only if it is still the entry we are on.
+        if (window.history.state?.__rosterGuard) window.history.back();
+      }
+      return;
+    }
+    if (guardsHistory.current) return;
+
+    guardsHistory.current = true;
+    window.history.pushState(
+      { ...window.history.state, __rosterGuard: true },
+      "",
+      window.location.href,
+    );
+
+    const onPop = () => {
+      if (!guardsHistory.current) return;
+      // Stand behind it again, so a second Back is asked about too.
+      window.history.pushState(
+        { ...window.history.state, __rosterGuard: true },
+        "",
+        window.location.href,
+      );
+      setLeaveTo({ kind: "back" });
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [dirty, props.canEdit]);
 
   /**
    * Put a draft back, without treading on anybody.
@@ -425,9 +480,31 @@ export function SessionSingersGrid(props: {
     setOffer(null);
   }
 
-  function leaveNow(href: string) {
+  function leaveNow(target: { kind: "href"; href: string } | { kind: "back" }) {
     setLeaveTo(null);
-    router.push(href);
+    // Stood down first, so that clearing up after it is never mistaken for
+    // somebody pressing Back again.
+    const wasGuarding = guardsHistory.current;
+    guardsHistory.current = false;
+
+    if (target.kind === "href") {
+      /*
+       * REPLACE, not push, when the guard is up.
+       *
+       * The extra entry the guard added is the one we are standing on, so the
+       * new page takes its place. Pushing instead left it in the stack, and
+       * two things went wrong: the save's own tidying-up called
+       * `history.back()` on it at the same moment as the navigation, so Save
+       * and leave could land back on the session it had just left; and Back
+       * from the new page then needed two presses to get past the session.
+       */
+      if (wasGuarding) router.replace(target.href);
+      else router.push(target.href);
+      return;
+    }
+
+    // Going back for real: over the extra entry, and over the page itself.
+    window.history.go(-2);
   }
 
   /*
@@ -1005,14 +1082,34 @@ export function SessionSingersGrid(props: {
         saving={isPending}
         onStay={() => setLeaveTo(null)}
         onDiscard={() => {
-          const href = leaveTo;
+          const target = leaveTo;
           forgetDraft();
-          if (href) leaveNow(href);
+          // The edits go too — otherwise the draft is written again a moment
+          // later from state that still holds them.
+          setRows((prev) => {
+            const wanted = new Map(baseline.map((r) => [r.id, r]));
+            return prev
+              .filter((r) => wanted.has(r._localId))
+              .map((r) => {
+                const b = wanted.get(r._localId)!;
+                return {
+                  ...r,
+                  singerId: b.singerId,
+                  bhajanId: b.bhajanId,
+                  bhajanTitle: b.bhajanTitle,
+                  festivalBhajanTitle: b.festivalBhajanTitle,
+                  confirmedPitch: b.confirmedPitch,
+                  alternativeTablaPitch: b.alternativeTablaPitch,
+                  _bhajanQuery: b.bhajanTitle ?? b.festivalBhajanTitle ?? "",
+                };
+              });
+          });
+          if (target) leaveNow(target);
         }}
         onSave={() => {
-          const href = leaveTo;
+          const target = leaveTo;
           saveAll(() => {
-            if (href) leaveNow(href);
+            if (target) leaveNow(target);
           });
         }}
       />

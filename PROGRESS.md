@@ -747,12 +747,9 @@ Still genuinely open, none blocking:
     is on the first two. The roster grid is dense and a 24-row ladder per slot
     would overwhelm it; a compact variant is probably wanted, which is a design
     decision rather than a bug.
-14. **Should the phone's BACK gesture be guarded too?** The unsaved-changes
-    dialog catches links; back is a `popstate`, which can only be intercepted
-    by pushing a sentinel history entry and re-pushing it on the way past — a
-    pattern that strands people on a page when it goes wrong. Conservative
-    choice: not guarded. The draft kept on the device makes going back
-    recoverable, which is the outcome that actually matters.
+14. ~~Should the phone's BACK gesture be guarded too?~~ **Done, 2026-08-13.**
+    Sailavan tried it within the hour: back is how you navigate on a phone, so
+    leaving it out was the wrong call. See below.
 
 ### Push notifications — DONE, plus the day-of nudge
 
@@ -972,9 +969,28 @@ Decisions worth keeping:
 - **No autosave.** Saving runs the notification stack — removals, the settled
   announcement — so autosaving would ping the group on every keystroke.
 
-Not covered: the phone's BACK gesture. Intercepting it means pushing history
-entries and re-pushing on popstate, which breaks navigation when it goes wrong.
-The draft makes going back recoverable instead. Logged under OPEN-QUESTIONS.
+**Back is guarded too** (added the same day — Sailavan tried it immediately, and
+on a phone back IS the navigation). While there is unsaved work, one extra
+history entry for the same page is pushed, so the first Back lands on it rather
+than leaving; it is re-pushed and the dialog asks. Nothing moves on screen, and
+the entry is taken away again as soon as there is nothing to lose, so Back never
+needs two presses on a page that is up to date.
+
+Two things that had to be right, both caught by driving it rather than by
+reading it:
+
+- **Leaving by link while the guard is up uses `router.replace`, not `push`.**
+  The extra entry is the one being stood on, so the destination takes its
+  place. Pushing left it behind, and the save's own tidying-up called
+  `history.back()` at the same moment as the navigation — so *Save and leave*
+  could land back on the session it had just left.
+- **Discarding resets the rows to the baseline**, not just the draft. Otherwise
+  the draft is written again a moment later from state that still holds the
+  edits.
+
+Mic cushions are deliberately NOT part of this: they write to the database the
+moment they are tapped (verified — a row appears with no Save pressed), so
+there is never anything unsaved to ask about.
 
 ### The page slid sideways on every phone (found on the way, 2026-08-13)
 
