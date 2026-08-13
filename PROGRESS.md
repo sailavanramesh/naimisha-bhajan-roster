@@ -904,6 +904,33 @@ back. Editable fields are whitelisted in `lib/bhajanFields.ts` — `deity` is
 deliberately absent because it is denormalised into join tables that every
 filter queries, and editing the raw string would leave the two disagreeing.
 
+### Saving twice in a row (fixed 2026-08-13)
+
+Reported as: pressing **Save changes** sometimes gave "An error occurred in the
+Server Components render." Reproduced exactly on the old build — first save
+fine, second save HTTP 500 and that banner, and the second change never
+reached the database.
+
+Two faults, one symptom.
+
+1. **The grid clashed with its own writes.** Its rows live in client state,
+   seeded once by a `useState` initialiser, and each row carries the
+   `updatedAt` it had at page load so a stale tab cannot overwrite somebody's
+   `confirmedPitch`. Nothing gave the grid the NEW stamps after a save, so the
+   second press sent the load-time values and the optimistic-concurrency check
+   correctly refused them. `revalidatePath` does not help: the component stays
+   mounted, so the initialiser never re-runs. A new row also kept its `new_…`
+   id and would have been inserted a second time.
+   `upsertSessionSingerRows` now returns the saved ids and stamps in position
+   order and the grid takes them.
+2. **The refusal never said any of this.** Next replaces the message of
+   anything thrown out of a Server Action in a production build. Refusals are
+   results now (`SaveRowsResult`), not exceptions — the genuine two-people-at-
+   once case shows its real sentence, verified with two browser contexts.
+
+Worth remembering: any Server Action whose failure a person needs to read must
+RETURN the reason. Throwing is for faults nobody can act on.
+
 ### Also worth knowing
 
 - `data/roster.xlsx` was replaced with the newer export from `~/Downloads`
