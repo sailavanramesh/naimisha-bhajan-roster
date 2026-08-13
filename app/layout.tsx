@@ -1,5 +1,4 @@
 import "./globals.css";
-import { Faustina, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { Nav } from "@/components/Nav";
 import { YantraFull } from "@/components/Yantra";
 import Link from "next/link";
@@ -7,32 +6,17 @@ import { headers } from "next/headers";
 import { GoogleSignIn } from "@/components/GoogleSignIn";
 import { getRole, getSignedInSinger, ROLE_LABELS, requireSignIn } from "@/lib/auth";
 
-/**
+/*
  * Three roles, deliberately paired (docs/SPEC.md §6).
  *
  * Faustina carries the transliterated Sanskrit — it has the diacritic coverage
  * and reads as belonging to the tradition rather than to a dashboard.
+ *
+ * They are declared in app/globals.css and served from public/fonts rather
+ * than through next/font/google, which fetched them from fonts.gstatic.com at
+ * build time and failed three deploys in two days when it could not. The CSS
+ * variables are the same names, so nothing downstream noticed.
  */
-const display = Faustina({
-  subsets: ["latin", "latin-ext"],
-  weight: ["500", "600", "700"],
-  variable: "--font-display",
-  display: "swap",
-});
-
-const sans = IBM_Plex_Sans({
-  subsets: ["latin", "latin-ext"],
-  weight: ["400", "500", "600"],
-  variable: "--font-sans",
-  display: "swap",
-});
-
-const mono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-mono",
-  display: "swap",
-});
 
 export const metadata = {
   title: "Naimiṣa Bhajan Roster",
@@ -134,7 +118,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const isAuthRoute = pathname === "/signin" || pathname.startsWith("/api/auth");
   const walled = requireSignIn && role === "viewer" && !isAuthRoute;
   return (
-    <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
+    /* The font variables come from app/globals.css now, not from a class. */
+    <html lang="en">
       <head>
         {/*
           Written by hand because Next 15 emits only the standardised
