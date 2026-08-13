@@ -576,3 +576,65 @@ input[type="date"][data-empty="true"] {
     background-color: rgb(var(--brass) / 0);
   }
 }
+
+/*
+  The "more below" arrow on the live view.
+
+  Two states. Idle it simply arrives — a short fade and rise, once, so the eye
+  catches that something appeared without anything continuing to move on a
+  screen people are reading pitches off.
+*/
+@keyframes live-more-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.live-more {
+  animation: live-more-in 400ms ease-out 1;
+}
+
+/*
+  The other state: a row changed or was added below the fold. This one keeps
+  going, which is the exception to everything else on this screen — the ring on
+  a changed row lasts six seconds because it is aimed at a row you can see, and
+  a row you cannot see has to keep asking until somebody scrolls down to it. It
+  stops the instant that row's top edge comes into view.
+*/
+@keyframes live-more-nudge {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    box-shadow: 0 0 0 0 rgb(var(--brass) / 0.35);
+  }
+  75% {
+    transform: translateY(3px);
+    box-shadow: 0 0 0 5px rgb(var(--brass) / 0);
+  }
+  85% {
+    transform: translateY(0);
+    box-shadow: 0 0 0 0 rgb(var(--brass) / 0.35);
+  }
+}
+
+.live-more-unseen {
+  animation: live-more-nudge 2.6s ease-in-out infinite;
+}
+
+/*
+  Less motion still gets told, the same way the changed row does: a steady
+  brass halo instead of a bob. It does not fade, because unlike the row ring
+  this mark has to survive until the row is looked at.
+*/
+@media (prefers-reduced-motion: reduce) {
+  .live-more-unseen {
+    animation: none;
+    box-shadow: 0 0 0 4px rgb(var(--brass) / 0.4);
+  }
+}

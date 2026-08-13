@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DeitySymbols } from "@/components/DeitySymbol";
 import { useMicCushions, cushionTint } from "@/components/MicCushions";
 import { useSessionVersion } from "@/components/useSessionVersion";
+import { hasMoreBelow, isRowSeen, movedRows } from "@/lib/liveBoard";
 import { MIC_COLOURS } from "@/lib/micCushion";
 
 export type LiveSlot = {
@@ -108,6 +109,76 @@ export function LiveBoard({
   const nonce = useRef(0);
   const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
+  /*
+   * The scrolling part of the board, and whether there is anything under the
+   * bottom edge of it.
+   *
+   * A long Sunday or festival session does not fit on one screen, and until now
+   * nothing said so: the list simply ended at the edge of the glass. Sailavan,
+   * on a stand in the hall — "otherwise we may not know".
+   */
+  const scroller = useRef<HTMLDivElement | null>(null);
+  const [more, setMore] = useState(false);
+
+  /*
+   * Rows that have changed while out of sight, held until they are actually
+   * looked at.
+   *
+   * Deliberately NOT tied to the six-second ring. A ring is for a row you can
+   * see; a row below the fold has to keep saying so until somebody scrolls to
+   * it, however long that takes. So this is a ref that measure() prunes as
+   * rows come into view, rather than something a timer clears.
+   */
+  const unseen = useRef<Set<number>>(new Set());
+  const [unseenBelow, setUnseenBelow] = useState(false);
+
+  /**
+   * Is there more below, and is any of it something that just changed?
+   *
+   * Rectangles rather than offsetTop: the cards' offsetParent is the fixed
+   * root, not the scroller, so the two are only accidentally in the same
+   * coordinate space and one day would not be.
+   */
+  const measure = useCallback(() => {
+    const el = scroller.current;
+    if (!el) return;
+
+    setMore(hasMoreBelow(el));
+
+    const box = el.getBoundingClientRect();
+    for (const position of [...unseen.current]) {
+      const row = el.querySelector<HTMLElement>(`[data-position="${position}"]`);
+      // Gone from the running order entirely — nothing left to go and look at.
+      if (!row) {
+        unseen.current.delete(position);
+        continue;
+      }
+      if (isRowSeen(row.getBoundingClientRect().top, box.bottom)) unseen.current.delete(position);
+    }
+    setUnseenBelow(unseen.current.size > 0);
+  }, []);
+
+  useEffect(() => {
+    const el = scroller.current;
+    if (!el) return;
+    measure();
+    el.addEventListener("scroll", measure, { passive: true });
+    /*
+     * Two observers, because the two things that change are different. The
+     * scroller resizes when the phone turns or Chrome's address bar slides
+     * away; the list inside it grows when a row is added and the scroller
+     * itself never changes size at all.
+     */
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    const list = el.firstElementChild;
+    if (list) ro.observe(list);
+    return () => {
+      el.removeEventListener("scroll", measure);
+      ro.disconnect();
+    };
+  }, [measure]);
+
   useEffect(() => {
     const now = new Map(
       slots.map((s) => [
@@ -137,10 +208,20 @@ export function LiveBoard({
     seen.current = now;
     if (!before) return;
 
-    const moved = [...now.entries()]
-      .filter(([position, sig]) => before.has(position) && before.get(position) !== sig)
-      .map(([position]) => position);
+    /*
+     * An ADDED row counts as a change too — see movedRows.
+     *
+     * This used to require `before.has(position)`, so a bhajan added while the
+     * board was up arrived in total silence: the one kind of change you would
+     * think hardest to miss. The first-render guard above is what makes it
+     * safe: at open, `before` is null and we return before getting here, so
+     * arriving at a session does not ring all four rows.
+     */
+    const moved = movedRows(before, now);
     if (moved.length === 0) return;
+
+    // Assume unseen; measure() clears the ones that are on screen right now.
+    for (const position of moved) unseen.current.add(position);
 
     nonce.current += 1;
     const mine = nonce.current;
@@ -187,6 +268,14 @@ export function LiveBoard({
       running.clear();
     };
   }, []);
+
+  /*
+   * Re-measure once the DOM has caught up with a new running order. The
+   * observers cover a list that changed HEIGHT; this covers the rest — a row
+   * swapped for another of the same size, and the freshly-marked unseen set
+   * needing its first prune against what is actually on screen.
+   */
+  useEffect(measure, [slots, changed, measure]);
   /** Which card's words are open, by position. Null for none. */
   const [words, setWords] = useState<number | null>(null);
   const openSlot = words === null ? null : (slots.find((s) => s.position === words) ?? null);
@@ -304,7 +393,12 @@ export function LiveBoard({
         )}
       </aside>
 
-      <div className="flex min-w-0 flex-1 flex-col overflow-auto px-3 py-3 sm:px-5 sm:py-4">
+      {/* scroll-smooth in CSS rather than behavior:"smooth" in the scrollBy
+          call, so the global prefers-reduced-motion rule can turn it off. */}
+      <div
+        ref={scroller}
+        className="flex min-w-0 flex-1 scroll-smooth flex-col overflow-auto px-3 py-3 sm:px-5 sm:py-4"
+      >
         <ol className={`flex min-h-0 flex-col gap-2.5 ${roomy ? "flex-1" : ""}`}>
           {slots.map((s) => {
             const tint = cushionTint(cushions.get(s.singerId ?? "")?.colour ?? null);
@@ -319,6 +413,8 @@ export function LiveBoard({
                   state, so remounting costs nothing.
                 */
                 key={`${s.position}:${changed.get(s.position) ?? 0}`}
+                // How measure() finds a row to ask whether it is on screen.
+                data-position={s.position}
                 /*
                   min-h-fit matters more than flex-1 does. A card may GROW to
                   share the screen, but it must never shrink below its own
@@ -435,6 +531,55 @@ export function LiveBoard({
           ) : null}
         </ol>
       </div>
+
+      {/*
+        There is more below.
+
+        Discrete on purpose — a small ringed arrow at the bottom right, the
+        corner a thumb already rests on, and gone the moment the list ends. It
+        is a BUTTON rather than a decoration because on a stand at arm's length
+        the arrow is also the easiest place to press to see what it is pointing
+        at, and because the alternative fails the keyboard.
+
+        It brightens and nudges when a row has changed or been added out of
+        sight. That is the case Sailavan guessed it would cover: the ring on a
+        changed row is no use at all if the row is under the bottom edge, and
+        the arrow is the only thing on screen that can say "down there".
+      */}
+      {more ? (
+        <button
+          type="button"
+          onClick={() => {
+            const el = scroller.current;
+            // Not a whole screen: leaving a sliver of the last card visible is
+            // what tells you the two views are the same list.
+            el?.scrollBy({ top: Math.round(el.clientHeight * 0.85) });
+          }}
+          aria-label={
+            unseenBelow
+              ? "More bhajans below, including one that has just changed. Scroll down."
+              : "More bhajans below. Scroll down."
+          }
+          title={unseenBelow ? "Something changed below" : "More below"}
+          className={[
+            /*
+              Tucked right into the corner, and small. Cards run the full width
+              and put the singer's name at their bottom right, so anything
+              bigger or further in starts covering a name — and the only card it
+              can ever sit over is the one already cut in half by the bottom
+              edge, which is the card the arrow is there to talk about.
+            */
+            "absolute bottom-2 right-2 z-10 inline-flex h-8 w-8 items-center justify-center",
+            "rounded-full border bg-surface/80 text-lg leading-none backdrop-blur-sm",
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brass/70",
+            unseenBelow
+              ? "live-more-unseen border-brass/70 text-brass"
+              : "live-more border-rule text-on-surface-muted hover:border-brass/50 hover:text-on-surface",
+          ].join(" ")}
+        >
+          <span aria-hidden>↓</span>
+        </button>
+      ) : null}
     </div>
 
       {/*
