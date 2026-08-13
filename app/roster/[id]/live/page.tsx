@@ -35,6 +35,7 @@ export default async function LiveSessionPage({
   const session = await prisma.session.findUnique({
     where: { id: sessionId },
     include: {
+      category: { select: { name: true, image: true } },
       slots: {
         include: {
           singer: true,
@@ -100,6 +101,8 @@ export default async function LiveSessionPage({
       sessionId={session.id}
       heading={heading}
       subheading={subheading}
+      categoryName={session.category?.name ?? null}
+      categoryImage={session.category?.image ?? null}
       slots={slots}
       instruments={session.instruments.map((i) => ({
         instrument: i.instrument,

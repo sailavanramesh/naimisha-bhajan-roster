@@ -52,12 +52,17 @@ export function LiveBoard({
   sessionId,
   heading,
   subheading,
+  categoryName,
+  categoryImage,
   slots,
   instruments,
 }: {
   sessionId: string;
   heading: string;
   subheading: string;
+  /** The kind of session, shown as a mark at the foot of the rail. */
+  categoryName?: string | null;
+  categoryImage?: string | null;
   slots: LiveSlot[];
   instruments: LiveInstrument[];
 }) {
@@ -197,7 +202,27 @@ export function LiveBoard({
           </p>
         </div>
 
-        <span aria-hidden className="h-7 w-7" />
+        {/*
+          The session's kind, at the foot of the rail.
+          
+          It balances the exit button at the top, so the rail reads as a
+          deliberate column rather than a control with space under it — and it
+          is the one place on this screen where something decorative costs
+          nothing, because the cards own the rest and nobody reads the rail
+          twice. The name is in the tooltip rather than on screen: at 36px wide
+          there is no honest way to show it, and the picture is the point.
+        */}
+        {categoryImage ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img
+            src={categoryImage}
+            alt=""
+            title={categoryName ?? undefined}
+            className="h-7 w-7 rounded-full border border-rule object-cover opacity-90"
+          />
+        ) : (
+          <span aria-hidden className="h-7 w-7" />
+        )}
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col overflow-auto px-3 py-3 sm:px-5 sm:py-4">
