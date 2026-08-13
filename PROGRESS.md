@@ -747,6 +747,9 @@ Still genuinely open, none blocking:
     is on the first two. The roster grid is dense and a 24-row ladder per slot
     would overwhelm it; a compact variant is probably wanted, which is a design
     decision rather than a bug.
+14. ~~Should the phone's BACK gesture be guarded too?~~ **Done, 2026-08-13.**
+    Sailavan tried it within the hour: back is how you navigate on a phone, so
+    leaving it out was the wrong call. See below.
 
 ### Push notifications — DONE, plus the day-of nudge
 
@@ -903,6 +906,149 @@ correcting a correction does not lose the original, and any field can be put
 back. Editable fields are whitelisted in `lib/bhajanFields.ts` — `deity` is
 deliberately absent because it is denormalised into join tables that every
 filter queries, and editing the raw string would leave the two disagreeing.
+
+### Saving twice in a row (fixed 2026-08-13)
+
+Reported as: pressing **Save changes** sometimes gave "An error occurred in the
+Server Components render." Reproduced exactly on the old build — first save
+fine, second save HTTP 500 and that banner, and the second change never
+reached the database.
+
+Two faults, one symptom.
+
+1. **The grid clashed with its own writes.** Its rows live in client state,
+   seeded once by a `useState` initialiser, and each row carries the
+   `updatedAt` it had at page load so a stale tab cannot overwrite somebody's
+   `confirmedPitch`. Nothing gave the grid the NEW stamps after a save, so the
+   second press sent the load-time values and the optimistic-concurrency check
+   correctly refused them. `revalidatePath` does not help: the component stays
+   mounted, so the initialiser never re-runs. A new row also kept its `new_…`
+   id and would have been inserted a second time.
+   `upsertSessionSingerRows` now returns the saved ids and stamps in position
+   order and the grid takes them.
+2. **The refusal never said any of this.** Next replaces the message of
+   anything thrown out of a Server Action in a production build. Refusals are
+   results now (`SaveRowsResult`), not exceptions — the genuine two-people-at-
+   once case shows its real sentence, verified with two browser contexts.
+
+Worth remembering: any Server Action whose failure a person needs to read must
+RETURN the reason. Throwing is for faults nobody can act on.
+
+### Unsaved work in the roster grid (2026-08-13)
+
+Sailavan asked whether leaving a page with unsaved edits should ask first, and
+show what those edits are. It should — but a dialog alone answers the least
+important third of the problem, so this is three mechanisms:
+
+| How the work gets lost | What now happens |
+|---|---|
+| A link inside the app | Our own dialog, listing every change, with Save / Discard / Stay |
+| Closing or reloading the tab | The browser's generic prompt. Its wording is not ours to set and it cannot offer a Save button |
+| The phone locking, Safari dropping the tab | Nothing fires at all — so the edits are on the device, and offered back on return |
+
+The third is the likeliest one in a hall and the only one no dialog can help
+with. `lib/rosterDraft.ts` holds all of it as pure functions; 29 tests.
+
+Decisions worth keeping:
+
+- **The draft stores what it was edited FROM**, not just the edits. Without
+  that, a stale draft is indistinguishable from somebody else's newer save —
+  both merely differ from what is on screen — and restoring reinstates an old
+  pitch over a fresh one. The first version did exactly that and the browser
+  test caught it. A draft without that record is refused rather than guessed at.
+- **A row the draft changed AND somebody else has since saved keeps the saved
+  version**, and says what the draft wanted. CLAUDE.md rule 6: a confirmedPitch
+  exists nowhere else.
+- **A tabla that merely followed its pitch is not a second change.** Tabla
+  pitch is Sa + 7 semitones, so one edit was reading as "2 unsaved changes",
+  which makes the count worthless. `describeChanges` takes the app's own
+  pitch→tabla map and stays silent when the tabla simply followed.
+- **Read the draft before writing it.** A page opens with nothing unsaved, so
+  the writer's first act would otherwise be to clear the draft it was meant to
+  offer. The effects are ordered deliberately.
+- **No autosave.** Saving runs the notification stack — removals, the settled
+  announcement — so autosaving would ping the group on every keystroke.
+
+**Back is guarded too** (added the same day — Sailavan tried it immediately, and
+on a phone back IS the navigation). While there is unsaved work, one extra
+history entry for the same page is pushed, so the first Back lands on it rather
+than leaving; it is re-pushed and the dialog asks. Nothing moves on screen, and
+the entry is taken away again as soon as there is nothing to lose, so Back never
+needs two presses on a page that is up to date.
+
+Two things that had to be right, both caught by driving it rather than by
+reading it:
+
+- **Leaving by link while the guard is up uses `router.replace`, not `push`.**
+  The extra entry is the one being stood on, so the destination takes its
+  place. Pushing left it behind, and the save's own tidying-up called
+  `history.back()` at the same moment as the navigation — so *Save and leave*
+  could land back on the session it had just left.
+- **Discarding resets the rows to the baseline**, not just the draft. Otherwise
+  the draft is written again a moment later from state that still holds the
+  edits.
+
+Mic cushions are deliberately NOT part of this: they write to the database the
+moment they are tapped (verified — a row appears with no Save pressed), so
+there is never anything unsaved to ask about.
+
+### The page slid sideways on every phone (found on the way, 2026-08-13)
+
+At 375px the document was 404px wide, so every screen drifted under the thumb —
+and `position: fixed` is placed against that wider viewport, which is how a
+centred dialog ends up half off screen.
+
+Two `min-width: auto` defaults, which is what a flex or grid child gets unless
+told otherwise: `app/layout.tsx`'s content column, and `Card` itself. Neither
+would shrink below the widest thing inside it — the roster table declares
+`min-w-[720px]` on purpose — so instead of the table scrolling in its own box,
+the page grew. `min-w-0` on both. Measured 404 → 392 → 375, and desktop is
+unchanged.
+
+### What kind of session, in the calendar (2026-08-13)
+
+Sailavan: "in calendar view, when there is a session, can we have the session
+type badge show on that date rather than the purple line, or along with it?"
+
+Along with it, because the two say different things: the bar says how FULL a
+day is (and how many sessions it holds), the mark says what KIND of thing it
+is. Dropping the bar would lose the first question to answer the second.
+
+A cell is ~40px wide on a phone, so the mark is the kind's own picture — the
+same conclusion the live view's rail reached — with the name in the tooltip. On
+`sm` and wider there is room for the name on its own line under the date, so it
+gets one. Kinds with no picture show two letters instead ("Routine Thursday" →
+RT), which keeps every categorised day recognisable.
+
+**The pictures are not inlined.** They live in the database as data URLs of
+17–68KB; a month can hold fifty sessions, and 49 of them are currently the same
+kind. So `app/api/session-kinds/[id]/image` serves them as ordinary cacheable
+files, stamped with the kind's `updatedAt` and marked immutable for a year — a
+changed picture is a new URL. The calendar carries ids only. Measured: a month
+with ten categorised sessions across four kinds makes **four** image requests,
+and none at all on a second visit.
+
+Sessions of the same kind on one day collapse to a single mark with a count;
+past two kinds it says "+N" rather than dropping any silently. Logic is pure in
+`lib/categoryMark.ts`, 25 tests.
+
+**The purple bar is gone** (same day, on seeing it): with a picture and a name
+in the cell as well, three things were competing for forty pixels — "looks
+congested", and it was. Sailavan chose to move fullness into the cell's own
+background, so nothing is added to the cell at all: the day deepens as it fills
+(1–3, 4–7, 8+ — the steps the bar used), and a month reads as a pattern.
+
+The wash is an overlay rather than a background class, so `hover:bg-panel-hover`
+still shows through and the cell keeps feeling like a button.
+
+One thing the bar did that a wash cannot: it showed a session that EXISTS but
+has nobody on it — no wash and no session look the same. That day is the one a
+coordinator is hunting for, so the date itself carries it: brass, semibold,
+dotted underline. Verified by staging such a session on a future date, since
+the empty ones were all deleted from the data.
+
+Two sessions in a day used to be two bars. The name line now carries "×2", so
+a morning and an evening of the same kind still read as two.
 
 ### Also worth knowing
 

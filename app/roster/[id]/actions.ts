@@ -36,11 +36,30 @@ export type SingerRowInput = {
   updatedAt?: string | null;
 };
 
-/*
- * A "use server" file may only export async functions, so the concurrent-edit
- * case is signalled with a plain Error. The message is what the grid shows, so
- * it is written for the person reading it, not for a log.
+/**
+ * What a save gives back.
+ *
+ * A refusal is a RESULT, never a thrown error. Next strips the message from
+ * anything thrown out of a Server Action in a production build and replaces it
+ * with "An error occurred in the Server Components render…", so throwing meant
+ * the careful sentence explaining what happened never reached anybody — the one
+ * situation where the explanation matters most.
+ *
+ * On success it returns the saved rows' stamps in position order. The grid
+ * holds its rows in local state seeded once, so without these it would keep
+ * sending the `updatedAt` values the page loaded with and the SECOND save in a
+ * row would collide with the first one's own writes.
  */
+export type SaveRowsResult =
+  | { ok: true; stamps: { id: string; updatedAt: string }[] }
+  | { ok: false; error: string };
+
+/**
+ * A refusal raised inside the transaction, so it rolls back, and turned into a
+ * result outside it. Not exported: a "use server" file may only export async
+ * functions.
+ */
+class Refusal extends Error {}
 
 export async function updateSessionNotes(sessionId: string, notes: string) {
   await requireCapability("editSessionNotes");
@@ -98,7 +117,10 @@ export async function deleteSingerRow(id: string) {
  * not a permission. A member's payload is reduced to the bhajan fields and the
  * existing singer is preserved, so a crafted POST cannot reassign anybody.
  */
-export async function upsertSessionSingerRows(sessionId: string, rows: SingerRowInput[]) {
+export async function upsertSessionSingerRows(
+  sessionId: string,
+  rows: SingerRowInput[],
+): Promise<SaveRowsResult> {
   const role = await requireCapability("editSlotBhajan");
   // Read before the transaction: saving the grid is also how somebody gets
   // swapped out of a row, which is a removal with no delete anywhere.
@@ -126,16 +148,20 @@ export async function upsertSessionSingerRows(sessionId: string, rows: SingerRow
       });
 
     if (rows.length !== existing.length) {
-      throw new Error(
-        "Members can change which bhajan is in a slot, but not add, remove or " +
+      return {
+        ok: false,
+        error:
+          "Members can change which bhajan is in a slot, but not add, remove or " +
           "reorder slots. Ask an editor for those.",
-      );
+      };
     }
     // Preserve the existing order: a member reordering would move singers.
     rows.sort((a, b) => (byId.get(a.id as string)!.position) - (byId.get(b.id as string)!.position));
   }
 
-  await prisma.$transaction(async (tx) => {
+  // `.then/.catch` rather than a `try` block around the whole transaction, so
+  // the body below keeps its indentation and stays readable.
+  const refusal = await prisma.$transaction(async (tx) => {
     const existingIds = rows
       .filter((r) => r.id && !String(r.id).startsWith("new_"))
       .map((r) => r.id as string);
@@ -166,7 +192,7 @@ export async function upsertSessionSingerRows(sessionId: string, rows: SingerRow
       });
       for (const p of proposed) {
         const reason = rosterBlockReason(p);
-        if (reason) throw new Error(reason);
+        if (reason) throw new Refusal(reason);
       }
     }
 
@@ -186,7 +212,7 @@ export async function upsertSessionSingerRows(sessionId: string, rows: SingerRow
         return seen !== new Date(r.updatedAt as string).getTime();
       });
       if (clashed.length > 0) {
-        throw new Error(
+        throw new Refusal(
           `Somebody else saved this session while you had it open, so nothing was ` +
             `written — your changes are still on screen. Open the session again in a ` +
             `new tab to see theirs, then re-apply yours.`,
@@ -252,6 +278,26 @@ export async function upsertSessionSingerRows(sessionId: string, rows: SingerRow
       next += 1;
       await tx.sessionSlot.update({ where: { id: s.id }, data: { position: next } });
     }
+  })
+    .then(() => null)
+    .catch((e) => {
+      if (e instanceof Refusal) return e.message;
+      throw e;
+    });
+
+  if (refusal) return { ok: false, error: refusal };
+
+  /*
+   * The stamps the grid needs to save again without reloading.
+   *
+   * Positions 1…rows.length are this save's rows, in the order they were sent;
+   * anything beyond that is a stranded row parked above them, which the grid
+   * is not showing.
+   */
+  const saved = await prisma.sessionSlot.findMany({
+    where: { sessionId, position: { gt: 0, lte: rows.length } },
+    orderBy: { position: "asc" },
+    select: { id: true, updatedAt: true },
   });
 
   // Saving the grid can be the moment somebody is first rostered — or the
@@ -267,4 +313,9 @@ export async function upsertSessionSingerRows(sessionId: string, rows: SingerRow
   await recordSungAsKnown(sessionId);
 
   revalidatePath(`/roster/${sessionId}`);
+
+  return {
+    ok: true,
+    stamps: saved.map((s) => ({ id: s.id, updatedAt: s.updatedAt.toISOString() })),
+  };
 }

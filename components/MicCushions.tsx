@@ -23,6 +23,15 @@ export type CushionController = {
   set: (singerId: string, colour: MicColourValue | null) => void;
   isPending: (singerId: string) => boolean;
   failed: string | null;
+  /**
+   * True once the first poll has come back, successfully or not.
+   *
+   * The map starts empty and fills a moment later, so anything comparing
+   * "before" with "now" sees that first fill as a change. On the live view
+   * that meant every row with a cushion rang the moment the board opened —
+   * which is the one time nothing has changed at all.
+   */
+  ready: boolean;
 };
 
 /**
@@ -37,6 +46,7 @@ export type CushionController = {
 export function useMicCushions(sessionId: string): CushionController {
   const [map, setMap] = useState<CushionMap>(() => new Map());
   const [failed, setFailed] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
   /*
    * A ref, not state: the polling loop must read the CURRENT pending set at
    * the moment a response lands. Held in state it would be captured stale by
@@ -60,12 +70,15 @@ export function useMicCushions(sessionId: string): CushionController {
             if (!stopped) {
               setMap((cur) => mergeCushions(cur, data.cushions, pending.current));
               setFailed(null);
+              setReady(true);
             }
           } else {
             delay = BACKOFF_MS;
+            if (!stopped) setReady(true);
           }
         } catch {
           delay = BACKOFF_MS;
+          if (!stopped) setReady(true);
         }
       }
 
@@ -131,6 +144,7 @@ export function useMicCushions(sessionId: string): CushionController {
     set,
     isPending: (singerId: string) => pending.current.has(singerId),
     failed,
+    ready,
   };
 }
 

@@ -47,6 +47,7 @@ type DayRow = { singer: string; bhajan: string | null; pitch: string | null };
 type DaySession = {
   id: string;
   startsAt: string | null;
+  categoryId: string | null;
   categoryName: string | null;
   entries: number;
   rows: DayRow[];
@@ -69,6 +70,7 @@ export async function GET(req: NextRequest) {
       id: true,
       date: true,
       startsAt: true,
+      categoryId: true,
       category: { select: { name: true } },
       _count: { select: { slots: true } },
       slots: {
@@ -102,6 +104,7 @@ export async function GET(req: NextRequest) {
     const value: DaySession = {
       id: s.id,
       startsAt: s.startsAt,
+      categoryId: s.categoryId ?? null,
       categoryName: s.category?.name ?? null,
       entries: s._count.slots ?? 0,
       rows: s.slots.map((x) => ({

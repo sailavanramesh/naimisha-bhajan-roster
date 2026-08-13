@@ -1,5 +1,4 @@
 import "./globals.css";
-import { Faustina, IBM_Plex_Sans, IBM_Plex_Mono } from "next/font/google";
 import { Nav } from "@/components/Nav";
 import { YantraFull } from "@/components/Yantra";
 import Link from "next/link";
@@ -7,42 +6,46 @@ import { headers } from "next/headers";
 import { GoogleSignIn } from "@/components/GoogleSignIn";
 import { getRole, getSignedInSinger, ROLE_LABELS, requireSignIn } from "@/lib/auth";
 
-/**
+/*
  * Three roles, deliberately paired (docs/SPEC.md §6).
  *
  * Faustina carries the transliterated Sanskrit — it has the diacritic coverage
  * and reads as belonging to the tradition rather than to a dashboard.
+ *
+ * They are declared in app/globals.css and served from public/fonts rather
+ * than through next/font/google, which fetched them from fonts.gstatic.com at
+ * build time and failed three deploys in two days when it could not. The CSS
+ * variables are the same names, so nothing downstream noticed.
  */
-const display = Faustina({
-  subsets: ["latin", "latin-ext"],
-  weight: ["500", "600", "700"],
-  variable: "--font-display",
-  display: "swap",
-});
 
-const sans = IBM_Plex_Sans({
-  subsets: ["latin", "latin-ext"],
-  weight: ["400", "500", "600"],
-  variable: "--font-sans",
-  display: "swap",
-});
-
-const mono = IBM_Plex_Mono({
-  subsets: ["latin"],
-  weight: ["400", "500", "600"],
-  variable: "--font-mono",
-  display: "swap",
-});
+/*
+ * Dev is a different app, and says so everywhere it is seen.
+ *
+ * Home Screen icons, and — the one that caught Sailavan out — the LINK
+ * PREVIEW. Sending both URLs into the same WhatsApp thread produced two
+ * identical cards: same mark, same title, same line of description, with only
+ * the hostname to tell them apart, in the smallest text on the card.
+ *
+ * A preview is read at a glance by somebody deciding which to tap, so the
+ * three things it shows all change: the picture, the title and the line under
+ * it.
+ */
+const IS_DEV = process.env.APP_ENV === "dev";
+const ICONS = IS_DEV ? "/icons/dev" : "/icons";
+const APP_TITLE = IS_DEV ? "Naimiṣa Bhajan Roster (DEV)" : "Naimiṣa Bhajan Roster";
+const APP_BLURB = IS_DEV
+  ? "Test copy — not the live roster. Changes here reach nobody."
+  : "Bhajan suggestions, rostering and pitch for Naimisha";
 
 export const metadata = {
-  title: "Naimiṣa Bhajan Roster",
+  title: APP_TITLE,
   /*
     This is what a shared link previews as — WhatsApp and the rest read it from
     <meta name="description">, which Next renders from here. Kept in step with
     app/manifest.ts, which carries the same line for the installed app.
   */
-  description: "Bhajan suggestions, rostering and pitch for Naimisha",
-  applicationName: "Naimiṣa Roster",
+  description: APP_BLURB,
+  applicationName: IS_DEV ? "Naimiṣa DEV" : "Naimiṣa Roster",
   /*
     Without this, Next resolves og:image against "http://localhost:3000" and a
     scraper is handed an image it cannot fetch — the preview then falls back to
@@ -69,22 +72,37 @@ export const metadata = {
     fall back to the bare URL.
   */
   openGraph: {
-    title: "Naimiṣa Bhajan Roster",
-    description: "Bhajan suggestions, rostering and pitch for Naimisha",
+    title: APP_TITLE,
+    description: APP_BLURB,
     type: "website",
-    siteName: "Naimiṣa Bhajan Roster",
+    siteName: APP_TITLE,
+    /*
+      Named explicitly for BOTH, from public/, rather than relying on the
+      app/opengraph-image.png filename convention — that convention wins over
+      anything set here, so while it existed the dev card kept the production
+      picture however the metadata was written.
+    */
+    images: [
+      { url: IS_DEV ? "/og-dev.png" : "/og.png", width: 1200, height: 630, type: "image/png" },
+    ],
   },
   twitter: {
     card: "summary_large_image" as const,
-    title: "Naimiṣa Bhajan Roster",
-    description: "Bhajan suggestions, rostering and pitch for Naimisha",
+    title: APP_TITLE,
+    description: APP_BLURB,
+    images: [IS_DEV ? "/og-dev.png" : "/og.png"],
   },
+  /*
+    Dev points at its own set — see app/manifest.ts. The apple entry is the
+    one that decides what an iPhone puts on the Home Screen; iOS reads it when
+    the shortcut is created and never again.
+  */
   icons: {
     icon: [
-      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+      { url: `${ICONS}/icon-192.png`, sizes: "192x192", type: "image/png" },
+      { url: `${ICONS}/icon-512.png`, sizes: "512x512", type: "image/png" },
     ],
-    apple: "/icons/apple-touch-icon.png",
+    apple: `${ICONS}/apple-touch-icon.png`,
   },
 };
 
@@ -134,7 +152,8 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   const isAuthRoute = pathname === "/signin" || pathname.startsWith("/api/auth");
   const walled = requireSignIn && role === "viewer" && !isAuthRoute;
   return (
-    <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
+    /* The font variables come from app/globals.css now, not from a class. */
+    <html lang="en">
       <head>
         {/*
           Written by hand because Next 15 emits only the standardised
@@ -158,7 +177,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <div className="flex min-h-screen">
           <Nav role={role} isDev={isDev} />
 
-          <div className="flex-1">
+          {/*
+            min-w-0, and it matters more than it looks.
+
+            A flex child defaults to `min-width: auto`, which means it refuses
+            to be narrower than its own content. The roster table declares
+            min-w-[720px] — deliberately, so its columns stay usable — and
+            scrolls inside its own overflow-x-auto box. But that box could not
+            shrink below the table while this column would not shrink either,
+            so at 375px the whole PAGE became 404px wide and every screen
+            drifted sideways under the thumb. Fixed-position things are placed
+            against that wider viewport too, which is how a centred dialog ends
+            up half off the screen on a phone.
+          */}
+          <div className="min-w-0 flex-1">
             <div className="mx-auto max-w-6xl px-3 pb-16 pt-14 sm:px-6 sm:pt-8">
               <header className="no-print mb-6">
                 <div className="flex items-center gap-4 border-b border-rule pb-4">

@@ -25,14 +25,18 @@ export type LiveSlot = {
 export type LiveInstrument = { instrument: string; person: string | null };
 
 /**
- * Everything on a row that is worth noticing a change to.
+ * Everything on a row that is worth noticing a change to — which is all of it.
  *
- * The mic cushion is deliberately absent: it has its own live colour and
- * changes far more often, and ringing the row every time somebody swaps a
- * cushion would make the ring mean nothing.
+ * The mic cushion was left out at first, on the reasoning that it has its own
+ * live colour and changes often enough that ringing the row each time would
+ * wear the ring out. Sailavan wanted it in, and he is the one at the desk:
+ * from there a cushion swap is exactly the kind of change you need to catch,
+ * and the person who made it is standing in the same hall.
  */
-function rowSignature(s: LiveSlot): string {
-  return [s.singerName, s.bhajanTitle, s.confirmedPitch, s.tablaPitch, s.raga].join("\u0000");
+function rowSignature(s: LiveSlot, cushion: string | null): string {
+  return [s.singerName, s.bhajanTitle, s.confirmedPitch, s.tablaPitch, s.raga, cushion].join(
+    "\u0000",
+  );
 }
 
 /**
@@ -89,11 +93,50 @@ export function LiveBoard({
    * The FIRST render sets the baseline and glows nothing: arriving at a page
    * is not a change.
    */
-  const [changed, setChanged] = useState<Set<number>>(new Set());
+  /*
+   * Each entry is a row that changed, against a nonce that increases every
+   * time. The nonce is the whole trick: it goes into the row's React key, so a
+   * changed row is a NEW element and the CSS animation starts from the
+   * beginning.
+   *
+   * Without it the ring fired exactly once and never again. Re-adding a class
+   * an element already has does not restart an animation, and the class was
+   * never coming off — the effect re-runs every four seconds when the cushion
+   * poll returns a fresh Map, and its cleanup killed the timeout that was
+   * meant to remove it. So the first change rang, the class stuck, the
+   * animation finished, and every change after that was silent. Exactly what
+   * Sailavan described.
+   */
+  const [changed, setChanged] = useState<Map<number, number>>(new Map());
   const seen = useRef<Map<number, string> | null>(null);
+  const nonce = useRef(0);
+  const timers = useRef<Map<number, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
-    const now = new Map(slots.map((s) => [s.position, rowSignature(s)]));
+    const now = new Map(
+      slots.map((s) => [
+        s.position,
+        rowSignature(s, cushions.get(s.singerId ?? "")?.colour ?? null),
+      ]),
+    );
+    /*
+     * Nothing rings until the cushions have arrived once.
+     *
+     * The cushion map starts empty and fills a moment after the board opens,
+     * so treating that first fill as a change rang every row that had a
+     * cushion — at the one moment when nothing had changed. The baseline is
+     * simply not taken until the board is showing everything it is going to
+     * show.
+     *
+     * This is per DEVICE, which is the point: each screen rings for what has
+     * changed since IT opened, so a phone joining at 6.55 does not inherit a
+     * tablet's history.
+     */
+    if (!cushions.ready) {
+      seen.current = null;
+      return;
+    }
+
     const before = seen.current;
     seen.current = now;
     if (!before) return;
@@ -103,11 +146,51 @@ export function LiveBoard({
       .map(([position]) => position);
     if (moved.length === 0) return;
 
-    setChanged(new Set(moved));
-    // Slightly past the animation, so the class is never pulled mid-pulse.
-    const timer = setTimeout(() => setChanged(new Set()), 6200);
-    return () => clearTimeout(timer);
-  }, [slots]);
+    nonce.current += 1;
+    const mine = nonce.current;
+    setChanged((prev) => {
+      const next = new Map(prev);
+      for (const position of moved) next.set(position, mine);
+      return next;
+    });
+
+    /*
+     * One timer per row, held in a ref rather than returned as cleanup —
+     * this effect re-runs on every cushion poll, and a cleanup would cancel
+     * the removal of a ring that is still mid-pulse.
+     */
+    for (const position of moved) {
+      const running = timers.current.get(position);
+      if (running) clearTimeout(running);
+      timers.current.set(
+        position,
+        setTimeout(() => {
+          timers.current.delete(position);
+          setChanged((prev) => {
+            if (prev.get(position) !== mine) return prev; // a newer change owns it
+            const next = new Map(prev);
+            next.delete(position);
+            return next;
+          });
+        }, 6200),
+      );
+    }
+    /*
+     * `cushions` is a fresh Map on every poll, so this runs every four seconds
+     * whether anything moved or not. That is fine and deliberate: the
+     * comparison is by VALUE, so an unchanged poll produces identical
+     * signatures and rings nothing.
+     */
+  }, [slots, cushions]);
+
+  // The timers outlive the effect, so they are cleared when the board goes.
+  useEffect(() => {
+    const running = timers.current;
+    return () => {
+      running.forEach(clearTimeout);
+      running.clear();
+    };
+  }, []);
   /** Which card's words are open, by position. Null for none. */
   const [words, setWords] = useState<number | null>(null);
   const openSlot = words === null ? null : (slots.find((s) => s.position === words) ?? null);
@@ -234,7 +317,12 @@ export function LiveBoard({
             );
             return (
               <li
-                key={s.position}
+                /*
+                  The nonce makes this a new element on every change, which is
+                  what restarts the animation. Nothing inside a card holds
+                  state, so remounting costs nothing.
+                */
+                key={`${s.position}:${changed.get(s.position) ?? 0}`}
                 /*
                   min-h-fit matters more than flex-1 does. A card may GROW to
                   share the screen, but it must never shrink below its own

@@ -3,10 +3,21 @@
 import { useMemo, useRef, useState, useTransition, useEffect } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { DeitySymbols } from "@/components/DeitySymbol";
 import { Button } from "@/components/ui";
 import { deleteSingerRow, upsertSessionSingerRows, type SingerRowInput } from "./actions";
 import { useMicCushions, MicCushionDots, cushionTint } from "@/components/MicCushions";
+import { LeaveWithChangesDialog } from "@/components/LeaveWithChangesDialog";
+import {
+  describeChanges,
+  draftKey,
+  readDraft,
+  restorePlan,
+  ageLabel,
+  type DraftRow,
+  type StoredDraft,
+} from "@/lib/rosterDraft";
 import { stepWithinSeries } from "@/lib/pitch";
 import { tablaWithOverride } from "@/lib/tabla";
 import { ragaScale } from "@/lib/ragaScales";
@@ -47,6 +58,24 @@ function pickRecommendedPitch(singerGender: string | null | undefined, b?: Bhaja
   if (g === "ladies") return b.referenceLadiesPitch ?? b.referenceGentsPitch ?? "";
   if (g === "gents") return b.referenceGentsPitch ?? b.referenceLadiesPitch ?? "";
   return b.referenceGentsPitch ?? b.referenceLadiesPitch ?? "";
+}
+
+/**
+ * A row reduced to what a person can change, for comparing against what was
+ * loaded and for keeping on the device. `_localId` is the identity rather than
+ * `id`, because it survives a save turning a `new_…` row into a real one.
+ */
+function toDraftRow(r: RowState): DraftRow {
+  return {
+    id: r._localId,
+    singerId: r.singerId,
+    singerName: r.singerName ?? null,
+    bhajanId: r.bhajanId,
+    bhajanTitle: r.bhajanTitle,
+    festivalBhajanTitle: r.festivalBhajanTitle,
+    confirmedPitch: r.confirmedPitch,
+    alternativeTablaPitch: r.alternativeTablaPitch,
+  };
 }
 
 type BhSearchState = { q: string; items: { id: string; title: string }[]; open: boolean; loading: boolean };
@@ -139,6 +168,7 @@ export function SessionSingersGrid(props: {
    * both rows and setting it on either sets both.
    */
   const cushions = useMicCushions(props.sessionId);
+  const router = useRouter();
 
   const [rows, setRows] = useState<RowState[]>(
     props.initialRows.map((r) => ({
@@ -159,6 +189,323 @@ export function SessionSingersGrid(props: {
       _bhajanQuery: r.bhajanTitle ?? r.festivalBhajanTitle ?? "",
     }))
   );
+
+  /*
+   * UNSAVED WORK.
+   *
+   * Edits live in this component until somebody presses Save, and three things
+   * can take them away: navigating inside the app, closing or reloading the
+   * tab, and — the likeliest one in a hall — the phone locking or Safari
+   * dropping the tab while the singer is in another app.
+   *
+   * Only the first can be stopped with our own dialog. The browser will show
+   * nothing but its own generic sentence for the second, and nothing at all
+   * for the third. So the edits are also written to the device, and offered
+   * back on return. See lib/rosterDraft.ts.
+   *
+   * `baseline` is what the grid was last in agreement with the database about:
+   * what loaded, and then whatever each save wrote.
+   */
+  const [baseline, setBaseline] = useState<DraftRow[]>(() =>
+    props.initialRows.map((r) => ({
+      id: r.id,
+      singerId: r.singerId,
+      singerName: r.singerName,
+      bhajanId: r.bhajanId,
+      bhajanTitle: r.bhajanTitle,
+      festivalBhajanTitle: r.festivalBhajanTitle,
+      confirmedPitch: r.confirmedPitch,
+      alternativeTablaPitch: r.alternativeTablaPitch,
+    })),
+  );
+  const draftRows = useMemo(() => rows.map(toDraftRow), [rows]);
+  const changes = useMemo(
+    () =>
+      describeChanges(baseline, draftRows, {
+        // Choosing a pitch moves the tabla with it, and counting that as a
+        // second change made a single edit read as "2 unsaved changes".
+        tablaFor: (p) => (p ? (props.suggestions.pitchToTabla[p] ?? null) : null),
+      }),
+    [baseline, draftRows, props.suggestions.pitchToTabla],
+  );
+  const dirty = changes.length > 0;
+
+  /**
+   * Where somebody was trying to go when the dialog stopped them — a page, or
+   * backwards, which is not a page and has to be replayed differently.
+   */
+  const [leaveTo, setLeaveTo] = useState<{ kind: "href"; href: string } | { kind: "back" } | null>(
+    null,
+  );
+  /** A draft found on the device, waiting to be accepted or thrown away. */
+  const [offer, setOffer] = useState<StoredDraft | null>(null);
+  /** Rows a restored draft did NOT put back, because somebody else had. */
+  const [heldBack, setHeldBack] = useState<string[]>([]);
+
+  const forgetDraft = () => {
+    try {
+      window.localStorage.removeItem(draftKey(props.sessionId));
+    } catch {
+      // Private browsing, or storage full. Losing the draft is the cost.
+    }
+  };
+
+  /*
+   * On arrival, is there work here from last time?
+   *
+   * This runs BEFORE the effect that keeps the draft written, and that order
+   * is load-bearing: a page opens with nothing unsaved, so the writer's first
+   * act would be to clear the very draft this is trying to offer. Effects run
+   * in the order they are declared, and the ref below is set on the first pass,
+   * which is what the writer waits for.
+   *
+   * Only offered if it still differs from what the database now holds —
+   * otherwise somebody saved it from another device in the meantime and the
+   * offer would be noise.
+   */
+  const askedForDraft = useRef(false);
+  useEffect(() => {
+    if (askedForDraft.current || !props.canEdit) return;
+    askedForDraft.current = true;
+    let raw: string | null = null;
+    try {
+      raw = window.localStorage.getItem(draftKey(props.sessionId));
+    } catch {
+      return;
+    }
+    const found = readDraft(raw, Date.now());
+    if (!found) return;
+    if (describeChanges(baseline, found.rows).length === 0) {
+      forgetDraft();
+      return;
+    }
+    setOffer(found);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.sessionId, props.canEdit, baseline]);
+
+  /*
+   * Keep the draft current, a moment behind the typing.
+   *
+   * Debounced because this runs on every keystroke in a bhajan field, and
+   * writing to storage is synchronous — on a mid-range phone that is exactly
+   * the sort of thing that makes typing feel heavy.
+   */
+  useEffect(() => {
+    if (!props.canEdit) return;
+    // Nothing may touch storage until it has been read (see above), and an
+    // offer nobody has answered yet owns what is in there.
+    if (!askedForDraft.current || offer) return;
+    if (!dirty) {
+      forgetDraft();
+      return;
+    }
+    const t = setTimeout(() => {
+      try {
+        window.localStorage.setItem(
+          draftKey(props.sessionId),
+          // `base` is what these edits were made to. Restoring needs it to
+          // tell this draft apart from somebody else's newer save.
+          JSON.stringify({ savedAt: Date.now(), rows: draftRows, base: baseline }),
+        );
+      } catch {
+        // Nothing to be done, and nothing worth interrupting anybody over.
+      }
+    }, 500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dirty, draftRows, props.sessionId, props.canEdit, offer]);
+
+  /*
+   * Closing or reloading the tab.
+   *
+   * The browser substitutes its own wording and offers no Save button; this is
+   * a speed bump, not the dialog. Registered only while there is something to
+   * lose, so an untouched page never asks.
+   */
+  useEffect(() => {
+    if (!dirty) return;
+    const onLeave = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onLeave);
+    return () => window.removeEventListener("beforeunload", onLeave);
+  }, [dirty]);
+
+  /*
+   * Going somewhere else in the app.
+   *
+   * The App Router has no navigation guard, so links are caught on the way
+   * past — capture phase, before the router sees the click. Left button only,
+   * and never for a modified click, a new tab, a download or another site:
+   * those either leave the page intact or are the browser's business.
+   */
+  useEffect(() => {
+    if (!dirty) return;
+    const onClick = (e: MouseEvent) => {
+      if (e.defaultPrevented || e.button !== 0) return;
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const link = (e.target as HTMLElement | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!link || link.hasAttribute("download")) return;
+      if (link.target && link.target !== "_self") return;
+
+      const url = new URL(link.href, window.location.href);
+      if (url.origin !== window.location.origin) return;
+      // Same page — a jump to an anchor loses nothing.
+      if (url.pathname === window.location.pathname && url.search === window.location.search) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+      setLeaveTo({ kind: "href", href: `${url.pathname}${url.search}${url.hash}` });
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [dirty]);
+
+  /*
+   * Going BACK — the swipe on a phone, the button on a laptop.
+   *
+   * Back is not a link, so nothing above catches it, and there is no way to
+   * cancel it once it has happened. The only thing that works is to be
+   * standing behind it: while there is unsaved work, one extra history entry
+   * for this same page is pushed, so the first Back lands on that instead of
+   * leaving. The entry is pushed again straight away and the dialog asks.
+   *
+   * Nothing moves on screen — same URL, same page — so somebody who came back
+   * on purpose sees only the question.
+   *
+   * The entry is taken away again the moment there is nothing to lose, so Back
+   * never needs pressing twice on a page that is up to date.
+   */
+  const guardsHistory = useRef(false);
+  useEffect(() => {
+    if (!props.canEdit) return;
+
+    if (!dirty) {
+      if (guardsHistory.current) {
+        guardsHistory.current = false;
+        // Only ours to remove, and only if it is still the entry we are on.
+        if (window.history.state?.__rosterGuard) window.history.back();
+      }
+      return;
+    }
+    if (guardsHistory.current) return;
+
+    guardsHistory.current = true;
+    window.history.pushState(
+      { ...window.history.state, __rosterGuard: true },
+      "",
+      window.location.href,
+    );
+
+    const onPop = () => {
+      if (!guardsHistory.current) return;
+      // Stand behind it again, so a second Back is asked about too.
+      window.history.pushState(
+        { ...window.history.state, __rosterGuard: true },
+        "",
+        window.location.href,
+      );
+      setLeaveTo({ kind: "back" });
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [dirty, props.canEdit]);
+
+  /**
+   * Put a draft back, without treading on anybody.
+   *
+   * A draft can be hours old, and a row it wants to change may have been saved
+   * by somebody else since. Those rows keep the saved version and are listed
+   * instead — a `confirmedPitch` exists nowhere else, so it is not something to
+   * overwrite from a stale copy on somebody's phone.
+   */
+  function restoreDraft() {
+    if (!offer) return;
+    // Against what the draft was edited FROM, not against this page:
+    // that is what distinguishes my stale draft from their fresh save.
+    const plan = restorePlan(offer.rows, offer.base, draftRows);
+
+    setRows((prev) => {
+      const byLocalId = new Map(prev.map((r) => [r._localId, r]));
+      return plan.rows.map((d) => {
+        const existing = byLocalId.get(d.id);
+        const singer = singerById.get(d.singerId);
+        const query = d.bhajanTitle ?? d.festivalBhajanTitle ?? "";
+
+        if (existing) {
+          return {
+            ...existing,
+            singerId: d.singerId,
+            singerName: singer?.name ?? existing.singerName,
+            singerGender: singer?.gender ?? existing.singerGender,
+            bhajanId: d.bhajanId,
+            bhajanTitle: d.bhajanTitle,
+            festivalBhajanTitle: d.festivalBhajanTitle,
+            confirmedPitch: d.confirmedPitch,
+            alternativeTablaPitch: d.alternativeTablaPitch,
+            _bhajanQuery: query,
+          };
+        }
+
+        // A row that was added and never saved. Its recommendation is derived
+        // from the bhajan on the server, so it fills in on the next save
+        // rather than being guessed at here.
+        return {
+          _localId: d.id,
+          id: d.id,
+          singerId: d.singerId,
+          singerName: singer?.name ?? d.singerName ?? "",
+          singerGender: singer?.gender ?? null,
+          bhajanId: d.bhajanId,
+          bhajanTitle: d.bhajanTitle,
+          festivalBhajanTitle: d.festivalBhajanTitle,
+          confirmedPitch: d.confirmedPitch,
+          alternativeTablaPitch: d.alternativeTablaPitch,
+          recommendedPitch: null,
+          raga: null,
+          deities: [],
+          updatedAt: null,
+          _bhajanQuery: query,
+        } satisfies RowState;
+      });
+    });
+
+    setHeldBack(plan.conflicts);
+    setOffer(null);
+  }
+
+  function discardOffer() {
+    forgetDraft();
+    setOffer(null);
+  }
+
+  function leaveNow(target: { kind: "href"; href: string } | { kind: "back" }) {
+    setLeaveTo(null);
+    // Stood down first, so that clearing up after it is never mistaken for
+    // somebody pressing Back again.
+    const wasGuarding = guardsHistory.current;
+    guardsHistory.current = false;
+
+    if (target.kind === "href") {
+      /*
+       * REPLACE, not push, when the guard is up.
+       *
+       * The extra entry the guard added is the one we are standing on, so the
+       * new page takes its place. Pushing instead left it in the stack, and
+       * two things went wrong: the save's own tidying-up called
+       * `history.back()` on it at the same moment as the navigation, so Save
+       * and leave could land back on the session it had just left; and Back
+       * from the new page then needed two presses to get past the session.
+       */
+      if (wasGuarding) router.replace(target.href);
+      else router.push(target.href);
+      return;
+    }
+
+    // Going back for real: over the extra entry, and over the page itself.
+    window.history.go(-2);
+  }
 
   /*
    * Reordering.
@@ -591,7 +938,8 @@ export function SessionSingersGrid(props: {
     return props.suggestions.pitches.filter((p) => p.toLowerCase().includes(q)).slice(0, 25);
   }
 
-  function saveAll() {
+  /** `then` runs only if the save actually went through — see the leave dialog. */
+  function saveAll(then?: () => void) {
     if (!props.canEdit) return;
 
     const missingSinger = rows.some((r) => !r.singerId);
@@ -601,6 +949,10 @@ export function SessionSingersGrid(props: {
     }
 
     setSaveError(null);
+    // What is being saved, as the unsaved-work tracking sees it. Taken before
+    // the await so that editing during a save does not mark those later edits
+    // as already saved.
+    const snapshot = rows.map(toDraftRow);
     startTransition(async () => {
       // recommendedPitch and raga are deliberately not sent: both are derived
       // from the bhajan and are no longer columns on the slot.
@@ -615,7 +967,41 @@ export function SessionSingersGrid(props: {
         updatedAt: r.updatedAt ?? null,
       }));
       try {
-        await upsertSessionSingerRows(props.sessionId, payload);
+        const res = await upsertSessionSingerRows(props.sessionId, payload);
+        if (!res.ok) {
+          setSaveError(res.error);
+          return;
+        }
+        setSaveError(null);
+
+        /*
+         * Take the ids and timestamps the save just wrote.
+         *
+         * These rows live in local state, seeded once when the page loaded.
+         * Without this the grid would keep sending the `updatedAt` values it
+         * started with, and pressing Save twice would be refused the second
+         * time as a concurrent edit — the grid clashing with its own writes.
+         * A new row would keep its `new_…` id too, and save as a duplicate.
+         *
+         * If the counts disagree the mapping is not trustworthy, so fall back
+         * to reloading rather than stamping rows with the wrong ids.
+         */
+        if (res.stamps.length === payload.length) {
+          setRows((prev) =>
+            prev.map((r, i) =>
+              res.stamps[i] ? { ...r, id: res.stamps[i].id, updatedAt: res.stamps[i].updatedAt } : r,
+            ),
+          );
+        } else {
+          router.refresh();
+        }
+
+        // Saved work is no longer unsaved work: the comparison moves on, the
+        // draft on the device goes, and whatever was waiting on the save (a
+        // page the person was trying to leave for) may now happen.
+        setBaseline(snapshot);
+        forgetDraft();
+        then?.();
       } catch (e) {
         setSaveError(
           e instanceof Error
@@ -690,6 +1076,93 @@ export function SessionSingersGrid(props: {
     <div className="grid gap-3">
       {portalEl}
 
+      <LeaveWithChangesDialog
+        open={leaveTo !== null}
+        changes={changes}
+        saving={isPending}
+        onStay={() => setLeaveTo(null)}
+        onDiscard={() => {
+          const target = leaveTo;
+          forgetDraft();
+          // The edits go too — otherwise the draft is written again a moment
+          // later from state that still holds them.
+          setRows((prev) => {
+            const wanted = new Map(baseline.map((r) => [r.id, r]));
+            return prev
+              .filter((r) => wanted.has(r._localId))
+              .map((r) => {
+                const b = wanted.get(r._localId)!;
+                return {
+                  ...r,
+                  singerId: b.singerId,
+                  bhajanId: b.bhajanId,
+                  bhajanTitle: b.bhajanTitle,
+                  festivalBhajanTitle: b.festivalBhajanTitle,
+                  confirmedPitch: b.confirmedPitch,
+                  alternativeTablaPitch: b.alternativeTablaPitch,
+                  _bhajanQuery: b.bhajanTitle ?? b.festivalBhajanTitle ?? "",
+                };
+              });
+          });
+          if (target) leaveNow(target);
+        }}
+        onSave={() => {
+          const target = leaveTo;
+          saveAll(() => {
+            if (target) leaveNow(target);
+          });
+        }}
+      />
+
+      {/*
+        Work from last time, found on this device. Offered rather than applied:
+        somebody may have moved on since, and having their session silently
+        rewritten by a draft they had forgotten about would be worse than
+        losing it.
+      */}
+      {offer ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-[12px] border border-brass/40 bg-brass/[0.08] px-3 py-2 text-xs">
+          <span>
+            Unsaved changes from {ageLabel(offer.savedAt, Date.now())} are still on this device.
+          </span>
+          <button
+            type="button"
+            onClick={restoreDraft}
+            className="font-semibold underline underline-offset-2"
+          >
+            Put them back
+          </button>
+          <button
+            type="button"
+            onClick={discardOffer}
+            className="text-on-surface-muted underline underline-offset-2 hover:text-warn"
+          >
+            Discard
+          </button>
+        </div>
+      ) : null}
+
+      {heldBack.length > 0 ? (
+        <div role="status" className="rounded-[12px] border border-warn/40 bg-warn/[0.08] px-3 py-2 text-xs">
+          <p className="font-semibold">
+            Somebody else had already saved {heldBack.length === 1 ? "this row" : "these rows"}, so
+            the saved version was kept:
+          </p>
+          <ul className="mt-1 grid gap-0.5">
+            {heldBack.map((c, i) => (
+              <li key={i}>{c}</li>
+            ))}
+          </ul>
+          <button
+            type="button"
+            onClick={() => setHeldBack([])}
+            className="mt-1 underline underline-offset-2 text-on-surface-muted"
+          >
+            Got it
+          </button>
+        </div>
+      ) : null}
+
       {saveError ? (
         <div
           role="alert"
@@ -714,8 +1187,19 @@ export function SessionSingersGrid(props: {
         {props.canEdit || props.canAssign ? (
           <div className="flex items-center gap-2">
             {props.canAssign ? <Button onClick={addRow}>Add row</Button> : null}
-            <Button onClick={saveAll} variant="primary">
-              {isPending ? "Saving…" : "Save changes"}
+            {/*
+              The count is the cheapest guard of the lot: most work is lost by
+              somebody who did not realise anything was outstanding, and a
+              button that says "Save 3 changes" says so without stopping them.
+              Note the arrow function — passing saveAll directly would hand it
+              the click event as its `then` callback.
+            */}
+            <Button onClick={() => saveAll()} variant="primary">
+              {isPending
+                ? "Saving…"
+                : dirty
+                  ? `Save ${changes.length} change${changes.length === 1 ? "" : "s"}`
+                  : "Save changes"}
             </Button>
           </div>
         ) : null}

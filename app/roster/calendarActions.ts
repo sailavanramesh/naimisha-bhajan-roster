@@ -8,6 +8,7 @@
 type DaySession = {
   id: string;
   startsAt: string | null;
+  categoryId: string | null;
   categoryName: string | null;
   entries: number;
   rows?: { singer: string; bhajan: string | null; pitch: string | null }[];
