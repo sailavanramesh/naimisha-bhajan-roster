@@ -43,7 +43,6 @@ export default async function LiveSessionPage({
         },
         orderBy: [{ position: "asc" }, { createdAt: "asc" }],
       },
-      instruments: { orderBy: { createdAt: "asc" } },
     },
   });
 
@@ -104,10 +103,6 @@ export default async function LiveSessionPage({
       categoryName={session.category?.name ?? null}
       categoryImage={session.category?.image ?? null}
       slots={slots}
-      instruments={session.instruments.map((i) => ({
-        instrument: i.instrument,
-        person: i.person,
-      }))}
     />
   );
 }
