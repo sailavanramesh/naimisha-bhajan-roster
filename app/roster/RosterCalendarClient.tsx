@@ -7,10 +7,12 @@ import { SessionRows } from "@/components/SessionRows";
 import { Button, Input } from "@/components/ui";
 import { fetchMonthInfo, createSessionForDate } from "./calendarActions";
 import { sortByStart, sessionLabel, hasSeveral, USUAL_START } from "@/lib/sessionsOfDay";
+import { dayMarks, dayKindLabel, type KindLite } from "@/lib/categoryMark";
 
 type DaySession = {
   id: string;
   startsAt: string | null;
+  categoryId: string | null;
   categoryName: string | null;
   entries: number;
   rows?: { singer: string; bhajan: string | null; pitch: string | null }[];
@@ -63,8 +65,19 @@ export default function RosterCalendarClient(props: {
   initialMonth: string;
   initialSelected: string;
   initialDayInfo: Record<string, DayInfo>;
+  /**
+   * Every kind of session, without its picture — a few rows, a few hundred
+   * bytes. The pictures come one at a time from a cacheable route, so a month
+   * of fifty sessions costs one request per kind rather than fifty copies of
+   * a 47KB data URL.
+   */
+  kinds: KindLite[];
 }) {
   const { canEdit, initialMonth, initialSelected, initialDayInfo } = props;
+  const kindsById = useMemo(
+    () => new Map(props.kinds.map((k) => [k.id, k])),
+    [props.kinds],
+  );
   const router = useRouter();
   const [currentMonth, setCurrentMonth] = useState<string>(initialMonth);
   const [selected, setSelected] = useState<string>(initialSelected);
@@ -133,6 +146,8 @@ export default function RosterCalendarClient(props: {
             {
               id: created.id,
               startsAt: USUAL_START,
+              // A session just created has no kind yet, so no mark.
+              categoryId: null,
               categoryName: null,
               entries: 0,
               rows: [],
@@ -226,6 +241,8 @@ export default function RosterCalendarClient(props: {
 
           const daySessions = sortByStart(dayInfo[date]?.sessions ?? []);
           const hasSession = daySessions.length > 0;
+          const { marks, overflow } = dayMarks(daySessions, kindsById);
+          const kindLabel = dayKindLabel(marks, overflow);
 
           return (
             <button
@@ -238,7 +255,56 @@ export default function RosterCalendarClient(props: {
                 inMonth ? "bg-panel" : "bg-panel text-slate-400",
               ].join(" ")}
             >
-              <div className="text-xs">{d.getUTCDate()}</div>
+              {/*
+                The date, and what kind of session the day holds.
+
+                The bar below stays: it says how FULL the day is, which is a
+                different question from what kind of thing it is. The mark
+                answers the second one — the kind's own picture, because at
+                this size a picture is the only honest way to say "Ramayana"
+                (the live view's rail reached the same conclusion). The name
+                is in the tooltip, and on a wide enough screen it also gets a
+                line of its own under the date.
+              */}
+              <div className="flex items-start justify-between gap-1">
+                <span className="text-xs">{d.getUTCDate()}</span>
+                {marks.length > 0 ? (
+                  <span className="flex shrink-0 items-center -space-x-1">
+                    {marks.map((m) =>
+                      m.src ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          key={m.id}
+                          src={m.src}
+                          alt=""
+                          title={m.count > 1 ? `${m.name} ×${m.count}` : m.name}
+                          loading="lazy"
+                          className="h-4 w-4 rounded-full border border-rule bg-panel object-cover sm:h-5 sm:w-5"
+                        />
+                      ) : (
+                        <span
+                          key={m.id}
+                          title={m.count > 1 ? `${m.name} ×${m.count}` : m.name}
+                          className="grid h-4 w-4 place-items-center rounded-full border border-rule bg-brass/15 text-[7px] font-semibold text-on-surface-muted sm:h-5 sm:w-5 sm:text-[8px]"
+                        >
+                          {m.initials}
+                        </span>
+                      ),
+                    )}
+                    {overflow > 0 ? (
+                      <span className="pl-1 text-[9px] text-on-surface-muted">+{overflow}</span>
+                    ) : null}
+                  </span>
+                ) : null}
+              </div>
+
+              {/* Room for the name only where there is room for the name. */}
+              {kindLabel ? (
+                <div className="mt-0.5 hidden truncate text-[10px] leading-tight text-on-surface-muted sm:block">
+                  {kindLabel}
+                </div>
+              ) : null}
+
               {hasSession ? (
                 /*
                   One bar per session, side by side, each shaded by how full it

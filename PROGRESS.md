@@ -1005,6 +1005,33 @@ would shrink below the widest thing inside it — the roster table declares
 the page grew. `min-w-0` on both. Measured 404 → 392 → 375, and desktop is
 unchanged.
 
+### What kind of session, in the calendar (2026-08-13)
+
+Sailavan: "in calendar view, when there is a session, can we have the session
+type badge show on that date rather than the purple line, or along with it?"
+
+Along with it, because the two say different things: the bar says how FULL a
+day is (and how many sessions it holds), the mark says what KIND of thing it
+is. Dropping the bar would lose the first question to answer the second.
+
+A cell is ~40px wide on a phone, so the mark is the kind's own picture — the
+same conclusion the live view's rail reached — with the name in the tooltip. On
+`sm` and wider there is room for the name on its own line under the date, so it
+gets one. Kinds with no picture show two letters instead ("Routine Thursday" →
+RT), which keeps every categorised day recognisable.
+
+**The pictures are not inlined.** They live in the database as data URLs of
+17–68KB; a month can hold fifty sessions, and 49 of them are currently the same
+kind. So `app/api/session-kinds/[id]/image` serves them as ordinary cacheable
+files, stamped with the kind's `updatedAt` and marked immutable for a year — a
+changed picture is a new URL. The calendar carries ids only. Measured: a month
+with ten categorised sessions across four kinds makes **four** image requests,
+and none at all on a second visit.
+
+Sessions of the same kind on one day collapse to a single mark with a count;
+past two kinds it says "+N" rather than dropping any silently. Logic is pure in
+`lib/categoryMark.ts`, 17 tests.
+
 ### Also worth knowing
 
 - `data/roster.xlsx` was replaced with the newer export from `~/Downloads`

@@ -126,12 +126,34 @@ export default async function RosterPage({
   const monthStart = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1, 0, 0, 0));
   const monthEndExclusive = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1, 0, 0, 0));
 
+  /*
+   * The kinds of session, for the marks in the calendar cells.
+   *
+   * Every kind, not only this month's — the calendar walks to other months
+   * without asking the server for these again. The pictures are deliberately
+   * NOT selected: they run 17–68KB each and come from
+   * /api/session-kinds/[id]/image, where the browser can cache them. `v` is
+   * the kind's updatedAt, which changes the URL when a picture changes.
+   */
+  const kindRows = await prisma.sessionCategory.findMany({
+    orderBy: [{ order: "asc" }, { name: "asc" }],
+    select: { id: true, name: true, image: true, updatedAt: true },
+  });
+  // `v: null` means no picture, so the cell shows initials instead. A kind
+  // with no picture still travels: its name is what the initials come from.
+  const kinds = kindRows.map((k) => ({
+    id: k.id,
+    name: k.name,
+    v: k.image ? k.updatedAt.getTime() : null,
+  }));
+
   const monthSessions = await prisma.session.findMany({
     where: { date: { gte: monthStart, lt: monthEndExclusive } },
     select: {
       id: true,
       date: true,
       startsAt: true,
+      categoryId: true,
       category: { select: { name: true } },
       _count: { select: { slots: true } },
       slots: {
@@ -162,6 +184,7 @@ export default async function RosterPage({
       sessions: {
         id: string;
         startsAt: string | null;
+        categoryId: string | null;
         categoryName: string | null;
         entries: number;
         rows: { singer: string; bhajan: string | null; pitch: string | null }[];
@@ -172,6 +195,7 @@ export default async function RosterPage({
     const value = {
       id: s.id,
       startsAt: s.startsAt,
+      categoryId: s.categoryId ?? null,
       categoryName: s.category?.name ?? null,
       entries: s._count.slots ?? 0,
       rows: s.slots.map((x) => ({
@@ -325,6 +349,7 @@ export default async function RosterPage({
               initialMonth={monthKey(monthStart)}
               initialSelected={toISODateUTC(selected)}
               initialDayInfo={dayInfo}
+              kinds={kinds}
             />
           ) : (
             <>
