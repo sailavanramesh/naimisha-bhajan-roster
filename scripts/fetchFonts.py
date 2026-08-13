@@ -1,10 +1,19 @@
-"""Download the three typefaces and rewrite the @font-face block in globals.css.
+"""Refresh the self-hosted typefaces FROM THE RUNNING PRODUCTION SITE.
 
-Google serves one file per (weight, subset) with a unicode-range on each, and
-that range is the reason these rules are hand-held rather than passed to
-next/font/local, which has no way to express one. Without the split every
-visitor would download the accented file to render a word with no accents in
-it.
+Not from Google, deliberately.
+
+Google reissues these files, and a fresh download is not necessarily the same
+drawing. Taking them from Google two days after the last production build gave
+a Faustina whose ṣ — the dot-under s in Naimiṣa, the app's own name — was drawn
+differently enough that Sailavan spotted it immediately. The point of holding
+the files here is that the type stops changing underneath us; downloading a
+new one to achieve that would defeat it.
+
+So the source of truth is whatever production is serving. To take a genuinely
+newer version, deploy it to dev first and look at the ṣ.
+
+Each file carries a unicode-range, which is why these rules are hand-held
+rather than passed to next/font/local, which has no way to express one.
 """
 
 import pathlib
