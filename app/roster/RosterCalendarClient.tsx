@@ -7,7 +7,14 @@ import { SessionRows } from "@/components/SessionRows";
 import { Button, Input } from "@/components/ui";
 import { fetchMonthInfo, createSessionForDate } from "./calendarActions";
 import { sortByStart, sessionLabel, hasSeveral, USUAL_START } from "@/lib/sessionsOfDay";
-import { dayMarks, dayKindLabel, type KindLite } from "@/lib/categoryMark";
+import {
+  dayMarks,
+  dayKindLabel,
+  fullnessStep,
+  sessionCountLabel,
+  dayTooltip,
+  type KindLite,
+} from "@/lib/categoryMark";
 
 type DaySession = {
   id: string;
@@ -242,19 +249,53 @@ export default function RosterCalendarClient(props: {
           const daySessions = sortByStart(dayInfo[date]?.sessions ?? []);
           const hasSession = daySessions.length > 0;
           const { marks, overflow } = dayMarks(daySessions, kindsById);
-          const kindLabel = dayKindLabel(marks, overflow);
+          const rows = daySessions.reduce((n, s) => n + s.entries, 0);
+          const step = fullnessStep(rows);
+          const kindLabel = [dayKindLabel(marks, overflow), sessionCountLabel(daySessions)]
+            .filter(Boolean)
+            .join(" ");
+          // A session nobody has rostered yet gets no wash, so the date itself
+          // has to say the day is not empty — see the wash below.
+          const awaitingRoster = hasSession && rows === 0;
 
           return (
             <button
               key={date}
               type="button"
               onClick={() => onDayClick(date)}
+              title={dayTooltip(marks, rows, daySessions.length)}
               className={[
                 "relative rounded-[12px] border px-2 py-2 text-left hover:bg-panel-hover",
                 isSelected ? "border-slate-900" : "border-slate-200",
                 inMonth ? "bg-panel" : "bg-panel text-slate-400",
               ].join(" ")}
             >
+              {/*
+                HOW FULL THE DAY IS, as the cell's own background.
+
+                This was a small coloured bar under the date. Once the cell also
+                carried the kind's picture and its name, three things were
+                competing for about forty pixels — "looks congested", and it
+                did. A wash adds nothing to the cell: the day simply deepens as
+                it fills, and a month reads as a pattern rather than as a row of
+                marks to decode.
+
+                An overlay rather than a background class, so `hover:bg-panel-hover`
+                still shows through underneath and the cell keeps feeling like a
+                button. Sits behind the content, which is why everything below is
+                in its own `relative` layer.
+              */}
+              {step > 0 ? (
+                <span
+                  aria-hidden
+                  className={[
+                    "pointer-events-none absolute inset-0 rounded-[12px]",
+                    step === 1 ? "bg-brass/[0.07]" : step === 2 ? "bg-brass/[0.14]" : "bg-brass/[0.22]",
+                  ].join(" ")}
+                />
+              ) : null}
+
+              <span className="relative block">
               {/*
                 The date, and what kind of session the day holds.
 
@@ -266,8 +307,18 @@ export default function RosterCalendarClient(props: {
                 is in the tooltip, and on a wide enough screen it also gets a
                 line of its own under the date.
               */}
-              <div className="flex items-start justify-between gap-1">
-                <span className="text-xs">{d.getUTCDate()}</span>
+              <span className="flex items-start justify-between gap-1">
+                <span
+                  className={[
+                    "text-xs",
+                    // No wash means an empty day OR a session with nobody on
+                    // it. The date says which — this is the day a coordinator
+                    // is looking for.
+                    awaitingRoster ? "font-semibold text-brass-ink underline decoration-dotted underline-offset-2" : "",
+                  ].join(" ")}
+                >
+                  {d.getUTCDate()}
+                </span>
                 {marks.length > 0 ? (
                   <span className="flex shrink-0 items-center -space-x-1">
                     {marks.map((m) =>
@@ -296,40 +347,16 @@ export default function RosterCalendarClient(props: {
                     ) : null}
                   </span>
                 ) : null}
-              </div>
+              </span>
 
               {/* Room for the name only where there is room for the name. */}
               {kindLabel ? (
-                <div className="mt-0.5 hidden truncate text-[10px] leading-tight text-on-surface-muted sm:block">
+                <span className="mt-0.5 hidden truncate text-[10px] leading-tight text-on-surface-muted sm:block">
                   {kindLabel}
-                </div>
+                </span>
               ) : null}
+              </span>
 
-              {hasSession ? (
-                /*
-                  One bar per session, side by side, each shaded by how full it
-                  is. A single total would say a day is busy without saying it
-                  is busy twice — and twice is the part that changes what you
-                  do about it.
-                */
-                <div className="absolute bottom-1 left-1/2 flex -translate-x-1/2 gap-0.5">
-                  {daySessions.slice(0, 3).map((ds) => (
-                    <div
-                      key={ds.id}
-                      title={sessionLabel(ds)}
-                      className={[
-                        "h-1.5 rounded-full",
-                        daySessions.length > 1 ? "w-2.5" : "w-6",
-                        ds.entries >= 8
-                          ? "bg-indigo-600/50"
-                          : ds.entries >= 4
-                            ? "bg-indigo-600/35"
-                            : "bg-indigo-600/20",
-                      ].join(" ")}
-                    />
-                  ))}
-                </div>
-              ) : null}
             </button>
           );
         })}

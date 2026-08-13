@@ -114,3 +114,47 @@ export function dayKindLabel(marks: DayMark[], overflow: number): string {
   const more = marks.length - 1 + overflow;
   return more > 0 ? `${marks[0].name} +${more}` : marks[0].name;
 }
+
+/**
+ * How full a day is, as a step on a four-point scale.
+ *
+ * The calendar used to say this with a coloured bar under the date. Once the
+ * cell also carried the kind's picture and its name, three things were
+ * competing for about forty pixels and Sailavan called it congested — rightly.
+ * So fullness moved into the cell's own background: nothing is added, the day
+ * simply deepens as it fills, and a month reads as a pattern.
+ *
+ * The steps are the ones the bar used, so the calendar says the same thing it
+ * always did:
+ *
+ *   0  a session with nobody on it yet — or no session at all
+ *   1  one to three, the ordinary weekday session (CLAUDE.md: 163 of 188)
+ *   2  four to seven, a fuller evening
+ *   3  eight or more, a Sunday or a festival
+ */
+export function fullnessStep(totalRows: number): 0 | 1 | 2 | 3 {
+  if (totalRows >= 8) return 3;
+  if (totalRows >= 4) return 2;
+  if (totalRows >= 1) return 1;
+  return 0;
+}
+
+/**
+ * How many sessions a day holds, said in words, or "" for the ordinary one.
+ *
+ * The bars carried this too — one bar per session — so it has to be said
+ * somewhere now that they are gone. A day with two sessions of the SAME kind
+ * would otherwise show a single mark and read as one session.
+ */
+export function sessionCountLabel(sessions: unknown[]): string {
+  return sessions.length > 1 ? `×${sessions.length}` : "";
+}
+
+/** What the cell says when hovered: the kinds, and how full the day is. */
+export function dayTooltip(marks: DayMark[], totalRows: number, sessionCount: number): string {
+  const kinds = marks.map((m) => (m.count > 1 ? `${m.name} ×${m.count}` : m.name)).join(", ");
+  const rows = totalRows === 1 ? "1 bhajan" : `${totalRows} bhajans`;
+  const sessions = sessionCount > 1 ? `${sessionCount} sessions · ` : "";
+  if (sessionCount === 0) return "";
+  return kinds ? `${kinds} · ${sessions}${rows}` : `${sessions}${rows}`;
+}

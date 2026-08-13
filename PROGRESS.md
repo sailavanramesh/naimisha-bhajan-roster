@@ -1030,7 +1030,25 @@ and none at all on a second visit.
 
 Sessions of the same kind on one day collapse to a single mark with a count;
 past two kinds it says "+N" rather than dropping any silently. Logic is pure in
-`lib/categoryMark.ts`, 17 tests.
+`lib/categoryMark.ts`, 25 tests.
+
+**The purple bar is gone** (same day, on seeing it): with a picture and a name
+in the cell as well, three things were competing for forty pixels — "looks
+congested", and it was. Sailavan chose to move fullness into the cell's own
+background, so nothing is added to the cell at all: the day deepens as it fills
+(1–3, 4–7, 8+ — the steps the bar used), and a month reads as a pattern.
+
+The wash is an overlay rather than a background class, so `hover:bg-panel-hover`
+still shows through and the cell keeps feeling like a button.
+
+One thing the bar did that a wash cannot: it showed a session that EXISTS but
+has nobody on it — no wash and no session look the same. That day is the one a
+coordinator is hunting for, so the date itself carries it: brass, semibold,
+dotted underline. Verified by staging such a session on a future date, since
+the empty ones were all deleted from the data.
+
+Two sessions in a day used to be two bars. The name line now carries "×2", so
+a morning and an evening of the same kind still read as two.
 
 ### Also worth knowing
 

@@ -4,6 +4,9 @@ import {
   kindImageSrc,
   dayMarks,
   dayKindLabel,
+  fullnessStep,
+  sessionCountLabel,
+  dayTooltip,
   type KindLite,
 } from "@/lib/categoryMark";
 
@@ -132,5 +135,58 @@ describe("dayKindLabel", () => {
 
   it("is empty when no session that day has a kind", () => {
     expect(dayKindLabel([], 0)).toBe("");
+  });
+});
+
+describe("fullnessStep", () => {
+  it("uses the same steps the coloured bar used", () => {
+    expect(fullnessStep(0)).toBe(0);
+    expect(fullnessStep(1)).toBe(1);
+    expect(fullnessStep(3)).toBe(1);
+    expect(fullnessStep(4)).toBe(2);
+    expect(fullnessStep(7)).toBe(2);
+    expect(fullnessStep(8)).toBe(3);
+    expect(fullnessStep(20)).toBe(3);
+  });
+
+  it("treats a session with nobody on it as empty, not as full", () => {
+    expect(fullnessStep(0)).toBe(0);
+  });
+});
+
+describe("sessionCountLabel", () => {
+  it("says nothing for the ordinary single session", () => {
+    expect(sessionCountLabel([{}])).toBe("");
+    expect(sessionCountLabel([])).toBe("");
+  });
+
+  it("says how many when a day holds more than one", () => {
+    // Two sessions of the same kind collapse to one mark, so without this a
+    // day with a morning and an evening would read as one session.
+    expect(sessionCountLabel([{}, {}])).toBe("×2");
+    expect(sessionCountLabel([{}, {}, {}])).toBe("×3");
+  });
+});
+
+describe("dayTooltip", () => {
+  const kinds = new Map([["r", kind("r", "Ramayana", 1)]]);
+
+  it("names the kind and counts the bhajans", () => {
+    const { marks } = dayMarks([{ categoryId: "r" }], kinds);
+    expect(dayTooltip(marks, 3, 1)).toBe("Ramayana · 3 bhajans");
+    expect(dayTooltip(marks, 1, 1)).toBe("Ramayana · 1 bhajan");
+  });
+
+  it("counts the sessions when there are several", () => {
+    const { marks } = dayMarks([{ categoryId: "r" }, { categoryId: "r" }], kinds);
+    expect(dayTooltip(marks, 7, 2)).toBe("Ramayana ×2 · 2 sessions · 7 bhajans");
+  });
+
+  it("still says something for a session with no kind set", () => {
+    expect(dayTooltip([], 3, 1)).toBe("3 bhajans");
+  });
+
+  it("is empty when the day holds no session", () => {
+    expect(dayTooltip([], 0, 0)).toBe("");
   });
 });
