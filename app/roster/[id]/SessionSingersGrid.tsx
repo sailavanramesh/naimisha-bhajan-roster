@@ -476,7 +476,22 @@ export function SessionSingersGrid(props: {
   }
 
   async function onBhajanQueryChange(localId: string, q: string) {
-    updateRow(localId, { _bhajanQuery: q, bhajanTitle: q || null, bhajanId: null });
+    /*
+     * The recommendation goes with the bhajan.
+     *
+     * onPickBhajan recomputes it for exactly this reason, but typing a title
+     * that is not in the masterlist took the other path: it cleared the
+     * bhajan and left the previous one's recommendation on screen. So a brand
+     * new song showed "5 Pancham / G" — the value belonging to whatever had
+     * been in that row a moment earlier — which is worse than showing nothing,
+     * because it looks like an answer.
+     */
+    updateRow(localId, {
+      _bhajanQuery: q,
+      bhajanTitle: q || null,
+      bhajanId: null,
+      recommendedPitch: null,
+    });
 
     if (!q.trim()) {
       setBhSearch((prev) => ({ ...prev, [localId]: { q, items: [], open: false, loading: false } }));
@@ -1057,7 +1072,7 @@ export function SessionSingersGrid(props: {
                                 guessed
                                   ? `${hint.pitch} — predicted from their own offset. They have not sung this one.`
                                   : hint.source === "list"
-                                    ? `${hint.pitch} — the shruti on their list`
+                                    ? `${hint.pitch} — the shruti saved for them on their list`
                                     : `${hint.pitch} — sung ${hint.times}\u00d7${hint.lastOn ? `, last ${hint.lastOn}` : ""}`
                               }
                               className={[
@@ -1078,7 +1093,7 @@ export function SessionSingersGrid(props: {
                                 {guessed
                                   ? "predicted"
                                   : hint.source === "list"
-                                    ? "list"
+                                    ? "saved"
                                     : `sung${hint.times > 1 ? ` ${hint.times}\u00d7` : ""}`}
                               </span>
                             </button>
