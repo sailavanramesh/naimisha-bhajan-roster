@@ -296,10 +296,11 @@ export async function goToSessionForDate(formData: FormData): Promise<void> {
   const day = new Date(`${parsed.data.date}T00:00:00.000Z`);
 
   // "Go to Thursday" means the usual evening session, not whatever happens to
-  // start earliest — a 9am festival session must not capture the jump.
+  // start earliest — a 9am festival session must not capture the jump, and
+  // `format` keeps a music program from capturing it either.
   const onThatDay = await prisma.session.findMany({
     where: { date: day },
-    select: { id: true, startsAt: true },
+    select: { id: true, startsAt: true, format: true },
   });
   const session =
     defaultSessionOf(onThatDay) ??

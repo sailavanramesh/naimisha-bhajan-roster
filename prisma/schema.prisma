@@ -37,6 +37,58 @@ enum SessionType {
   Festival
 }
 
+/// What a session IS — a set of bhajans, or a music program.
+///
+/// Separate from SessionType, which says which kind of occasion it is. A
+/// program is a Session so the calendar, the several-a-day handling, the
+/// category mark and the meta fields all work unchanged; its CONTENT lives in
+/// the Program* tables, which is also why nothing that reads SessionSlot can
+/// see one. Fairness, pitch history and repertoire are all computed from slots,
+/// and a program has none.
+enum SessionFormat {
+  bhajans
+  program
+}
+
+/// Which kind of session a category describes. The centre owns both
+/// vocabularies and they are not the same vocabulary — "Routine Thursday" is
+/// not a music program, and "Musical offering" is not a bhajan session.
+enum CategoryScope {
+  bhajans
+  program
+}
+
+/// A sung item, or a passage read between songs.
+///
+/// Narrations are ITEMS rather than a field on the song that follows: they sit
+/// in the running order, they need a person and a mic like anything else, and a
+/// program may open or close with one.
+enum ProgramItemKind {
+  song
+  narration
+}
+
+/// Which roster offers an instrument. `both` is for the ones that genuinely
+/// serve each — a tabla is a tabla.
+enum InstrumentScope {
+  bhajans
+  program
+  both
+}
+
+/// Who is doing a JOB at a session, as opposed to singing or playing at it.
+///
+/// An enum rather than a managed list, unlike Instrument: every job here maps
+/// to a VIEW, and adding one means writing the screen that goes with it. A job
+/// the app has no view for would be a label that does nothing.
+///
+/// Applies to bhajan sessions as much as to programs — the person on the desk
+/// on a Thursday is doing the same job with fewer channels.
+enum SessionJob {
+  soundEngineer
+  micCoordinator
+}
+
 enum SessionStatus {
   Draft
   Published
@@ -156,12 +208,15 @@ model Singer {
   createdAt         DateTime    @default(now())
   updatedAt         DateTime    @updatedAt
 
-  slots             SessionSlot[]
-  repertoire        SingerRepertoire[]
-  availability      SingerAvailability[]
-  micCushions       MicCushion[]
-  pushSubscriptions PushSubscription[]
-  notices           SessionNotice[]
+  slots              SessionSlot[]
+  repertoire         SingerRepertoire[]
+  availability       SingerAvailability[]
+  micCushions        MicCushion[]
+  pushSubscriptions  PushSubscription[]
+  notices            SessionNotice[]
+  programParts       ProgramPerformer[]
+  programInstruments ProgramItemInstrument[]
+  crew               SessionCrew[]
 }
 
 model Bhajan {
@@ -298,6 +353,9 @@ model Session {
   /// updatedAt cannot answer it, because every pitch edit bumps that too.
   rosterChangedAt DateTime?
   type            SessionType   @default(Weekday)
+  /// See SessionFormat. Defaults to `bhajans` so every existing row is
+  /// unaffected by this column arriving.
+  format          SessionFormat @default(bhajans)
   status          SessionStatus @default(Published)
   /// Seed for the generator, so a generated set is reproducible and shareable.
   seed            String?
@@ -312,6 +370,8 @@ model Session {
   micCushions       MicCushion[]
   notices           SessionNotice[]
   notificationRules NotificationRule[]
+  programItems      ProgramItem[]
+  crew              SessionCrew[]
 
   category SessionCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
@@ -324,10 +384,14 @@ model Session {
 /// Renamed from v1's `SessionSinger`; `slot Int?` became `position Int`.
 /// The kinds of session the centre runs. Owned by the group, not by the code.
 model SessionCategory {
-  id    String @id @default(cuid())
-  name  String @unique
+  id    String        @id @default(cuid())
+  /// Unique across BOTH scopes, deliberately. Two kinds with the same name and
+  /// different scopes would be indistinguishable everywhere they are shown.
+  name  String        @unique
+  /// Which vocabulary this belongs to. Existing rows are all bhajan kinds.
+  scope CategoryScope @default(bhajans)
   /// Sort order in the picker. Lower first.
-  order Int    @default(0)
+  order Int           @default(0)
 
   /// A small square image for this kind of session, as a data URL.
   ///
@@ -436,6 +500,148 @@ model SessionInstrument {
   session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
+}
+
+/// One entry in a music program's running order.
+///
+/// A program is a Session with `format = program`; this is its content. The
+/// bhajan roster's SessionSlot could not carry it: a slot is one singer at one
+/// shruti, and a program item is a rehearsed piece with several singers, its own
+/// instruments, and a pitch written as a bare note.
+model ProgramItem {
+  id        String @id @default(cuid())
+  sessionId String
+
+  /// Ordered from 1. Narrations take positions too, so the running order is one
+  /// list. The number the group SAYS out loud counts only the songs — see
+  /// lib/program.ts `songNumbers`, which derives it.
+  position Int
+  kind     ProgramItemKind @default(song)
+
+  /// The passage, for kind = narration. The reader is a ProgramPerformer with
+  /// part = "reader", so a guest reader needs nothing new.
+  narration String? @db.Text
+
+  songId String?
+  /// The title as written, for an item whose song is not catalogued yet, or a
+  /// heading for a narration.
+  title  String?
+
+  /// A BARE NOTE, e.g. "A#". Programs record pitch as the note alone — no
+  /// `2 Pancham / D` appears in any of the four source documents. See
+  /// lib/pitch.ts `saOfNote`, which reads this; `saOf` needs the slash.
+  pitchNote  String?
+  /// The full shruti label when one is known, so nothing is lost if it is.
+  pitchLabel String?
+
+  bpm          Int?
+  /// The recording being learnt from.
+  referenceUrl String?
+  /// Choral cues, swara interludes, repeat marks — the working notes that sit
+  /// beside a piece and are not its lyrics.
+  arrangement  String? @db.Text
+  notes        String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session     Session                 @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  performers  ProgramPerformer[]
+  instruments ProgramItemInstrument[]
+
+  @@unique([sessionId, position])
+  @@index([sessionId])
+  @@index([songId])
+}
+
+/// Who sings, or reads, one program item.
+///
+/// `singerId` OR `name`, never neither. Half of the performers in the source
+/// documents are not roster singers — `Psais`, `All girls`, `Radhika aunty` —
+/// and forcing them into the Singer table would put guests and groups into the
+/// fairness rotation, the availability calendar and the notification lists.
+model ProgramPerformer {
+  id       String  @id @default(cuid())
+  itemId   String
+  singerId String?
+  /// A guest or a group, when there is no Singer row.
+  name     String?
+  /// "lead", "chorus", "tenor", "base", "Boys", "reader".
+  part     String?
+  order    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  item   ProgramItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  singer Singer?     @relation(fields: [singerId], references: [id], onDelete: SetNull)
+
+  @@index([itemId])
+  @@index([singerId])
+}
+
+/// The instruments the centre plays. Managed in /admin — not free text.
+///
+/// `InstrumentPerson` keys eligibility by instrument NAME, and
+/// lib/instrumentScoring.ts scores off those names, so a rename here has to
+/// carry those rows with it and a retirement is a flag rather than a delete —
+/// otherwise a past program would lose what was played on it.
+model Instrument {
+  id     String          @id @default(cuid())
+  name   String          @unique
+  order  Int             @default(0)
+  scope  InstrumentScope @default(program)
+  active Boolean         @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  programItems ProgramItemInstrument[]
+}
+
+/// One instrument on one program item, and who is playing it.
+model ProgramItemInstrument {
+  id           String  @id @default(cuid())
+  itemId       String
+  instrumentId String
+  singerId     String?
+  /// The player when they are not a Singer row — the documents name several.
+  person       String?
+  order        Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  item       ProgramItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  instrument Instrument  @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+  singer     Singer?     @relation(fields: [singerId], references: [id], onDelete: SetNull)
+
+  @@unique([itemId, instrumentId])
+  @@index([itemId])
+  @@index([instrumentId])
+}
+
+/// Somebody doing a job at a session rather than singing at it.
+///
+/// The point is the VIEW: a person crewed on a session lands on the screen for
+/// their job when they open it, instead of hunting for it. See
+/// lib/sessionView.ts, where that decision is a pure function.
+model SessionCrew {
+  id        String     @id @default(cuid())
+  sessionId String
+  singerId  String
+  job       SessionJob
+  notes     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  singer  Singer  @relation(fields: [singerId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, singerId, job])
+  @@index([sessionId])
+  @@index([singerId])
 }
 
 /// What a singer knows or has curated for a festival. Replaces v1's

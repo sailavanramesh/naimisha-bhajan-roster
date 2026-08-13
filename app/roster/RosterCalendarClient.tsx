@@ -23,6 +23,8 @@ type DaySession = {
   categoryName: string | null;
   entries: number;
   rows?: { singer: string; bhajan: string | null; pitch: string | null }[];
+  /** See Session.format. Absent from an older response is read as bhajans. */
+  format?: "bhajans" | "program";
 };
 
 /**
@@ -181,6 +183,24 @@ export default function RosterCalendarClient(props: {
     startTransition(async () => {
       const created = await createSessionForDate(selected, { another: true });
       router.push(`/roster/${created.id}`);
+    });
+  }
+
+  /**
+   * A music program on the selected day.
+   *
+   * Always a new one, and it can sit alongside the bhajan session that day —
+   * which is the ordinary case, not the exception: the offering happens on the
+   * evening the group is already meeting.
+   */
+  function addProgramOnSelectedDay() {
+    if (!canEdit) {
+      setDenied("Only an editor can start a music program.");
+      return;
+    }
+    startTransition(async () => {
+      const created = await createSessionForDate(selected, { format: "program" });
+      router.push(`/program/${created.id}`);
     });
   }
 
@@ -397,47 +417,82 @@ export default function RosterCalendarClient(props: {
                   </div>
                 ) : null}
 
-                <SessionRows
-                  rows={ds.rows ?? []}
-                  total={ds.entries}
-                  emptyLabel="Session created, nothing rostered on it yet."
-                />
+                {ds.format === "program" ? (
+                  // A program has items, not rostered rows, so there is
+                  // nothing for SessionRows to show — and inventing a row per
+                  // item here would mean two places to keep in step.
+                  <p className="text-[12px] text-on-surface-muted">
+                    Music program · {ds.entries} item{ds.entries === 1 ? "" : "s"}
+                  </p>
+                ) : (
+                  <SessionRows
+                    rows={ds.rows ?? []}
+                    total={ds.entries}
+                    emptyLabel="Session created, nothing rostered on it yet."
+                  />
+                )}
 
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[12px]">
                   <Link
-                    href={`/roster/${ds.id}`}
+                    href={ds.format === "program" ? `/program/${ds.id}` : `/roster/${ds.id}`}
                     className="text-brass-ink underline underline-offset-2"
                   >
-                    Open this session →
+                    {ds.format === "program" ? "Open this program →" : "Open this session →"}
                   </Link>
-                  <Link
-                    href={`/roster/${ds.id}/live`}
-                    className="text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
-                  >
-                    ▶ Live view
-                  </Link>
+                  {ds.format === "program" ? null : (
+                    <Link
+                      href={`/roster/${ds.id}/live`}
+                      className="text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+                    >
+                      ▶ Live view
+                    </Link>
+                  )}
                 </div>
               </div>
             ))}
 
             {canEdit ? (
-              // Quiet, because a second session on a day is the exception.
-              <button
-                type="button"
-                onClick={() => addSessionOnSelectedDay()}
-                disabled={isPending}
-                className="justify-self-start text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
-              >
-                Add another session on this day
-              </button>
+              // Quiet, because a second session on a day is the exception —
+              // and so is a program, which is why both sit down here rather
+              // than competing with the sessions above them.
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => addSessionOnSelectedDay()}
+                  disabled={isPending}
+                  className="text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+                >
+                  Add another session on this day
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addProgramOnSelectedDay()}
+                  disabled={isPending}
+                  className="text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+                >
+                  Start a music program
+                </button>
+              </div>
             ) : null}
           </div>
         ) : (
-          <p className="text-on-surface-muted">
-            {canEdit
-              ? "Nothing on this day. Tap it to start a session."
-              : "Nothing on this day."}
-          </p>
+          <div className="grid justify-items-start gap-2">
+            <p className="text-on-surface-muted">
+              {canEdit
+                ? "Nothing on this day. Tap it to start a session."
+                : "Nothing on this day."}
+            </p>
+            {canEdit ? (
+              <button
+                type="button"
+                onClick={() => addProgramOnSelectedDay()}
+                disabled={isPending}
+                className="text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+              >
+                Start a music program
+              </button>
+            ) : null}
+          </div>
         )}
       </div>
 

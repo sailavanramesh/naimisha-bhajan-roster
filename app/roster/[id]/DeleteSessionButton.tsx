@@ -21,10 +21,20 @@ export function DeleteSessionButton({
   sessionId,
   dateLabel,
   rows,
+  kind = "session",
+  backTo = "/roster",
 }: {
   sessionId: string;
   dateLabel: string;
   rows: number;
+  /**
+   * What is being deleted, in the words on screen. A music program is a Session
+   * underneath and deletes through the same action, but nobody at the centre
+   * calls it a session, and "the 3 rows on it" is not what a program has.
+   */
+  kind?: "session" | "program";
+  /** Where to go afterwards — the list this thing came from. */
+  backTo?: string;
 }) {
   const router = useRouter();
   const [armed, setArmed] = useState(false);
@@ -39,7 +49,7 @@ export function DeleteSessionButton({
         setArmed(false);
         return;
       }
-      router.push("/roster");
+      router.push(backTo);
       router.refresh();
     });
 
@@ -54,7 +64,7 @@ export function DeleteSessionButton({
           }}
           className="justify-self-start text-xs text-on-surface-muted underline underline-offset-2 hover:text-warn"
         >
-          Delete this session
+          Delete this {kind}
         </button>
         {error ? (
           <p role="alert" className="rounded-[10px] border border-warn/40 bg-warn/[0.08] px-3 py-2 text-xs">
@@ -72,8 +82,11 @@ export function DeleteSessionButton({
         {rows > 0 ? (
           <>
             {" "}
-            and the {rows} row{rows === 1 ? "" : "s"} on it
+            and the {rows} {kind === "program" ? "item" : "row"}
+            {rows === 1 ? "" : "s"} on it
           </>
+        ) : kind === "program" ? (
+          " (nothing is in it)"
         ) : (
           " (nothing is rostered on it)"
         )}

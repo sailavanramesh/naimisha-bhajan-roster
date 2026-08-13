@@ -136,6 +136,12 @@ export async function announceSettledRosters(now: Date = new Date()): Promise<An
     const sessions = await prisma.session.findMany({
       where: {
         date: { gte: new Date(`${todayISO}T00:00:00.000Z`) },
+        // Bhajan sessions only. `slots: some` already excludes programs, which
+        // have none — this says so on purpose rather than by consequence, so
+        // that relaxing the slot condition one day cannot quietly start
+        // announcing "the roster is up" for a music program, which has no
+        // roster in the sense that message means.
+        format: "bhajans",
         slots: { some: { singerId: { not: null } } },
         notices: { none: { kind: "published" } },
       },

@@ -52,6 +52,23 @@ jobs:
           cp -r public .next/standalone/public
           cp -r .next/static .next/standalone/.next/static
 
+      # Migrate BEFORE the new build goes out, not after.
+      #
+      # The app and the schema ship together, and the app is the half that
+      # breaks first: a build selecting a column that does not exist yet fails
+      # every query on the page. Applying first means the window where the two
+      # disagree is a database that is ahead of the code, which is the harmless
+      # direction — the migrations here are additive.
+      #
+      # `migrate deploy`, never `migrate dev`: it applies committed migrations
+      # and nothing else. It never generates one, never resets, and never
+      # touches a database it was not pointed at.
+      - name: Apply migrations to the dev database
+        run: npx prisma migrate deploy
+        env:
+          DATABASE_URL: ${{ secrets.DEV_DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.DEV_DATABASE_URL }}
+
       - uses: azure/login@v2
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}

@@ -51,6 +51,12 @@ type DaySession = {
   categoryName: string | null;
   entries: number;
   rows: DayRow[];
+  /**
+   * See Session.format. The calendar shows programs beside bhajan sessions —
+   * they are a real thing happening that evening — but they open a different
+   * editor, and they have items rather than rostered rows.
+   */
+  format: "bhajans" | "program";
 };
 
 export async function GET(req: NextRequest) {
@@ -71,8 +77,9 @@ export async function GET(req: NextRequest) {
       date: true,
       startsAt: true,
       categoryId: true,
+      format: true,
       category: { select: { name: true } },
-      _count: { select: { slots: true } },
+      _count: { select: { slots: true, programItems: true } },
       slots: {
         select: {
           bhajanTitle: true,
@@ -100,18 +107,33 @@ export async function GET(req: NextRequest) {
      * The record is left alone — tapping the day still finds it rather than
      * creating a second one — it simply stops being advertised.
      */
-    if ((s._count.slots ?? 0) === 0) continue;
+    /*
+     * What counts as "something on this day" depends on what the session is.
+     * A program has no slots and never will — its content is program items —
+     * so counting slots would hide every program from the calendar entirely.
+     * The rule is the same in spirit for both: a record with nothing in it is
+     * left alone but not advertised.
+     */
+    const isProgram = s.format === "program";
+    const entries = isProgram ? (s._count.programItems ?? 0) : (s._count.slots ?? 0);
+    if (entries === 0) continue;
+
     const value: DaySession = {
       id: s.id,
       startsAt: s.startsAt,
       categoryId: s.categoryId ?? null,
       categoryName: s.category?.name ?? null,
-      entries: s._count.slots ?? 0,
-      rows: s.slots.map((x) => ({
-        singer: x.singer?.name ?? "Unassigned",
-        bhajan: x.bhajan?.title ?? x.bhajanTitle ?? x.festivalBhajanTitle ?? null,
-        pitch: x.confirmedPitch,
-      })),
+      entries,
+      format: s.format,
+      // A program's rows are its items, which are not singer-and-bhajan pairs;
+      // the panel says how many there are and links to the program instead.
+      rows: isProgram
+        ? []
+        : s.slots.map((x) => ({
+            singer: x.singer?.name ?? "Unassigned",
+            bhajan: x.bhajan?.title ?? x.bhajanTitle ?? x.festivalBhajanTitle ?? null,
+            pitch: x.confirmedPitch,
+          })),
     };
     const utcKey = isoDateUTC(s.date);
     const localKey = isoDateLocal(s.date);

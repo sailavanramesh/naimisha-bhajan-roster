@@ -55,7 +55,13 @@ export async function runNudges(now: Date = new Date()): Promise<NudgeRun> {
 
   const sessions = await prisma.session.findMany({
     // Session dates are stored at UTC midnight and read as Melbourne dates.
-    where: { date: new Date(`${date}T00:00:00.000Z`) },
+    //
+    // Bhajan sessions only. A music program has no SessionSlot rows, so it
+    // could never nudge anybody — but it WOULD count as "something on today",
+    // and a day holding nothing but a program would report a run that looked
+    // at a session and found nothing to say instead of the true "nothing on
+    // today". Nobody is chasing a program for a bhajan and a pitch.
+    where: { date: new Date(`${date}T00:00:00.000Z`), format: "bhajans" },
     select: {
       id: true,
       slots: {

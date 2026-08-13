@@ -234,20 +234,28 @@ export async function bulkDeleteSessions(
   return { ok: true, deleted: res.count, kept };
 }
 
-const CategoryInput = z.object({ name: z.string().trim().min(1).max(60) });
+const CategoryInput = z.object({
+  name: z.string().trim().min(1).max(60),
+  scope: z.enum(["bhajans", "program"]).default("bhajans"),
+});
 
 /**
  * Add a category.
  *
  * Editors, not owners: naming the kinds of session the centre runs is part of
  * running the roster, unlike deciding when the app buzzes people.
+ *
+ * `scope` says which vocabulary it joins — the kinds of bhajan session, or the
+ * kinds of music program. The name is checked across BOTH, because two kinds
+ * sharing a name would be indistinguishable everywhere either is shown.
  */
 export async function addSessionCategory(
   name: string,
+  scope: "bhajans" | "program" = "bhajans",
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   await requireCapability("manageAllocations");
 
-  const parsed = CategoryInput.safeParse({ name });
+  const parsed = CategoryInput.safeParse({ name, scope });
   if (!parsed.success) return { ok: false, error: "Give it a name." };
 
   const existing = await prisma.sessionCategory.findFirst({
@@ -255,9 +263,14 @@ export async function addSessionCategory(
   });
   if (existing) return { ok: false, error: `"${existing.name}" is already there.` };
 
-  const last = await prisma.sessionCategory.findFirst({ orderBy: { order: "desc" } });
+  // Ordering is per scope, so adding a program kind does not push its number
+  // past the end of the bhajan list and leave gaps in both.
+  const last = await prisma.sessionCategory.findFirst({
+    where: { scope: parsed.data.scope },
+    orderBy: { order: "desc" },
+  });
   await prisma.sessionCategory.create({
-    data: { name: parsed.data.name, order: (last?.order ?? -1) + 1 },
+    data: { name: parsed.data.name, scope: parsed.data.scope, order: (last?.order ?? -1) + 1 },
   });
 
   revalidatePath("/admin");

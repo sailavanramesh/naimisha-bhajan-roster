@@ -12,6 +12,8 @@ type DaySession = {
   categoryName: string | null;
   entries: number;
   rows?: { singer: string; bhajan: string | null; pitch: string | null }[];
+  /** See Session.format. Absent from an older response is read as bhajans. */
+  format?: "bhajans" | "program";
 };
 
 export async function fetchMonthInfo(monthKey: string): Promise<{
@@ -35,20 +37,29 @@ export async function fetchMonthInfo(monthKey: string): Promise<{
  *
  * `another` forces a new one onto a day that already has sessions — the only
  * way a second session gets created.
+ *
+ * `format: "program"` always creates. A music program is never what somebody
+ * means by "the session on Thursday", so there is nothing to find and reuse:
+ * asking for one is asking for a new one, on a day that may well already hold
+ * the bhajan session it runs alongside.
  */
 export async function createSessionForDate(
   dateISO: string,
-  opts: { another?: boolean } = {},
-): Promise<{ id: string }> {
+  opts: { another?: boolean; format?: "bhajans" | "program" } = {},
+): Promise<{ id: string; format: "bhajans" | "program" }> {
   const res = await fetch(`/api/roster/ensure`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ date: dateISO, another: opts.another === true }),
+    body: JSON.stringify({
+      date: dateISO,
+      another: opts.another === true,
+      format: opts.format ?? "bhajans",
+    }),
   });
   if (!res.ok) throw new Error("Failed to create session");
 
   const data = await res.json();
   const id = String(data?.sessionId || "");
   if (!id) throw new Error("No sessionId returned");
-  return { id };
+  return { id, format: data?.format === "program" ? "program" : "bhajans" };
 }

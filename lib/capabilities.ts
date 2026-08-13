@@ -39,6 +39,7 @@ export type Capability =
   | "setMicCushion" // mark which colour mic cushion a singer is on
   | "notifySingers" // send somebody a reminder about a session by hand
   | "manageNotificationRules" // owner only: when the day-of reminders go out
+  | "editPrograms" // build a music program: its running order, performers, crew
   | "viewAllPages";
 
 const EDITOR_CAPABILITIES: Capability[] = [
@@ -53,6 +54,11 @@ const EDITOR_CAPABILITIES: Capability[] = [
   "manageOwnLearning",
   "setMicCushion",
   "notifySingers",
+  // Its own capability rather than folding into buildSessions: a program is
+  // curated by hand from end to end, where a bhajan session is generated and
+  // then corrected. Nothing about being allowed to run the generator implies
+  // being the person who decides a Guru Poornima running order.
+  "editPrograms",
   "viewAllPages",
 ];
 
@@ -80,7 +86,16 @@ export function can(role: Role, capability: Capability): boolean {
 }
 
 /** Pages a member may reach. Everything else is owner/editor only. */
-export const MEMBER_PAGES = ["/roster", "/bhajans", "/singers", "/explore", "/my-list"];
+export const MEMBER_PAGES = [
+  "/roster",
+  "/bhajans",
+  "/singers",
+  "/explore",
+  "/my-list",
+  // Members READ programs — they are singing in them. Editing is gated on
+  // `editPrograms` at every action, which is what actually stops them.
+  "/program",
+];
 
 export function canSeePage(role: Role, path: string): boolean {
   // Keyed off the capability, not a role name. Written as `role === "editor"`

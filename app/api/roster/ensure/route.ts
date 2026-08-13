@@ -33,13 +33,25 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
   const date = String(body?.date || "");
   const another = body?.another === true;
+  const format = body?.format === "program" ? "program" : "bhajans";
   const dt = parseISODateUTC(date);
   if (!dt) return NextResponse.json({ error: "Invalid date" }, { status: 400 });
 
-  if (!another) {
+  if (format === "program" && !can(role, "editPrograms")) {
+    return NextResponse.json({ error: "Not allowed" }, { status: 403 });
+  }
+
+  /*
+   * A program is always created, never found. Nothing existing can be "the
+   * program on this day" in the sense the calendar means — a day commonly
+   * holds the bhajan session and the offering together, and reusing one for
+   * the other would hand back the wrong editor.
+   */
+  if (!another && format === "bhajans") {
+    // `format` is selected so defaultSessionOf can step around music programs.
     const onThatDay = await prisma.session.findMany({
       where: { date: dt },
-      select: { id: true, startsAt: true },
+      select: { id: true, startsAt: true, format: true },
     });
     const existing = defaultSessionOf(onThatDay);
     if (existing) return NextResponse.json({ sessionId: existing.id });
@@ -48,9 +60,9 @@ export async function POST(req: NextRequest) {
   // New sessions start at the usual evening time, because almost all of them
   // do. A morning one is then one field to change rather than one to fill in.
   const created = await prisma.session.create({
-    data: { date: dt, startsAt: USUAL_START },
-    select: { id: true },
+    data: { date: dt, startsAt: USUAL_START, format },
+    select: { id: true, format: true },
   });
 
-  return NextResponse.json({ sessionId: created.id });
+  return NextResponse.json({ sessionId: created.id, format: created.format });
 }
