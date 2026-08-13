@@ -10,6 +10,7 @@ import { DefaultViewToggle } from "./DefaultViewToggle";
 import { Card, CardContent, CardHeader, CardTitle, Input, Button } from "@/components/ui";
 import RosterCalendarClient from "./RosterCalendarClient";
 import { nextThursday, melbourneTodayISO } from "@/lib/dates";
+import { resolveRosterView } from "@/lib/rosterView";
 
 export const dynamic = "force-dynamic";
 
@@ -112,12 +113,7 @@ export default async function RosterPage({
   /** Temporary: two ways of showing a session kind's picture, to choose from. */
   const tile = sp.tile === "band" ? "band" : "badge";
 
-  const view: "calendar" | "list" =
-    sp.view === "list" || sp.view === "calendar"
-      ? sp.view
-      : savedView === "list"
-        ? "list"
-        : "calendar";
+  const view = resolveRosterView(sp.view, savedView === "list" ? "list" : savedView === "calendar" ? "calendar" : null);
   const q = (sp.q ?? "").trim();
 
   const todayUTC = new Date();

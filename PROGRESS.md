@@ -1050,6 +1050,28 @@ the empty ones were all deleted from the data.
 Two sessions in a day used to be two bars. The name line now carries "×2", so
 a morning and an evening of the same kind still read as two.
 
+### "My default view is List but it opens on Calendar" (2026-08-13)
+
+Reported against production. The saved setting was fine — the database still
+held `Sailavan … list`. The way IN was overriding it: the "Roster" pill on a
+session page linked to `/roster?view=calendar&m=…&d=…`, and an explicit `?view=`
+deliberately beats a saved default so that a shared link shows what its sender
+meant. Since the app opens on the nearest SESSION, coming back to the roster is
+the normal path, so the setting never got a say and looked broken.
+
+The pill keeps the month and day and no longer names a view. The rule itself
+moved into `lib/rosterView.ts` with tests, so "explicit beats saved beats
+calendar" is pinned rather than restated in a ternary.
+
+Verified by signing in as that account against the dev database — default set
+to `list`, then put back — and walking the real path: `/roster` shows the list,
+the pill now lands on the list, and the OLD link still forces the calendar,
+which is what proves the link was the cause. Predates the 2026-08-13
+promotion; it was not caused by it.
+
+`app/roster/CalendarView.tsx` is dead code (nothing imports it) and contains
+two more `?view=` links. Left alone rather than half-tidied.
+
 ### Also worth knowing
 
 - `data/roster.xlsx` was replaced with the newer export from `~/Downloads`

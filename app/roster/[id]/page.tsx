@@ -294,7 +294,19 @@ export default async function RosterSessionPage({
   const sessionDay = new Date(session.date);
   const rosterDay = sessionDay.toISOString().slice(0, 10);
   const rosterMonth = `${sessionDay.getUTCFullYear()}-${String(sessionDay.getUTCMonth() + 1).padStart(2, "0")}`;
-  const backToRosterHref = `/roster?view=calendar&m=${rosterMonth}&d=${rosterDay}`;
+  /*
+   * No `view=` here, deliberately.
+   *
+   * This link used to force the calendar. An explicit view always beats a
+   * saved default — that is what makes a shared link show what was meant — so
+   * anybody whose default is the LIST got the calendar every time they came
+   * back from a session. Since the app opens on the nearest session, that is
+   * the normal way in, and it read as the setting being ignored. It was.
+   *
+   * The month and day stay: they cost nothing when the list is showing, and
+   * they put the calendar on the right month when it is.
+   */
+  const backToRosterHref = `/roster?m=${rosterMonth}&d=${rosterDay}`;
 
   const dateLabel = new Date(session.date).toLocaleDateString(undefined, {
     weekday: "long",
