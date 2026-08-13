@@ -10,10 +10,17 @@ import { Gender } from '@prisma/client';
 import type { SungRow } from '@/lib/singerProfile';
 import { buildAllProfiles, buildSingerProfile, type SingerProfile } from '@/lib/singerProfile';
 import { historyCutoff } from '@/lib/dates';
+import { hasBeenSung, melbourneNowLocal } from '@/lib/sungCutoff';
 
 /*
  * Offsets are learned from what has been SUNG. A confirmed pitch on a session
  * that has not happened yet is a plan, not evidence — see historyCutoff.
+ *
+ * This is only the COARSE half of the test. It compares dates, so it still lets
+ * through today's session, which at nine in the morning has not been sung. The
+ * two-hour rule in lib/sungCutoff.ts finishes the job in toSungRows(), where
+ * the session's own start time is available; keeping the date filter in SQL
+ * means we never drag the whole future roster back to compare it.
  */
 const SUNG_SESSION = () => ({ date: { lte: historyCutoff() } });
 
@@ -66,7 +73,7 @@ const SUNG_SLOT_SELECT = {
   bhajanId: true,
   bhajanTitle: true,
   singer: { select: { name: true, gender: true } },
-  session: { select: { date: true } },
+  session: { select: { date: true, startsAt: true } },
   bhajan: {
     select: {
       raga: true,
@@ -84,7 +91,7 @@ type RawSlot = {
   bhajanTitle: string | null;
   /** Null on a drafted-but-unrostered slot. Such rows carry no profile signal. */
   singer: { name: string; gender: Gender | null } | null;
-  session: { date: Date };
+  session: { date: Date; startsAt: string | null };
   bhajan: {
     raga: string | null;
     title: string;
@@ -93,9 +100,25 @@ type RawSlot = {
   } | null;
 };
 
-/** Drop slots with no singer — a profile is by definition per singer. */
+/**
+ * Drop slots with no singer — a profile is by definition per singer — and
+ * slots whose session has not been sung yet.
+ *
+ * The second test is the same one the known list uses: two hours after the
+ * session's start. Without it, a pitch confirmed while PLANNING tonight showed
+ * up this morning as "Triveni has sung this", on the strength of a row that is
+ * still a plan somebody might change. One `now` for the whole set, so a page
+ * cannot render a row as sung and unsung in the same breath.
+ */
 function toSungRows(slots: RawSlot[]): SungRow[] {
-  return slots.filter((s) => s.singer !== null).map(toSungRow);
+  const nowLocal = melbourneNowLocal();
+  return slots
+    .filter(
+      (s) =>
+        s.singer !== null &&
+        hasBeenSung(s.session.date.toISOString().slice(0, 10), s.session.startsAt, nowLocal),
+    )
+    .map(toSungRow);
 }
 
 function toSungRow(slot: RawSlot): SungRow {
