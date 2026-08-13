@@ -317,31 +317,64 @@ input[type="date"][data-empty="true"] {
   A row that has just changed, on the live view.
 
   The board refreshes itself silently, so somebody at the desk would otherwise
-  see only that it now says something different, never that it changed. Two
-  seconds of a warm ring is enough to catch the eye and short enough not to
-  become part of the furniture.
+  see only that it now says something different, never that it changed.
 
-  Held at full strength for the first third: a glow that starts fading
-  immediately is easy to miss if you looked up a moment late.
+  Six seconds, not two, and it breathes twice before it goes. Sailavan:
+  "someone may not be looking at the screen consistently" — which is the whole
+  situation this is for. A person at the sound desk is watching the hall, not
+  the tablet, and a two-second flash aimed at somebody already staring at the
+  screen is aimed at the wrong person. Two slow pulses give a glance somewhere
+  to land.
+
+  A ring AND a wash: the ring alone was easy to miss at arm's length on a
+  bright screen, and tinting the whole card carries much further without
+  touching the text underneath.
 */
 @keyframes live-row-changed {
-  0%,
-  30% {
-    box-shadow: 0 0 0 3px rgb(var(--brass) / 0.55);
+  0% {
+    box-shadow: 0 0 0 4px rgb(var(--brass) / 0.75);
+    background-color: rgb(var(--brass) / 0.14);
+  }
+  25% {
+    box-shadow: 0 0 0 4px rgb(var(--brass) / 0.35);
+    background-color: rgb(var(--brass) / 0.05);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgb(var(--brass) / 0.75);
+    background-color: rgb(var(--brass) / 0.14);
+  }
+  75% {
+    box-shadow: 0 0 0 4px rgb(var(--brass) / 0.35);
+    background-color: rgb(var(--brass) / 0.05);
   }
   100% {
-    box-shadow: 0 0 0 3px rgb(var(--brass) / 0);
+    box-shadow: 0 0 0 4px rgb(var(--brass) / 0);
+    background-color: rgb(var(--brass) / 0);
   }
 }
 
 .live-row-changed {
-  animation: live-row-changed 2s ease-out 1;
+  animation: live-row-changed 6s ease-in-out 1;
 }
 
-/* Somebody who has asked for less motion still gets told, just not by moving. */
+/*
+  Somebody who has asked for less motion still gets told, and for just as long
+  — they simply get a steady mark rather than a pulsing one.
+*/
 @media (prefers-reduced-motion: reduce) {
   .live-row-changed {
-    animation: none;
-    box-shadow: 0 0 0 3px rgb(var(--brass) / 0.45);
+    animation: live-row-hold 6s linear 1;
+  }
+}
+
+@keyframes live-row-hold {
+  0%,
+  80% {
+    box-shadow: 0 0 0 4px rgb(var(--brass) / 0.6);
+    background-color: rgb(var(--brass) / 0.12);
+  }
+  100% {
+    box-shadow: 0 0 0 4px rgb(var(--brass) / 0);
+    background-color: rgb(var(--brass) / 0);
   }
 }

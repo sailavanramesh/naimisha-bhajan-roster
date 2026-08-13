@@ -101,7 +101,7 @@ export default async function RosterSessionPage({
   const session = await prisma.session.findUnique({
     where: { id: sessionId },
     include: {
-      category: { select: { name: true } },
+      category: { select: { name: true, image: true } },
       slots: {
         include: {
           singer: true,
@@ -348,7 +348,16 @@ export default async function RosterSessionPage({
           {session.category || session.topic ? (
             <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
               {session.category ? (
-                <span className="rounded-full border border-brass/40 bg-brass/[0.08] px-2 py-0.5 text-[11px] uppercase tracking-wide text-on-surface-muted">
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-brass/40 bg-brass/[0.08] py-0.5 pe-2 ps-0.5 text-[11px] uppercase tracking-wide text-on-surface-muted">
+                  {/* The kind's picture, same badge as the roster list uses. */}
+                  {session.category.image ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={session.category.image}
+                      alt=""
+                      className="h-4 w-4 rounded-full object-cover"
+                    />
+                  ) : null}
                   {session.category.name}
                 </span>
               ) : null}

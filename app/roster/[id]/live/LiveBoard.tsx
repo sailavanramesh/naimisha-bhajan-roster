@@ -99,7 +99,8 @@ export function LiveBoard({
     if (moved.length === 0) return;
 
     setChanged(new Set(moved));
-    const timer = setTimeout(() => setChanged(new Set()), 2200);
+    // Slightly past the animation, so the class is never pulled mid-pulse.
+    const timer = setTimeout(() => setChanged(new Set()), 6200);
     return () => clearTimeout(timer);
   }, [slots]);
   /** Which card's words are open, by position. Null for none. */

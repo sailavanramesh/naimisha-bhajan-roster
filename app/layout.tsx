@@ -121,6 +121,8 @@ function SignInWall() {
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const role = await getRole();
+  /* A test system should be obvious at a glance — see components/Yantra.tsx. */
+  const isDev = process.env.APP_ENV === "dev";
   const signedIn = await getSignedInSinger();
 
   /*
@@ -154,16 +156,27 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         </a>
 
         <div className="flex min-h-screen">
-          <Nav role={role} />
+          <Nav role={role} isDev={isDev} />
 
           <div className="flex-1">
             <div className="mx-auto max-w-6xl px-3 pb-16 pt-14 sm:px-6 sm:pt-8">
               <header className="no-print mb-6">
                 <div className="flex items-center gap-4 border-b border-rule pb-4">
-                  <YantraFull size={54} className="shrink-0 text-brass" />
+                  <YantraFull size={54} className="shrink-0 text-brass" variant={isDev ? "dev" : "brand"} />
                   <div>
                     <h1 className="font-display text-2xl font-semibold tracking-tight text-on-ground sm:text-3xl">
                       Naimiṣa Bhajan Roster
+                      {/*
+                        Said in words as well as in colour. Somebody who has
+                        both open on a phone should not have to remember which
+                        mark means which — and colour alone is not something to
+                        rest a "do not touch production" signal on.
+                      */}
+                      {isDev ? (
+                        <span className="ms-2 align-middle rounded-full border border-kumkum/50 bg-kumkum/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-kumkum">
+                          dev
+                        </span>
+                      ) : null}
                     </h1>
                     {/* Strapline removed at Sailavan's request, 2026-08-11. The
                         wording is kept verbatim in PROGRESS.md under "Removed

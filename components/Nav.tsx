@@ -35,7 +35,7 @@ function Hamburger({ open }: { open: boolean }) {
   );
 }
 
-export function Nav({ role = "viewer" }: { role?: string }) {
+export function Nav({ role = "viewer", isDev = false }: { role?: string; isDev?: boolean }) {
   const pathname = usePathname();
 
   const [expanded, setExpanded] = useState<boolean>(true);
@@ -122,7 +122,7 @@ export function Nav({ role = "viewer" }: { role?: string }) {
       >
         <div className="flex items-center justify-between gap-2 px-1 pb-3">
           <div className={clsx("flex items-center gap-2 font-display text-sm font-semibold text-on-ground", expanded ? "opacity-100" : "opacity-0 pointer-events-none")}>
-            <Yantra size={22} className="text-brass" />
+            <Yantra size={22} className="text-brass" variant={isDev ? "dev" : "brand"} />
             Naimiṣa Roster
           </div>
 
@@ -162,7 +162,7 @@ export function Nav({ role = "viewer" }: { role?: string }) {
           <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
           <div className="absolute left-0 top-0 h-full w-[82%] max-w-[320px] bg-ground-raised border-r border-rule p-3">
             <div className="flex items-center justify-between px-1 pb-3">
-              <div className="flex items-center gap-2 font-display text-sm font-semibold text-on-ground"><Yantra size={22} className="text-brass" />Naimiṣa Roster</div>
+              <div className="flex items-center gap-2 font-display text-sm font-semibold text-on-ground"><Yantra size={22} className="text-brass" variant={isDev ? "dev" : "brand"} />Naimiṣa Roster</div>
               <button type="button" onClick={() => setMobileOpen(false)} aria-label="Close navigation">
                 <Hamburger open={true} />
               </button>
