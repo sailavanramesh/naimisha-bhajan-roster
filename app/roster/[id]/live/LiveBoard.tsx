@@ -25,14 +25,18 @@ export type LiveSlot = {
 export type LiveInstrument = { instrument: string; person: string | null };
 
 /**
- * Everything on a row that is worth noticing a change to.
+ * Everything on a row that is worth noticing a change to — which is all of it.
  *
- * The mic cushion is deliberately absent: it has its own live colour and
- * changes far more often, and ringing the row every time somebody swaps a
- * cushion would make the ring mean nothing.
+ * The mic cushion was left out at first, on the reasoning that it has its own
+ * live colour and changes often enough that ringing the row each time would
+ * wear the ring out. Sailavan wanted it in, and he is the one at the desk:
+ * from there a cushion swap is exactly the kind of change you need to catch,
+ * and the person who made it is standing in the same hall.
  */
-function rowSignature(s: LiveSlot): string {
-  return [s.singerName, s.bhajanTitle, s.confirmedPitch, s.tablaPitch, s.raga].join("\u0000");
+function rowSignature(s: LiveSlot, cushion: string | null): string {
+  return [s.singerName, s.bhajanTitle, s.confirmedPitch, s.tablaPitch, s.raga, cushion].join(
+    "\u0000",
+  );
 }
 
 /**
@@ -93,7 +97,12 @@ export function LiveBoard({
   const seen = useRef<Map<number, string> | null>(null);
 
   useEffect(() => {
-    const now = new Map(slots.map((s) => [s.position, rowSignature(s)]));
+    const now = new Map(
+      slots.map((s) => [
+        s.position,
+        rowSignature(s, cushions.get(s.singerId ?? "")?.colour ?? null),
+      ]),
+    );
     const before = seen.current;
     seen.current = now;
     if (!before) return;
@@ -107,7 +116,13 @@ export function LiveBoard({
     // Slightly past the animation, so the class is never pulled mid-pulse.
     const timer = setTimeout(() => setChanged(new Set()), 6200);
     return () => clearTimeout(timer);
-  }, [slots]);
+    /*
+     * `cushions` is a fresh Map on every poll, so this runs every four seconds
+     * whether anything moved or not. That is fine and deliberate: the
+     * comparison is by VALUE, so an unchanged poll produces identical
+     * signatures and rings nothing.
+     */
+  }, [slots, cushions]);
   /** Which card's words are open, by position. Null for none. */
   const [words, setWords] = useState<number | null>(null);
   const openSlot = words === null ? null : (slots.find((s) => s.position === words) ?? null);
