@@ -3,6 +3,7 @@
 import { useMemo, useRef, useState, useTransition, useEffect } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { DeitySymbols } from "@/components/DeitySymbol";
 import { Button } from "@/components/ui";
 import { deleteSingerRow, upsertSessionSingerRows, type SingerRowInput } from "./actions";
@@ -139,6 +140,7 @@ export function SessionSingersGrid(props: {
    * both rows and setting it on either sets both.
    */
   const cushions = useMicCushions(props.sessionId);
+  const router = useRouter();
 
   const [rows, setRows] = useState<RowState[]>(
     props.initialRows.map((r) => ({
@@ -615,7 +617,34 @@ export function SessionSingersGrid(props: {
         updatedAt: r.updatedAt ?? null,
       }));
       try {
-        await upsertSessionSingerRows(props.sessionId, payload);
+        const res = await upsertSessionSingerRows(props.sessionId, payload);
+        if (!res.ok) {
+          setSaveError(res.error);
+          return;
+        }
+        setSaveError(null);
+
+        /*
+         * Take the ids and timestamps the save just wrote.
+         *
+         * These rows live in local state, seeded once when the page loaded.
+         * Without this the grid would keep sending the `updatedAt` values it
+         * started with, and pressing Save twice would be refused the second
+         * time as a concurrent edit — the grid clashing with its own writes.
+         * A new row would keep its `new_…` id too, and save as a duplicate.
+         *
+         * If the counts disagree the mapping is not trustworthy, so fall back
+         * to reloading rather than stamping rows with the wrong ids.
+         */
+        if (res.stamps.length === payload.length) {
+          setRows((prev) =>
+            prev.map((r, i) =>
+              res.stamps[i] ? { ...r, id: res.stamps[i].id, updatedAt: res.stamps[i].updatedAt } : r,
+            ),
+          );
+        } else {
+          router.refresh();
+        }
       } catch (e) {
         setSaveError(
           e instanceof Error
