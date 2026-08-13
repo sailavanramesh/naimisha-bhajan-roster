@@ -1072,6 +1072,37 @@ promotion; it was not caused by it.
 `app/roster/CalendarView.tsx` is dead code (nothing imports it) and contains
 two more `?view=` links. Left alone rather than half-tidied.
 
+### The known list now waits for the session, and the clock finishes the job (2026-08-13)
+
+Sailavan: "a song can't go into the known list if that date hasn't happened
+yet, it should only go in two hours after the completion of that session (based
+on its start time)" — and "have you backfilled it... and will the app continue
+to update the known list as the roster is populated?"
+
+Two faults, both real.
+
+**The cutoff was a DATE.** `recordSungAsKnown` skipped a session only if its
+date was in the future, so a 7pm session counted as sung from midnight that
+morning, while it was still a plan somebody might change. It is now two hours
+after the session's own `startsAt` — `lib/sungCutoff.ts`, 12 tests, Melbourne
+wall-clock throughout because a session date is a Melbourne date and a start
+time is a Melbourne clock time.
+
+**Nothing ran after a session.** `recordSungAsKnown` only ever ran from a
+roster SAVE, and rosters are written days ahead, when nothing has been sung. If
+nobody edited the session afterwards — and often nobody does — what was sung
+never reached anybody's list. Tightening the cutoff makes that certain rather
+than likely.
+
+So `syncSungRepertoire` now runs from the hourly job that already sends the
+nudges. It asks the same question of every session that recently finished, and
+is idempotent: re-running adds nothing. `?days=` widens it for a one-off
+backfill.
+
+Measured on the dev copy of production: 194 sessions swept, **17 pairs added**,
+11 pitches filled, second run added 0. Those 17 were the gap between what the
+roster knew (540 sung pairs) and what the lists held (523).
+
 ### Also worth knowing
 
 - `data/roster.xlsx` was replaced with the newer export from `~/Downloads`

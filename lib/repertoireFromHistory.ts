@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { RepertoireKind } from "@prisma/client";
-import { melbourneTodayISO } from "@/lib/dates";
+import { hasBeenSung, melbourneNowLocal } from "@/lib/sungCutoff";
 
 /**
  * lib/repertoireFromHistory.ts — singing something puts it on your list.
@@ -18,9 +18,10 @@ import { melbourneTodayISO } from "@/lib/dates";
  *
  * Four rules, all about not overwriting a person's own words:
  *
- * 1. ONLY WHAT WAS SUNG. A session dated in the future is a plan. A pitch
- *    typed while planning is not evidence that anybody sang anything, which is
- *    the same rule the offset profiles use (lib/dates.ts, historyCutoff).
+ * 1. ONLY WHAT WAS SUNG. Until two hours after the session started, it is a
+ *    plan; a pitch typed while planning is not evidence that anybody sang
+ *    anything. This used to compare DATES, so a 7pm session counted from
+ *    midnight — Sailavan caught it. See lib/sungCutoff.ts.
  * 2. NEVER DOWNGRADE. If the bhajan is already on their list at any stage it
  *    stays where it is. Somebody who has it as "learning" has said something
  *    about themselves that a roster row does not overrule.
@@ -39,6 +40,7 @@ export async function recordSungAsKnown(
       where: { id: sessionId },
       select: {
         date: true,
+        startsAt: true,
         slots: {
           where: { singerId: { not: null }, bhajanId: { not: null } },
           select: {
@@ -53,7 +55,7 @@ export async function recordSungAsKnown(
     if (!session) return { ...nothing, skipped: "no such session" };
 
     const dateISO = session.date.toISOString().slice(0, 10);
-    if (dateISO > melbourneTodayISO()) {
+    if (!hasBeenSung(dateISO, session.startsAt)) {
       return { ...nothing, skipped: "session has not happened yet" };
     }
     if (session.slots.length === 0) return nothing;
@@ -115,4 +117,54 @@ export async function recordSungAsKnown(
     console.error("recordSungAsKnown failed", e);
     return { ...nothing, skipped: "error" };
   }
+}
+
+/**
+ * Catch the sessions that were rostered in advance and never touched again.
+ *
+ * `recordSungAsKnown` runs when a roster is SAVED, and the ordinary way to
+ * roster is days ahead — at which point the session has not happened, so
+ * nothing is recorded. If nobody edits it afterwards, and often nobody does,
+ * what was sung never reaches anybody's list. Tightening the cutoff to two
+ * hours after the start makes that certain rather than likely: at save time
+ * the answer is now almost always "not yet".
+ *
+ * So the clock finishes the job. This runs from the hourly job that already
+ * sends the nudges (app/api/nudges/run), and asks the same question of every
+ * session that has recently finished. Re-running it is free — the recording
+ * step adds only what is missing.
+ *
+ * `days` bounds the sweep so the hourly run stays cheap. A one-off backfill
+ * passes a large number.
+ */
+export async function syncSungRepertoire(
+  days = 21,
+): Promise<{ sessions: number; added: number; pitchFilled: number }> {
+  const now = new Date();
+  const from = new Date(now);
+  from.setUTCDate(from.getUTCDate() - days);
+  from.setUTCHours(0, 0, 0, 0);
+
+  const nowLocal = melbourneNowLocal(now);
+
+  const sessions = await prisma.session.findMany({
+    where: { date: { gte: from }, slots: { some: { singerId: { not: null }, bhajanId: { not: null } } } },
+    select: { id: true, date: true, startsAt: true },
+    orderBy: { date: "asc" },
+  });
+
+  let touched = 0;
+  let added = 0;
+  let pitchFilled = 0;
+
+  for (const s of sessions) {
+    const dateISO = s.date.toISOString().slice(0, 10);
+    if (!hasBeenSung(dateISO, s.startsAt, nowLocal)) continue;
+    const result = await recordSungAsKnown(s.id);
+    touched++;
+    added += result.added;
+    pitchFilled += result.pitchFilled;
+  }
+
+  return { sessions: touched, added, pitchFilled };
 }
