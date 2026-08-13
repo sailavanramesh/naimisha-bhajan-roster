@@ -747,6 +747,12 @@ Still genuinely open, none blocking:
     is on the first two. The roster grid is dense and a 24-row ladder per slot
     would overwhelm it; a compact variant is probably wanted, which is a design
     decision rather than a bug.
+14. **Should the phone's BACK gesture be guarded too?** The unsaved-changes
+    dialog catches links; back is a `popstate`, which can only be intercepted
+    by pushing a sentinel history entry and re-pushing it on the way past — a
+    pattern that strands people on a page when it goes wrong. Conservative
+    choice: not guarded. The draft kept on the device makes going back
+    recoverable, which is the outcome that actually matters.
 
 ### Push notifications — DONE, plus the day-of nudge
 
@@ -930,6 +936,58 @@ Two faults, one symptom.
 
 Worth remembering: any Server Action whose failure a person needs to read must
 RETURN the reason. Throwing is for faults nobody can act on.
+
+### Unsaved work in the roster grid (2026-08-13)
+
+Sailavan asked whether leaving a page with unsaved edits should ask first, and
+show what those edits are. It should — but a dialog alone answers the least
+important third of the problem, so this is three mechanisms:
+
+| How the work gets lost | What now happens |
+|---|---|
+| A link inside the app | Our own dialog, listing every change, with Save / Discard / Stay |
+| Closing or reloading the tab | The browser's generic prompt. Its wording is not ours to set and it cannot offer a Save button |
+| The phone locking, Safari dropping the tab | Nothing fires at all — so the edits are on the device, and offered back on return |
+
+The third is the likeliest one in a hall and the only one no dialog can help
+with. `lib/rosterDraft.ts` holds all of it as pure functions; 29 tests.
+
+Decisions worth keeping:
+
+- **The draft stores what it was edited FROM**, not just the edits. Without
+  that, a stale draft is indistinguishable from somebody else's newer save —
+  both merely differ from what is on screen — and restoring reinstates an old
+  pitch over a fresh one. The first version did exactly that and the browser
+  test caught it. A draft without that record is refused rather than guessed at.
+- **A row the draft changed AND somebody else has since saved keeps the saved
+  version**, and says what the draft wanted. CLAUDE.md rule 6: a confirmedPitch
+  exists nowhere else.
+- **A tabla that merely followed its pitch is not a second change.** Tabla
+  pitch is Sa + 7 semitones, so one edit was reading as "2 unsaved changes",
+  which makes the count worthless. `describeChanges` takes the app's own
+  pitch→tabla map and stays silent when the tabla simply followed.
+- **Read the draft before writing it.** A page opens with nothing unsaved, so
+  the writer's first act would otherwise be to clear the draft it was meant to
+  offer. The effects are ordered deliberately.
+- **No autosave.** Saving runs the notification stack — removals, the settled
+  announcement — so autosaving would ping the group on every keystroke.
+
+Not covered: the phone's BACK gesture. Intercepting it means pushing history
+entries and re-pushing on popstate, which breaks navigation when it goes wrong.
+The draft makes going back recoverable instead. Logged under OPEN-QUESTIONS.
+
+### The page slid sideways on every phone (found on the way, 2026-08-13)
+
+At 375px the document was 404px wide, so every screen drifted under the thumb —
+and `position: fixed` is placed against that wider viewport, which is how a
+centred dialog ends up half off screen.
+
+Two `min-width: auto` defaults, which is what a flex or grid child gets unless
+told otherwise: `app/layout.tsx`'s content column, and `Card` itself. Neither
+would shrink below the widest thing inside it — the roster table declares
+`min-w-[720px]` on purpose — so instead of the table scrolling in its own box,
+the page grew. `min-w-0` on both. Measured 404 → 392 → 375, and desktop is
+unchanged.
 
 ### Also worth knowing
 

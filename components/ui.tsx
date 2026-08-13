@@ -25,6 +25,12 @@ export function Card(props: { children: React.ReactNode; className?: string }) {
         // A warm panel lifted off the lacquer, edged with a brass hairline —
         // not a cream slab. The top highlight is the light catching the edge.
         "rounded-[14px] border border-card-edge bg-surface text-on-surface",
+        // Cards are laid out in grids, and a grid item defaults to
+        // `min-width: auto` — it will not shrink below its own content. One
+        // wide thing inside a card therefore pushed the card past the screen
+        // and the whole page slid sideways at 375px. Anything genuinely wide
+        // scrolls in its own overflow-x-auto box instead.
+        "min-w-0",
         "shadow-[0_1px_2px_rgb(var(--ink)/0.04),0_12px_28px_-20px_rgb(var(--ink)/0.18)]",
         props.className
       )}

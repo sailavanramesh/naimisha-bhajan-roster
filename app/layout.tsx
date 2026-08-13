@@ -177,7 +177,20 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <div className="flex min-h-screen">
           <Nav role={role} isDev={isDev} />
 
-          <div className="flex-1">
+          {/*
+            min-w-0, and it matters more than it looks.
+
+            A flex child defaults to `min-width: auto`, which means it refuses
+            to be narrower than its own content. The roster table declares
+            min-w-[720px] — deliberately, so its columns stay usable — and
+            scrolls inside its own overflow-x-auto box. But that box could not
+            shrink below the table while this column would not shrink either,
+            so at 375px the whole PAGE became 404px wide and every screen
+            drifted sideways under the thumb. Fixed-position things are placed
+            against that wider viewport too, which is how a centred dialog ends
+            up half off the screen on a phone.
+          */}
+          <div className="min-w-0 flex-1">
             <div className="mx-auto max-w-6xl px-3 pb-16 pt-14 sm:px-6 sm:pt-8">
               <header className="no-print mb-6">
                 <div className="flex items-center gap-4 border-b border-rule pb-4">

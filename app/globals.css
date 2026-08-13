@@ -502,6 +502,8 @@ input[type="date"][data-empty="true"] {
      60      the mobile navigation drawer and its trigger
      100     the live view, which covers the app including the navigation
      120     the words sheet, which covers the live view
+     140     the unsaved-changes dialog, which is raised BY a click on the
+             navigation and so must cover it
      9999    the bhajan search dropdown, a body-level portal that must clear
              whatever it is anchored inside
 
