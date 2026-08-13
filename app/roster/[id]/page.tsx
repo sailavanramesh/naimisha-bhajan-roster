@@ -331,26 +331,32 @@ export default async function RosterSessionPage({
 
       <Card>
         <CardHeader>
-          <CardTitle>
-            {dateLabel}
-            {/*
-              What kind of session it was, beside the date rather than only in
-              the details panel at the foot of the page — a member never opens
-              that panel, and this is the part they benefit from knowing. The
-              time is deliberately not here: it belongs to the people planning,
-              and the panel already carries it.
-            */}
-            {session.category ? (
-              <span className="ms-2 align-middle rounded-full border border-brass/40 bg-brass/[0.08] px-2 py-0.5 text-[11px] font-normal uppercase tracking-wide text-on-surface-muted">
-                {session.category.name}
-              </span>
-            ) : null}
-            {session.topic ? (
-              <span className="ms-2 align-middle text-sm font-normal italic text-on-surface-muted">
-                {session.topic}
-              </span>
-            ) : null}
-          </CardTitle>
+          <CardTitle>{dateLabel}</CardTitle>
+
+          {/*
+            The kind on its own line, always — not trailing the date.
+            
+            Beside the date it wrapped on a phone in portrait as soon as the
+            name ran long ("Sathyam Shivam Sundaram"), so the header was one
+            line on some sessions and two on others, breaking wherever the
+            words happened to fall. Its own line is the same shape every time,
+            which is what makes a header scannable.
+
+            Still not the time: that belongs to whoever is planning, and the
+            details panel carries it.
+          */}
+          {session.category || session.topic ? (
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+              {session.category ? (
+                <span className="rounded-full border border-brass/40 bg-brass/[0.08] px-2 py-0.5 text-[11px] uppercase tracking-wide text-on-surface-muted">
+                  {session.category.name}
+                </span>
+              ) : null}
+              {session.topic ? (
+                <span className="text-sm italic text-on-surface-muted">{session.topic}</span>
+              ) : null}
+            </div>
+          ) : null}
 
           <div className="mt-2 grid gap-2 text-sm">
             {/*
