@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { sectionFamily, zipVerseLines } from "@/lib/songVerses";
+import { sectionFamily, verseLayout } from "@/lib/songVerses";
 
 export type VerseView = {
   id: string;
@@ -114,6 +114,13 @@ function SectionHeading({ label }: { label: string }) {
   );
 }
 
+/**
+ * One verse: the layers that line up, zipped, and the rest beneath.
+ *
+ * Both parts can appear at once, which is the Krishna document's shape — six
+ * lines of Devanagari paired with six of transliteration, and then one English
+ * sentence for the whole verse. See lib/songVerses.ts `verseLayout`.
+ */
 function VerseBody({
   verse,
   visible,
@@ -121,47 +128,42 @@ function VerseBody({
   verse: VerseView;
   visible: (layer: Layer) => boolean;
 }) {
-  const lines = zipVerseLines(verse);
+  const { lines, blocks } = verseLayout(verse);
 
-  // Aligned: each line with its own transliteration and meaning beneath it.
-  if (lines) {
-    return (
-      <div className="grid gap-2">
-        {lines.map((line, i) => (
-          <div key={i} className="grid gap-0.5">
-            {visible("script") && line.script ? (
-              <p className="font-display text-lg leading-snug text-on-surface">{line.script}</p>
-            ) : null}
-            {visible("roman") && line.roman ? (
-              <p className="text-[15px] leading-snug text-on-surface">{line.roman}</p>
-            ) : null}
-            {visible("meaning") && line.meaning ? (
-              <p className="text-sm italic leading-snug text-on-surface-muted">{line.meaning}</p>
-            ) : null}
-          </div>
-        ))}
-      </div>
-    );
-  }
+  const blockStyle: Record<Layer, string> = {
+    script: "whitespace-pre-wrap font-display text-lg leading-relaxed text-on-surface",
+    roman: "whitespace-pre-wrap text-[15px] leading-relaxed text-on-surface",
+    meaning:
+      "whitespace-pre-wrap border-l-2 border-rule-surface pl-3 text-sm italic leading-relaxed text-on-surface-muted",
+  };
 
-  // Not aligned: whole blocks, in reading order, kept clearly apart.
   return (
     <div className="grid gap-2">
-      {visible("script") && verse.script ? (
-        <p className="whitespace-pre-wrap font-display text-lg leading-relaxed text-on-surface">
-          {verse.script}
-        </p>
+      {lines.length > 0 ? (
+        <div className="grid gap-2">
+          {lines.map((line, i) => (
+            <div key={i} className="grid gap-0.5">
+              {visible("script") && line.script ? (
+                <p className="font-display text-lg leading-snug text-on-surface">{line.script}</p>
+              ) : null}
+              {visible("roman") && line.roman ? (
+                <p className="text-[15px] leading-snug text-on-surface">{line.roman}</p>
+              ) : null}
+              {visible("meaning") && line.meaning ? (
+                <p className="text-sm italic leading-snug text-on-surface-muted">{line.meaning}</p>
+              ) : null}
+            </div>
+          ))}
+        </div>
       ) : null}
-      {visible("roman") && verse.roman ? (
-        <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-on-surface">
-          {verse.roman}
-        </p>
-      ) : null}
-      {visible("meaning") && verse.meaning ? (
-        <p className="whitespace-pre-wrap border-l-2 border-rule-surface pl-3 text-sm italic leading-relaxed text-on-surface-muted">
-          {verse.meaning}
-        </p>
-      ) : null}
+
+      {blocks
+        .filter((block) => visible(block.layer))
+        .map((block) => (
+          <p key={block.layer} className={blockStyle[block.layer]}>
+            {block.text}
+          </p>
+        ))}
     </div>
   );
 }

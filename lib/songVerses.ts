@@ -143,6 +143,70 @@ export function zipVerseLines(verse: VerseLayers): VerseLine[] | null {
   }));
 }
 
+export type Layer = "script" | "roman" | "meaning";
+
+/** In reading order: the words, then how to say them, then what they mean. */
+const LAYER_ORDER: readonly Layer[] = ["script", "roman", "meaning"];
+
+export type VerseLayout = {
+  /** The layers that line up, zipped. Empty when none do. */
+  lines: VerseLine[];
+  /** The layers that do not, kept whole and shown beneath. */
+  blocks: Array<{ layer: Layer; text: string }>;
+};
+
+/**
+ * How to lay a verse out: which layers align, and which stand alone.
+ *
+ * Generalises `zipVerseLines`, which was all-or-nothing and threw away real
+ * alignment. The Krishna document is the case that showed it: six lines of
+ * Devanagari against six of transliteration — a perfect pairing — and then one
+ * English sentence for the whole verse. The old rule saw "not all three match"
+ * and rendered three blocks, losing the one pairing a reader most wants.
+ *
+ * The rule: group the layers present by line count, align the LARGEST group,
+ * and leave the rest as blocks. A group of one is not an alignment, so a lone
+ * layer falls through to a block and the Meerabai case still refuses to pair a
+ * four-line stanza with one sentence. Ties go to the group that comes first in
+ * reading order, which is the one containing the script.
+ */
+export function verseLayout(verse: VerseLayers): VerseLayout {
+  const present = LAYER_ORDER.filter((layer) => layerLines(verse[layer]).length > 0);
+  if (present.length === 0) return { lines: [], blocks: [] };
+
+  const byCount = new Map<number, Layer[]>();
+  for (const layer of present) {
+    const count = layerLines(verse[layer]).length;
+    byCount.set(count, [...(byCount.get(count) ?? []), layer]);
+  }
+
+  // Largest group wins; ties fall to whichever appeared first, which the Map
+  // preserves because `present` is already in reading order.
+  let aligned: Layer[] = [];
+  for (const group of byCount.values()) {
+    if (group.length > aligned.length) aligned = group;
+  }
+  if (aligned.length < 2) aligned = [];
+
+  const lines: VerseLine[] = [];
+  if (aligned.length > 0) {
+    const length = layerLines(verse[aligned[0]]).length;
+    for (let i = 0; i < length; i++) {
+      lines.push({
+        script: aligned.includes("script") ? (layerLines(verse.script)[i] ?? null) : null,
+        roman: aligned.includes("roman") ? (layerLines(verse.roman)[i] ?? null) : null,
+        meaning: aligned.includes("meaning") ? (layerLines(verse.meaning)[i] ?? null) : null,
+      });
+    }
+  }
+
+  const blocks = present
+    .filter((layer) => !aligned.includes(layer))
+    .map((layer) => ({ layer, text: (verse[layer] ?? "").trim() }));
+
+  return { lines, blocks };
+}
+
 /** Is there anything in this verse at all? */
 export function verseIsEmpty(verse: VerseLayers): boolean {
   return (

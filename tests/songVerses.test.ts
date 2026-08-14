@@ -7,6 +7,7 @@ import {
   sectionsFor,
   splitPastedVerses,
   verseIsEmpty,
+  verseLayout,
   zipVerseLines,
 } from "../lib/songVerses";
 
@@ -124,6 +125,70 @@ describe("zipVerseLines — the Meerabai shape", () => {
   it("does not align when there is only one layer to align", () => {
     expect(layersAlign({ roman: "a\nb" })).toBe(false);
     expect(zipVerseLines({ roman: "a\nb" })).toBeNull();
+  });
+});
+
+describe("verseLayout — the Krishna document's shape", () => {
+  // Six lines of Devanagari, six of transliteration, one English sentence for
+  // the whole verse. The pairing is real and must not be thrown away just
+  // because the third layer does not join it.
+  const verse = {
+    script: ["सुनो-सुनो, साँवरे की बंसी है बाजे", "नैनों से धार-धार कजरा बहे जी", "जियरा तरसे, नैना तरसे"].join("\n"),
+    roman: ["suno-suno, sāvare kī baṃsī hai bāje", "nainoṃ se dhār-dhār kajarā bahe jī", "jiyarā tarase, nainā tarase"].join("\n"),
+    meaning: "Listen, listen; the flute of Shyam is playing. My heart longs, my eyes long.",
+  };
+
+  it("aligns the script with its transliteration", () => {
+    const layout = verseLayout(verse);
+    expect(layout.lines).toHaveLength(3);
+    expect(layout.lines[0].script).toBe("सुनो-सुनो, साँवरे की बंसी है बाजे");
+    expect(layout.lines[0].roman).toBe("suno-suno, sāvare kī baṃsī hai bāje");
+  });
+
+  it("leaves the one-sentence meaning as a block rather than pinning it to line one", () => {
+    const layout = verseLayout(verse);
+    expect(layout.lines.every((l) => l.meaning === null)).toBe(true);
+    expect(layout.blocks).toHaveLength(1);
+    expect(layout.blocks[0].layer).toBe("meaning");
+    expect(layout.blocks[0].text).toContain("flute of Shyam");
+  });
+
+  it("still aligns all three when all three match — the Janmashtami shape", () => {
+    const layout = verseLayout({
+      script: "அ\nஆ",
+      roman: "a\naa",
+      meaning: "one\ntwo",
+    });
+    expect(layout.lines).toHaveLength(2);
+    expect(layout.lines[1]).toEqual({ script: "ஆ", roman: "aa", meaning: "two" });
+    expect(layout.blocks).toEqual([]);
+  });
+
+  it("aligns nothing when no two layers agree — the Meerabai shape", () => {
+    const layout = verseLayout({
+      roman: "one\ntwo\nthree\nfour",
+      meaning: "As Your servant, I will plant Your garden.",
+    });
+    expect(layout.lines).toEqual([]);
+    expect(layout.blocks.map((b) => b.layer)).toEqual(["roman", "meaning"]);
+  });
+
+  it("makes a block of a lone layer rather than calling it aligned", () => {
+    const layout = verseLayout({ roman: "just\nthis" });
+    expect(layout.lines).toEqual([]);
+    expect(layout.blocks.map((b) => b.layer)).toEqual(["roman"]);
+  });
+
+  it("has nothing to lay out for an empty verse", () => {
+    expect(verseLayout({})).toEqual({ lines: [], blocks: [] });
+  });
+
+  it("keeps the blocks in reading order", () => {
+    // Two layers agree (script and meaning at 2 lines); the odd one out is the
+    // transliteration, and it still reads in its usual place.
+    const layout = verseLayout({ script: "a\nb", roman: "x\ny\nz", meaning: "1\n2" });
+    expect(layout.lines).toHaveLength(2);
+    expect(layout.blocks.map((b) => b.layer)).toEqual(["roman"]);
   });
 });
 
