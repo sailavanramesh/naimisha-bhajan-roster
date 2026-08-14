@@ -8,6 +8,8 @@ import { DeitySymbols } from "@/components/DeitySymbol";
 import { Button } from "@/components/ui";
 import { deleteSingerRow, upsertSessionSingerRows, type SingerRowInput } from "./actions";
 import { useMicCushions, MicCushionDots, cushionTint } from "@/components/MicCushions";
+import type { MicColourValue } from "@/lib/micCushion";
+import { ChorusCell } from "./ChorusCell";
 import { LeaveWithChangesDialog } from "@/components/LeaveWithChangesDialog";
 import {
   describeChanges,
@@ -34,6 +36,9 @@ type BhajanLite = {
 };
 
 type RowState = SingerRowInput & {
+  /** Read-only here: ChorusCell writes these itself, outside the grid's save. */
+  chorusSingerId?: string | null;
+  chorusCushion?: MicColourValue | null;
   _localId: string;
   singerName?: string;
   singerGender?: string | null;
@@ -151,6 +156,9 @@ export function SessionSingersGrid(props: {
     recommendedPitch: string | null;
     raga: string | null;
     deities: string[];
+    /** The chorus mic on this bhajan. Written by ChorusCell, not by the save. */
+    chorusSingerId: string | null;
+    chorusCushion: MicColourValue | null;
     updatedAt: string;
   }>;
   suggestions: {
@@ -185,6 +193,8 @@ export function SessionSingersGrid(props: {
       recommendedPitch: r.recommendedPitch,
       raga: r.raga,
       deities: r.deities,
+      chorusSingerId: r.chorusSingerId,
+      chorusCushion: r.chorusCushion,
       updatedAt: r.updatedAt,
       _bhajanQuery: r.bhajanTitle ?? r.festivalBhajanTitle ?? "",
     }))
@@ -1228,6 +1238,7 @@ export function SessionSingersGrid(props: {
                 Bhajan
               </th>
               <th className="w-[168px] px-2 py-1.5 text-left font-semibold">Pitch</th>
+              <th className="w-[132px] px-2 py-1.5 text-left font-semibold">Chorus mic</th>
               <th className="w-[108px] whitespace-nowrap px-2 py-1.5 text-left font-semibold">
                 Recommended
               </th>
@@ -1590,6 +1601,17 @@ export function SessionSingersGrid(props: {
                   </td>
 
                   {/* Recommended — derived, never editable. Plain text. */}
+                  <td data-label="Chorus mic" className="px-2 py-1.5 align-top">
+                    <ChorusCell
+                      slotId={r.id ?? null}
+                      singers={props.singers}
+                      chorusSingerId={r.chorusSingerId ?? null}
+                      chorusCushion={r.chorusCushion ?? null}
+                      canAssign={props.canAssign}
+                      canSetCushion={props.canSetMicCushion}
+                    />
+                  </td>
+
                   <td data-label="Recommended" className="whitespace-nowrap px-2 py-1.5 text-[12px] text-on-surface-muted">
                     {r.recommendedPitch ?? "—"}
                   </td>

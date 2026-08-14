@@ -6,12 +6,16 @@ import { DeitySymbols } from "@/components/DeitySymbol";
 import { useMicCushions, cushionTint } from "@/components/MicCushions";
 import { useSessionVersion } from "@/components/useSessionVersion";
 import { hasMoreBelow, isRowSeen, movedRows } from "@/lib/liveBoard";
-import { MIC_COLOURS } from "@/lib/micCushion";
+import { MIC_COLOURS, micColourDot, micColourLabel, type MicColourValue } from "@/lib/micCushion";
 
 export type LiveSlot = {
   position: number;
   singerId: string | null;
   singerName: string;
+  /** Who is on the chorus mic for this bhajan, if anybody. */
+  chorusName: string | null;
+  /** That mic's cushion colour, which tints the chorus line. */
+  chorusCushion: MicColourValue | null;
   bhajanTitle: string;
   bhajanId: string | null;
   deities: string[];
@@ -33,8 +37,67 @@ export type LiveSlot = {
  * and the person who made it is standing in the same hall.
  */
 function rowSignature(s: LiveSlot, cushion: string | null): string {
-  return [s.singerName, s.bhajanTitle, s.confirmedPitch, s.tablaPitch, s.raga, cushion].join(
-    "\u0000",
+  return [
+    s.singerName,
+    s.bhajanTitle,
+    s.confirmedPitch,
+    s.tablaPitch,
+    s.raga,
+    cushion,
+    // The chorus mic counts for the same reason the lead cushion does: it is a
+    // change made in the hall, by somebody standing in it, that the desk has to
+    // catch.
+    s.chorusName,
+    s.chorusCushion,
+  ].join("\u0000");
+}
+
+/**
+ * Who is on the chorus mic, under the singer who is leading.
+ *
+ * Smaller than the lead singer, because that is the relationship — the desk
+ * reads the lead first and the chorus as a qualifier. Tinted with the CHORUS
+ * mic's own cushion colour, which is stored on the row rather than against the
+ * person: the same singer may lead one bhajan on blue and chorus another on
+ * green, and a colour keyed by person could not say both.
+ *
+ * A dot as well as the colour, and the colour name in the title. Colour alone
+ * is not something to hang a cue on — somebody colour-blind at the desk still
+ * has to know which cushion is meant.
+ */
+function ChorusLine({
+  name,
+  cushion,
+  dense = false,
+}: {
+  name: string | null;
+  cushion: MicColourValue | null;
+  dense?: boolean;
+}) {
+  if (!name) return null;
+  const dot = micColourDot(cushion);
+  // micColourLabel, not a lookup in MIC_COLOURS: green is the chorus-only
+  // colour and is not in that list at all, so it would never resolve.
+  const label = cushion ? micColourLabel(cushion) : null;
+
+  return (
+    <span
+      className={`flex items-center gap-1 leading-tight ${dense ? "text-[12px]" : "text-sm"}`}
+      style={dot ? { color: dot } : undefined}
+      title={label ? `${label} chorus mic` : "Chorus mic"}
+    >
+      {dot ? (
+        <span
+          aria-hidden
+          className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+          style={{ background: dot }}
+        />
+      ) : null}
+      <span className={dot ? "" : "text-on-surface-muted"}>{name}</span>
+      <span className="sr-only">
+        {label ? ` on the ${label.toLowerCase()} chorus mic` : " on the chorus mic"}
+      </span>
+    </span>
   );
 }
 
@@ -293,13 +356,26 @@ export function LiveBoard({
   }, [openSlot]);
 
   /*
-   * A typical weekday session is three or four bhajans (CLAUDE.md: 163 of 188),
-   * and at that size the cards should own the screen rather than sit in a
-   * short stack with empty space beneath. Cards flex to fill the viewport, so
-   * three of them are a third of the height each; a long Sunday or festival
-   * session hits the minimum height and scrolls as before.
+   * Three ways to lay this out, decided only by how many bhajans there are.
+   *
+   * ROOMY (1–3): the cards own the screen. A short session should not be a
+   * small stack with empty space beneath it, so cards flex to fill.
+   *
+   * DENSE (4+): Sailavan asked for less scrolling without losing readability.
+   * The cards lose their full-width boxes and put the pitch beside the title
+   * instead of under it, which roughly halves a card's height, and on a screen
+   * wide enough they run in two or three columns. Four bhajans then fit on a
+   * phone in portrait where before they scrolled.
+   *
+   * The columns key on WIDTH, never on aspect ratio. That distinction is the
+   * whole reason the card interior below is a single column: keying on the
+   * ratio is what made Chrome on Android and Safari on iPhone disagree, because
+   * the two report different viewport HEIGHTS as the address bar hides, so the
+   * same phone could land either side of the boundary and the layout would
+   * rearrange under you. Width does not move when the address bar does.
    */
-  const roomy = slots.length > 0 && slots.length <= 4;
+  const roomy = slots.length > 0 && slots.length <= 3;
+  const dense = slots.length >= 4;
 
   /*
    * Type scales with the viewport, not with the slot count, so a three-bhajan
@@ -399,7 +475,25 @@ export function LiveBoard({
         ref={scroller}
         className="flex min-w-0 flex-1 scroll-smooth flex-col overflow-auto px-3 py-3 sm:px-5 sm:py-4"
       >
-        <ol className={`flex min-h-0 flex-col gap-2.5 ${roomy ? "flex-1" : ""}`}>
+        <ol
+          className={
+            dense
+              ? /*
+                  Columns on width alone. minmax(0,1fr) so a long title wraps
+                  instead of widening its column and the page with it.
+
+                  Deliberately NOT auto-rows-fr with a full-height grid, which
+                  was tried: it filled the spare height on a four-bhajan screen,
+                  which looked better, and squashed nineteen rows until the
+                  pitch was clipped. `auto` did not hold as a floor once the
+                  cards were centring their own content. Spare height at the
+                  bottom is a cosmetic loss; a clipped shruti is a misread, and
+                  this file already chose scrolling over hiding once before.
+                */
+                "grid grid-cols-[minmax(0,1fr)] gap-2.5 sm:grid-cols-2 xl:grid-cols-3"
+              : `flex min-h-0 flex-col gap-2.5 ${roomy ? "flex-1" : ""}`
+          }
+        >
           {slots.map((s) => {
             const tint = cushionTint(cushions.get(s.singerId ?? "")?.colour ?? null);
             const dot = MIC_COLOURS.find(
@@ -425,7 +519,8 @@ export function LiveBoard({
                   to scroll than to hide the pitch.
                 */
                 className={[
-                  "flex flex-col justify-center rounded-[14px] border border-card-edge bg-surface p-3 sm:p-4",
+                  "flex min-w-0 flex-col justify-center rounded-[14px] border border-card-edge bg-surface",
+                  dense ? "p-2.5 sm:p-3" : "p-3 sm:p-4",
                   roomy ? "min-h-fit flex-1" : "",
                   changed.has(s.position) ? "live-row-changed" : "",
                 ].join(" ")}
@@ -434,15 +529,102 @@ export function LiveBoard({
                 }
                 title={dot ? `${dot.label} mic cushion` : undefined}
               >
-                {/*
+                {dense ? (
+                  /*
+                    The dense card: two lines instead of five.
+
+                    The pitch moves BESIDE the title rather than under it, which
+                    is what buys most of the height back, and it keeps its box
+                    and its weight because it is still the thing the harmonium
+                    reads first. Raga and tabla drop to one shared line — they
+                    are reference, not performance — and the singer sits at the
+                    end of that line rather than owning one of its own.
+                  */
+                  <div className="flex min-w-0 flex-col gap-1">
+                    {/*
+                      The pitch under the title, always.
+
+                      Side by side was tried and keyed on the VIEWPORT width,
+                      which is the wrong measure: at 844px the board goes to two
+                      columns, so each card is about 380px — NARROWER than the
+                      390px card in portrait, where stacking was already needed.
+                      The two rules compounded and clipped the titles again.
+                      What actually matters is the card-s width, and until this
+                      file has container queries, one consistent arrangement
+                      beats a breakpoint that measures the wrong thing.
+                    */}
+                    <div className="flex min-w-0 flex-col gap-1">
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <span className="shrink-0 font-mono text-xs text-on-surface-muted">
+                        {s.position}
+                      </span>
+                      <DeitySymbols deities={s.deities} size={18} />
+                      {/*
+                        Two lines, not one.
+
+                        `truncate` here cut "Ambika Tava Darshanam" to "Ambika
+                        Ta…" on a phone, because the pitch box rightly wins the
+                        width contest — and the title is the one thing on the
+                        card a singer is looking for. Height was never the thing
+                        that was scarce at this size: four bhajans used a third
+                        of the screen. So the title gets the room to wrap, and
+                        stops at two lines so a long one cannot push the card
+                        out of the count that made it dense in the first place.
+                      */}
+                      <h2 className="line-clamp-2 min-w-0 flex-1 break-words font-display text-lg font-semibold leading-tight sm:text-xl">
+                        {s.bhajanTitle}
+                      </h2>
+                      {/* whitespace-nowrap and shrink-0: "1.5 Madhyam / F#"
+                          wrapped is a misread, and it must win the space
+                          contest against a long title rather than lose it. */}
+                      </div>
+
+                      {/* Full width when stacked so it reads like the roomy
+                          card's box; beside the title when there is room. */}
+                      <span className="w-full shrink-0 whitespace-nowrap rounded-[10px] border-2 border-brass/45 bg-field px-2 py-1 text-center font-mono text-lg font-semibold leading-none">
+                        {s.confirmedPitch ?? "\u2014"}
+                      </span>
+                    </div>
+
+                    <div className="flex min-w-0 items-end justify-between gap-2">
+                      <span className="min-w-0 truncate text-[13px] text-on-surface-muted">
+                        <span className="italic">{s.raga ?? "raga not recorded"}</span>
+                        {" \u00b7 tabla "}
+                        <span className="font-mono text-on-surface">{s.tablaPitch ?? "\u2014"}</span>
+                        {s.tablaPitch ? null : (
+                          <span className="ml-1 uppercase tracking-wide text-warn">none fits</span>
+                        )}
+                        {s.lyrics || s.bhajanId ? (
+                          <>
+                            {" \u00b7 "}
+                            <button
+                              type="button"
+                              onClick={() => setWords(s.position)}
+                              className="uppercase tracking-wide underline underline-offset-2 hover:text-on-surface"
+                            >
+                              words
+                            </button>
+                          </>
+                        ) : null}
+                      </span>
+
+                      <span className="flex shrink-0 flex-col items-end leading-tight">
+                        <span className="text-[15px] font-medium">{s.singerName}</span>
+                        <ChorusLine name={s.chorusName} cushion={s.chorusCushion} dense />
+                        {dot ? <span className="sr-only">{dot.label} mic cushion</span> : null}
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                /*
                   One column, every screen. This used to switch between a row
-                  and a stack on the viewport's aspect ratio, which was where
+                  and a stack on the viewport\'s aspect ratio, which was where
                   Chrome on Android disagreed with Safari on iPhone: the two
                   report different viewport heights as the address bar hides
                   and shows, so the same phone could land either side of the
                   1/1 boundary and the card would rearrange under you. A single
                   column cannot disagree with itself.
-                */}
+                */
                 <div className="flex min-w-0 flex-col gap-1.5">
                   {/* Bhajan — unchanged, still the headline. */}
                   <div className="flex items-center gap-2.5">
@@ -468,7 +650,7 @@ export function LiveBoard({
                     className="w-full whitespace-nowrap rounded-[12px] border-2 border-brass/45 bg-field px-3 py-1 text-center font-mono text-2xl font-semibold leading-none sm:text-[30px]"
                     style={fill.pitch}
                   >
-                    {s.confirmedPitch ?? "—"}
+                    {s.confirmedPitch ?? "\u2014"}
                   </div>
 
                   <div
@@ -485,7 +667,7 @@ export function LiveBoard({
                   >
                     {/* The drum to tune, not the fifth of the shruti. */}
                     <span className="text-[0.6em] uppercase tracking-wide">tabla</span>{" "}
-                    <span className="font-mono text-on-surface">{s.tablaPitch ?? "—"}</span>
+                    <span className="font-mono text-on-surface">{s.tablaPitch ?? "\u2014"}</span>
                     {s.tablaPitch ? null : (
                       <span className="ml-1 text-[0.55em] uppercase tracking-wide text-warn">
                         none fits
@@ -495,7 +677,7 @@ export function LiveBoard({
 
                   {/*
                     The words, without leaving.
-                    
+
                     Sailavan: singers want the lyrics up during a session and
                     must be able to get back "without losing it". So this opens
                     a sheet OVER the live view rather than navigating anywhere —
@@ -513,14 +695,16 @@ export function LiveBoard({
                     </button>
                   ) : null}
 
-                  {/* Singer, bottom right. */}
-                  <div className="flex justify-end">
+                  {/* Singer, bottom right, with the chorus mic beneath. */}
+                  <div className="flex flex-col items-end">
                     <span className="font-medium" style={fill.singer}>
                       {s.singerName}
                     </span>
+                    <ChorusLine name={s.chorusName} cushion={s.chorusCushion} />
                     {dot ? <span className="sr-only">{dot.label} mic cushion</span> : null}
                   </div>
                 </div>
+                )}
               </li>
             );
           })}

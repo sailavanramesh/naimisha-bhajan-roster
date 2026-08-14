@@ -303,6 +303,10 @@ export default async function RosterSessionPage({
       computeRecommendedPitch(x.singer?.gender ?? null, x.bhajan) || x.historicalRecommendedPitch || null,
     raga: x.bhajan?.raga ?? null,
     deities: x.bhajan?.deities.map((d) => d.deity.name) ?? [],
+    // The chorus mic. Read here, written by ChorusCell on its own — never
+    // through the grid's save, which carries the historical record.
+    chorusSingerId: x.chorusSingerId,
+    chorusCushion: x.chorusCushion,
   }));
 
   const suggestions = await getPitchSuggestions();

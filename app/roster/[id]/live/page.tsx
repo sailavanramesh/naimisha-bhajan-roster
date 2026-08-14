@@ -39,6 +39,7 @@ export default async function LiveSessionPage({
       slots: {
         include: {
           singer: true,
+          chorusSinger: { select: { name: true } },
           bhajan: { include: { deities: { include: { deity: true } } } },
         },
         orderBy: [{ position: "asc" }, { createdAt: "asc" }],
@@ -66,6 +67,10 @@ export default async function LiveSessionPage({
     position: s.position,
     singerId: s.singerId,
     singerName: s.singer?.name ?? "Unassigned",
+    // The chorus mic: who is on it for THIS bhajan, and the colour of that
+    // mic's cushion. Both live on the row — see SessionSlot.chorusCushion.
+    chorusName: s.chorusSinger?.name ?? null,
+    chorusCushion: s.chorusCushion,
     bhajanTitle:
       s.bhajan?.title ?? s.bhajanTitle ?? s.festivalBhajanTitle ?? s.inputOnlyCustomBhajan ?? "—",
     bhajanId: s.bhajanId,

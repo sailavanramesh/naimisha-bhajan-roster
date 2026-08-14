@@ -217,6 +217,7 @@ model Singer {
   updatedAt    DateTime @updatedAt
 
   slots              SessionSlot[]
+  chorusSlots        SessionSlot[]           @relation("ChorusSinger")
   repertoire         SingerRepertoire[]
   availability       SingerAvailability[]
   micCushions        MicCushion[]
@@ -487,16 +488,32 @@ model SessionSlot {
 
   alternativeTablaPitch String?
 
+  /// Who is on the chorus mic for THIS bhajan, and what colour that mic's
+  /// cushion is.
+  ///
+  /// The colour lives on the row rather than on the person, unlike MicCushion.
+  /// That table is keyed (session, singer) because a singer has one mic for a
+  /// whole session — but the chorus mic is a different mic, and the same person
+  /// may lead bhajan 1 on blue and chorus bhajan 3. Keyed by person, those two
+  /// facts cannot both be true.
+  ///
+  /// SetNull like `singerId`, and for the same reason: removing somebody from
+  /// the roster must never delete the row that holds a confirmed pitch.
+  chorusSingerId String?
+  chorusCushion  MicColour?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  singer  Singer? @relation(fields: [singerId], references: [id], onDelete: SetNull)
-  bhajan  Bhajan? @relation(fields: [bhajanId], references: [id], onDelete: SetNull)
+  session      Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  singer       Singer? @relation(fields: [singerId], references: [id], onDelete: SetNull)
+  chorusSinger Singer? @relation("ChorusSinger", fields: [chorusSingerId], references: [id], onDelete: SetNull)
+  bhajan       Bhajan? @relation(fields: [bhajanId], references: [id], onDelete: SetNull)
 
   @@unique([sessionId, position])
   @@index([sessionId])
   @@index([singerId])
+  @@index([chorusSingerId])
   @@index([bhajanId])
 }
 
@@ -887,11 +904,16 @@ model InstrumentPerson {
 }
 
 /// Mic cushion colours, as the physical cushions on the sound desk.
+///
+/// `green` arrived with the chorus mic (2026-08-14). Added at the END: these
+/// are stored values, and Postgres orders an enum by declaration, so inserting
+/// it among the others would reorder every existing sort.
 enum MicColour {
   blue
   grey
   orange
   pink
+  green
 }
 
 /// Which colour mic cushion a singer is on for a session, for the sound desk.

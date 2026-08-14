@@ -5,8 +5,15 @@
  *
  * A cushion belongs to a SINGER within a SESSION, not to a slot: a singer has
  * one mic for the night, so if they sing twice the cushion follows them.
+ *
+ * The CHORUS mic is the exception, and it is why `green` exists here. That
+ * cushion is stored per ROW (SessionSlot.chorusCushion) rather than per person,
+ * because the chorus mic is a different mic — the same singer may lead one
+ * bhajan on blue and chorus another on green, and a per-person key cannot hold
+ * both facts at once.
  */
 
+/** The four lead cushions on the desk. Unchanged — green is not one of them. */
 export const MIC_COLOURS = [
   { value: "blue", label: "Blue", dot: "#3B7DD8" },
   { value: "grey", label: "Grey", dot: "#8B9099" },
@@ -14,23 +21,43 @@ export const MIC_COLOURS = [
   { value: "pink", label: "Pink", dot: "#DC6FA4" },
 ] as const;
 
-export type MicColourValue = (typeof MIC_COLOURS)[number]["value"];
+/** The chorus cushion, which is the fifth colour and only offered there. */
+export const CHORUS_ONLY_COLOUR = { value: "green", label: "Green", dot: "#4E9A57" } as const;
+
+/**
+ * What the chorus column offers: the same four, plus green.
+ *
+ * Sailavan's words, and the reason this is a second list rather than a longer
+ * first one — the lead mics are four physical cushions, and adding a fifth to
+ * that cycle would offer the desk a cushion it does not have.
+ */
+export const CHORUS_COLOURS = [...MIC_COLOURS, CHORUS_ONLY_COLOUR] as const;
+
+export type MicColourValue = (typeof CHORUS_COLOURS)[number]["value"];
+/** The subset a LEAD mic may be. */
+export type LeadColourValue = (typeof MIC_COLOURS)[number]["value"];
 
 const VALUES = new Set<string>(MIC_COLOURS.map((c) => c.value));
+const CHORUS_VALUES = new Set<string>(CHORUS_COLOURS.map((c) => c.value));
 
-export function isMicColour(value: unknown): value is MicColourValue {
+/** A lead cushion. Green is deliberately NOT one — see CHORUS_COLOURS. */
+export function isMicColour(value: unknown): value is LeadColourValue {
   return typeof value === "string" && VALUES.has(value);
+}
+
+export function isChorusColour(value: unknown): value is MicColourValue {
+  return typeof value === "string" && CHORUS_VALUES.has(value);
 }
 
 /** Null is "no cushion", which is a state a user can deliberately choose. */
 export function micColourLabel(colour: MicColourValue | null): string {
   if (colour === null) return "No cushion";
-  return MIC_COLOURS.find((c) => c.value === colour)?.label ?? "No cushion";
+  return CHORUS_COLOURS.find((c) => c.value === colour)?.label ?? "No cushion";
 }
 
 export function micColourDot(colour: MicColourValue | null): string | null {
   if (colour === null) return null;
-  return MIC_COLOURS.find((c) => c.value === colour)?.dot ?? null;
+  return CHORUS_COLOURS.find((c) => c.value === colour)?.dot ?? null;
 }
 
 /** What the client currently believes, per singer. */
