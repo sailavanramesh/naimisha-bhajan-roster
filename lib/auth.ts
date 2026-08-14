@@ -2,7 +2,14 @@ import { cookies } from "next/headers";
 import { normaliseEmail } from "./email";
 import { prisma } from "@/lib/db";
 import { auth, googleSignInConfigured } from "@/lib/authConfig";
-import { can, ROLES, ROLE_LABELS, type Role, type Capability } from "./capabilities";
+import {
+  can,
+  canWithGrants,
+  ROLES,
+  ROLE_LABELS,
+  type Role,
+  type Capability,
+} from "./capabilities";
 
 /**
  * lib/auth.ts — who may see and do what.
@@ -34,9 +41,11 @@ export {
   ROLE_LABELS,
   MEMBER_PAGES,
   can,
+  canWithGrants,
   canSeePage,
   type Role,
   type Capability,
+  type Grants,
 } from "./capabilities";
 
 /**
@@ -55,6 +64,8 @@ export async function getSignedInSinger(): Promise<{
   name: string;
   email: string;
   role: Role;
+  /** Per-person grants on top of the role. See canWithGrants. */
+  canEditWords: boolean;
 } | null> {
   if (!googleSignInConfigured) return null;
   const session = await auth().catch(() => null);
@@ -63,7 +74,7 @@ export async function getSignedInSinger(): Promise<{
 
   const singer = await prisma.singer.findUnique({
     where: { email },
-    select: { id: true, name: true, email: true, role: true },
+    select: { id: true, name: true, email: true, role: true, canEditWords: true },
   });
   // Signed in but not on the allowlist: a viewer, deliberately. Sign-in never
   // creates a singer.
@@ -71,7 +82,47 @@ export async function getSignedInSinger(): Promise<{
 
   const role: Role =
     singer.role === "owner" ? "owner" : singer.role === "coordinator" ? "editor" : "member";
-  return { id: singer.id, name: singer.name, email: singer.email, role };
+  return {
+    id: singer.id,
+    name: singer.name,
+    email: singer.email,
+    role,
+    canEditWords: singer.canEditWords,
+  };
+}
+
+/**
+ * May the person reading this page do it, counting their personal grants?
+ *
+ * `can(role, …)` is not enough for anything a named person can be given
+ * individually — it knows only the role. This resolves the signed-in singer
+ * first, so a member who has been given words-editing is allowed and every
+ * other member is not.
+ *
+ * An access-link visitor has no identity and therefore no grants, only their
+ * role. That is correct: a grant is given to a PERSON, and a link is not one.
+ */
+export async function canWithGrantsFor(capability: Capability): Promise<boolean> {
+  const signedIn = await getSignedInSinger();
+  const role = signedIn?.role ?? (await getRole());
+  return canWithGrants(role, capability, {
+    canEditWords: signedIn?.canEditWords ?? false,
+  });
+}
+
+/**
+ * The gate for a mutating action that a per-person grant can unlock.
+ *
+ * Same contract as requireCapability, and used the same way — at the top of
+ * every action, never in the UI.
+ */
+export async function requireGrantedCapability(capability: Capability): Promise<void> {
+  if (await canWithGrantsFor(capability)) return;
+  const role = await getRole();
+  throw new Error(
+    `Your access level (${ROLE_LABELS[role]}) does not allow this. ` +
+      `Ask the coordinator for a link with the right access.`,
+  );
 }
 
 export async function getRole(): Promise<Role> {

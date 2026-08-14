@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Button, Card, CardContent, Input } from "@/components/ui";
 import { NOTE_NAMES } from "@/lib/pitch";
@@ -14,11 +15,14 @@ import {
   removeProgramItem,
   updateProgramItem,
 } from "./actions";
+import { createSong, setItemSong } from "@/app/songs/actions";
 
 export type EditorItem = {
   id: string;
   position: number;
   kind: "song" | "narration";
+  /** The catalogue entry, when this item has one. Null while it is a bare title. */
+  songId: string | null;
   title: string;
   narration: string;
   pitchNote: string;
@@ -272,6 +276,7 @@ function ItemCard({
                   onChange={(e) => setDraft({ ...draft, title: e.target.value })}
                   placeholder={isReading ? "e.g. Opening words" : "e.g. Guru Meri Pooja"}
                 />
+                {!isReading ? <SongLink item={item} canEdit={canEdit} onError={onError} /> : null}
               </label>
 
               {!isReading ? (
@@ -382,6 +387,86 @@ function ItemCard({
         ) : null}
       </CardContent>
     </Card>
+  );
+}
+
+/**
+ * The catalogue entry behind this item, where the words live.
+ *
+ * An item can sit in a program with only a title — that is how one starts, and
+ * a half-built program should not demand a catalogue entry before it will hold
+ * a name. Linking one is what gives the item lyrics, meanings, and a place that
+ * remembers every other time the group has sung it.
+ *
+ * Creating from here rather than sending somebody to /songs first: they are
+ * building a running order, and the song they have just typed is obviously the
+ * one they mean.
+ */
+function SongLink({
+  item,
+  canEdit,
+  onError,
+}: {
+  item: EditorItem;
+  canEdit: boolean;
+  onError: (message: string | null) => void;
+}) {
+  const [pending, startTransition] = useTransition();
+
+  if (item.songId) {
+    return (
+      <span className="flex flex-wrap items-center gap-2 text-xs">
+        <Link
+          href={`/songs/${item.songId}`}
+          className="text-brass-ink underline underline-offset-2"
+        >
+          Words and meaning →
+        </Link>
+        {canEdit ? (
+          <button
+            type="button"
+            disabled={pending}
+            className="text-on-surface-muted underline underline-offset-2 hover:text-warn"
+            onClick={() =>
+              startTransition(async () => {
+                const res = await setItemSong({ itemId: item.id, songId: "" });
+                if (!res.ok) onError(res.error);
+              })
+            }
+          >
+            unlink
+          </button>
+        ) : null}
+      </span>
+    );
+  }
+
+  if (!canEdit) return null;
+
+  return (
+    <button
+      type="button"
+      disabled={pending || item.title.trim().length === 0}
+      className="justify-self-start text-xs text-on-surface-muted underline underline-offset-2 hover:text-on-surface disabled:opacity-40"
+      onClick={() =>
+        startTransition(async () => {
+          onError(null);
+          // Same title, same song: createSong hands back the existing one
+          // rather than refusing, so two people doing this at once converge.
+          const created = await createSong({ title: item.title });
+          if (!created.ok) {
+            onError(created.error);
+            return;
+          }
+          const linked = await setItemSong({ itemId: item.id, songId: created.id });
+          if (!linked.ok) onError(linked.error);
+        })
+      }
+    >
+      {item.title.trim().length === 0
+        ? "Name the song to add its words"
+        : "Add this to the song catalogue, with its words"}
+    </button>
   );
 }
 

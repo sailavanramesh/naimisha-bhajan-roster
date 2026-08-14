@@ -40,6 +40,7 @@ export type Capability =
   | "notifySingers" // send somebody a reminder about a session by hand
   | "manageNotificationRules" // owner only: when the day-of reminders go out
   | "editPrograms" // build a music program: its running order, performers, crew
+  | "editSongWords" // lyrics and meanings in the song catalogue
   | "viewAllPages";
 
 const EDITOR_CAPABILITIES: Capability[] = [
@@ -59,6 +60,7 @@ const EDITOR_CAPABILITIES: Capability[] = [
   // then corrected. Nothing about being allowed to run the generator implies
   // being the person who decides a Guru Poornima running order.
   "editPrograms",
+  "editSongWords",
   "viewAllPages",
 ];
 
@@ -85,6 +87,42 @@ export function can(role: Role, capability: Capability): boolean {
   return MATRIX[role].has(capability);
 }
 
+/**
+ * What one PERSON may be granted beyond their role.
+ *
+ * Exactly one thing so far. Sailavan wanted named people keeping the lyrics and
+ * meanings up to date without handing them the roster, and the four roles are a
+ * ladder — the only way to give somebody words-editing was to make them an
+ * editor, which is far more power than was meant.
+ *
+ * Deliberately a separate, additive check rather than a fifth role: roles stay
+ * a ladder that can be reasoned about, and a grant can only ever ADD. Nothing
+ * here can take a capability away from a role that has it.
+ */
+export type Grants = {
+  canEditWords?: boolean;
+};
+
+const GRANTED: Record<keyof Grants, Capability> = {
+  canEditWords: "editSongWords",
+};
+
+export function canWithGrants(
+  role: Role,
+  capability: Capability,
+  grants?: Grants | null,
+): boolean {
+  if (can(role, capability)) return true;
+  if (!grants) return false;
+
+  for (const [grant, granted] of Object.entries(GRANTED) as Array<
+    [keyof Grants, Capability]
+  >) {
+    if (grants[grant] && granted === capability) return true;
+  }
+  return false;
+}
+
 /** Pages a member may reach. Everything else is owner/editor only. */
 export const MEMBER_PAGES = [
   "/roster",
@@ -95,6 +133,8 @@ export const MEMBER_PAGES = [
   // Members READ programs — they are singing in them. Editing is gated on
   // `editPrograms` at every action, which is what actually stops them.
   "/program",
+  // And the words, which is the page a singer most wants on their phone.
+  "/songs",
 ];
 
 export function canSeePage(role: Role, path: string): boolean {

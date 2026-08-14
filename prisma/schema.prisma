@@ -205,8 +205,16 @@ model Singer {
   /// than in a cookie so it follows them from phone to laptop — everybody
   /// signs in, so there is somebody to store it against.
   defaultRosterView RosterView?
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
+
+  /// May edit song lyrics and meanings, without any other editor power.
+  ///
+  /// The role matrix in lib/capabilities.ts is otherwise a pure function of the
+  /// role. This is the one per-person grant, and it exists because Sailavan
+  /// wanted named people keeping the words up to date without handing them the
+  /// roster. See canWithGrants().
+  canEditWords Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   slots              SessionSlot[]
   repertoire         SingerRepertoire[]
@@ -272,6 +280,8 @@ model Bhajan {
   repertoire SingerRepertoire[]
   deities    BhajanDeity[]
   tags       BhajanTag[]
+  /// The program song that IS this bhajan, when there is one. See Song.
+  song       Song?
 
   @@index([searchVector], type: Gin)
   @@index([raga])
@@ -284,6 +294,7 @@ model Deity {
   name String @unique
 
   bhajans BhajanDeity[]
+  songs   SongDeity[]
 }
 
 model BhajanDeity {
@@ -302,6 +313,7 @@ model Tag {
   name String @unique
 
   bhajans BhajanTag[]
+  songs   SongTag[]
 }
 
 model BhajanTag {
@@ -546,6 +558,9 @@ model ProgramItem {
   updatedAt DateTime @updatedAt
 
   session     Session                 @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  // SetNull, never Cascade: removing a song from the catalogue must not delete
+  // the record of a program that sang it. The item keeps its own title.
+  song        Song?                   @relation(fields: [songId], references: [id], onDelete: SetNull)
   performers  ProgramPerformer[]
   instruments ProgramItemInstrument[]
 
@@ -619,6 +634,110 @@ model ProgramItemInstrument {
   @@unique([itemId, instrumentId])
   @@index([itemId])
   @@index([instrumentId])
+}
+
+/// A song sung at a music program.
+///
+/// Its own catalogue, not part of the 3,613-row bhajan masterlist. The
+/// masterlist is a copy of somebody else's spreadsheet of Sai bhajans; these
+/// are Meera bhajans, Carnatic kritis, Odia and Marathi abhangs and the
+/// occasional English piece, which the centre owns and edits itself.
+///
+/// `bhajanId` is a SOFT LINK for the overlap — "Om Sai Om Sai Om" and "Madhura
+/// Mohana" are both program songs and masterlist bhajans. A pointer, so the
+/// details page can offer the bhajan's own record; never a merge, or the two
+/// catalogues would have to agree about everything forever.
+model Song {
+  id        String  @id @default(cuid())
+  title     String  @unique
+  language  String?
+  /// "Meera bhajan", "Carnatic kriti", "Odia bhajan" — how the group would
+  /// describe where it comes from.
+  tradition String?
+  composer  String?
+
+  /// The recording the group learns it from.
+  referenceUrl String?
+  audio        String?
+  bpm          Int?
+  notes        String? @db.Text
+
+  bhajanId String? @unique
+
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bhajan  Bhajan?       @relation(fields: [bhajanId], references: [id], onDelete: SetNull)
+  verses  SongVerse[]
+  deities SongDeity[]
+  tags    SongTag[]
+  items   ProgramItem[]
+
+  @@index([tradition])
+}
+
+/// One section of a song — a Pallavi, a Charanam, a Chorus — in up to three
+/// layers.
+///
+/// Three columns rather than one, because the group's documents keep all three
+/// and each is read by different people: the script by whoever reads that
+/// script, the transliteration by everybody singing, the meaning by anybody
+/// wanting to know what they are singing.
+///
+/// Whether the layers are shown line by line or as blocks is NOT stored: it is
+/// derived from whether they have the same number of lines. See
+/// lib/songVerses.ts — the two source documents write these two different ways
+/// and both have to render honestly.
+model SongVerse {
+  id     String @id @default(cuid())
+  songId String
+  order  Int
+
+  /// "Pallavi", "Charanam 2", "Chorus". Free text with suggestions rather
+  /// than an enum: the group writes its own — "Swaras", "Interlude" — and a
+  /// label the app does not recognise is still a perfectly good label.
+  label String?
+
+  /// The words as written — Tamil, Devanagari, Telugu, Marathi.
+  script  String? @db.Text
+  /// The same words in Latin script, which is what most people sing from.
+  roman   String? @db.Text
+  /// What it means, in English.
+  meaning String? @db.Text
+
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  song Song @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  @@unique([songId, order])
+  @@index([songId])
+}
+
+/// Songs join the EXISTING Deity and Tag tables rather than growing their own.
+/// The catalogues are separate; the vocabularies are the centre's and are not.
+model SongDeity {
+  songId  String
+  deityId String
+
+  song  Song  @relation(fields: [songId], references: [id], onDelete: Cascade)
+  deity Deity @relation(fields: [deityId], references: [id], onDelete: Cascade)
+
+  @@id([songId, deityId])
+  @@index([deityId])
+}
+
+model SongTag {
+  songId String
+  tagId  String
+
+  song Song @relation(fields: [songId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([songId, tagId])
+  @@index([tagId])
 }
 
 /// Somebody doing a job at a session rather than singing at it.

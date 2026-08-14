@@ -102,6 +102,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
     id: item.id,
     position: item.position,
     kind: item.kind,
+    songId: item.songId,
     title: item.title ?? "",
     narration: item.narration ?? "",
     pitchNote: item.pitchNote ?? "",

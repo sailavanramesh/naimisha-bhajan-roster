@@ -243,6 +243,26 @@ export default async function AdminPage({
                     people. Listed last because it is the rarest. */}
                 <option value="owner">Owner</option>
               </select>
+              {/*
+                The one thing a person can be given without a role change.
+                Sailavan wanted named people keeping the lyrics and meanings up
+                to date; making them an editor to do it would hand them the
+                whole roster.
+              */}
+              <label
+                className="flex items-center gap-1.5 text-[11px] text-on-surface-muted"
+                title="May edit song lyrics and meanings, and nothing else"
+              >
+                <input
+                  key={`words-${s.canEditWords}`}
+                  type="checkbox"
+                  name="canEditWords"
+                  defaultChecked={s.canEditWords}
+                  disabled={!canEdit}
+                  className="h-4 w-4"
+                />
+                edits words
+              </label>
               <div className="flex items-center gap-2">
                 {canEdit ? (
                   <Button type="submit" className="h-10 w-[4.5rem] shrink-0 text-xs">Save</Button>
