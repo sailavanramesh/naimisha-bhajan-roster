@@ -14,6 +14,7 @@ import {
 import { googleSignInConfigured } from "@/lib/authConfig";
 import { SessionCategories } from "./SessionCategories";
 import { Instruments } from "./Instruments";
+import { Desks } from "./Desks";
 import { AddRepertoireForm } from "./AddRepertoireForm";
 
 import { getRole, can } from "@/lib/auth";
@@ -93,6 +94,29 @@ export default async function AdminPage({
     prisma.instrumentPerson.groupBy({ by: ["instrument"], _count: { _all: true } }),
   ]);
   const eligibleByName = new Map(eligibilityCounts.map((e) => [e.instrument, e._count._all]));
+
+  // The desks and their strips. A template a programme copies from.
+  const desks = (
+    await prisma.desk.findMany({
+      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+      include: {
+        channels: { orderBy: { number: "asc" } },
+        _count: { select: { sessions: true } },
+      },
+    })
+  ).map((d) => ({
+    id: d.id,
+    name: d.name,
+    kind: d.kind,
+    isDefault: d.isDefault,
+    usedBy: d._count.sessions,
+    channels: d.channels.map((c) => ({
+      id: c.id,
+      number: c.number,
+      label: c.label,
+      kind: c.kind as string,
+    })),
+  }));
   const instruments = instrumentRows.map((i) => ({
     id: i.id,
     name: i.name,
@@ -390,6 +414,22 @@ export default async function AdminPage({
         </CardHeader>
         <CardContent>
           <Instruments instruments={instruments} canEdit={canEdit} />
+        </CardContent>
+      </Card>
+
+
+      {/* ---- Sound desks ---- */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Sound desks</CardTitle>
+          <p className="mt-1 text-sm text-on-surface-muted">
+            The desks and the strips printed on them. A music programme copies these when it
+            picks a desk and edits its own copy, so tidying a label here never rewrites what a
+            past programme says was on a channel.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <Desks desks={desks} canEdit={canEdit} />
         </CardContent>
       </Card>
 

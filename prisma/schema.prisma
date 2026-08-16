@@ -226,6 +226,7 @@ model Singer {
   programParts       ProgramPerformer[]
   programInstruments ProgramItemInstrument[]
   crew               SessionCrew[]
+  deskChannels       SessionChannel[]
 }
 
 model Bhajan {
@@ -365,6 +366,8 @@ model Session {
   /// decided, which is what the quiet "the roster is up" announces. Slot
   /// updatedAt cannot answer it, because every pitch edit bumps that too.
   rosterChangedAt DateTime?
+  /// Which desk this programme is mixed on. Null until one is picked.
+  deskId          String?
   type            SessionType   @default(Weekday)
   /// See SessionFormat. Defaults to `bhajans` so every existing row is
   /// unaffected by this column arriving.
@@ -385,6 +388,8 @@ model Session {
   notificationRules NotificationRule[]
   programItems      ProgramItem[]
   crew              SessionCrew[]
+  channels          SessionChannel[]
+  desk              Desk?               @relation(fields: [deskId], references: [id], onDelete: SetNull)
 
   category SessionCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
@@ -564,6 +569,9 @@ model ProgramItem {
   pitchLabel String?
 
   bpm          Int?
+  /// The scene to recall on a desk that has scenes. Nothing reads it yet; it
+  /// is printed on the sheet so the operator can programme them once.
+  sceneNumber  Int?
   /// The recording being learnt from.
   referenceUrl String?
   /// Choral cues, swara interludes, repeat marks — the working notes that sit
@@ -580,6 +588,7 @@ model ProgramItem {
   song        Song?                   @relation(fields: [songId], references: [id], onDelete: SetNull)
   performers  ProgramPerformer[]
   instruments ProgramItemInstrument[]
+  channels    ProgramItemChannel[]
 
   @@unique([sessionId, position])
   @@index([sessionId])
@@ -628,7 +637,8 @@ model Instrument {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  programItems ProgramItemInstrument[]
+  programItems    ProgramItemInstrument[]
+  sessionChannels SessionChannel[]
 }
 
 /// One instrument on one program item, and who is playing it.
@@ -755,6 +765,125 @@ model SongTag {
 
   @@id([songId, tagId])
   @@index([tagId])
+}
+
+/// What a channel carries. Decides how it is grouped and read on the sheet.
+enum ChannelKind {
+  vocal
+  instrument
+  /// A backing track played through the system — the birthday programme's
+  /// English song was sung to one.
+  track
+  spare
+}
+
+enum DeskKind {
+  analog
+  digital
+}
+
+/// A mixing desk the centre uses, and the strips printed on it.
+///
+/// A TEMPLATE, not a programme's actual channel list. Picking a desk for a
+/// programme copies these strips into SessionChannel rows, which is what gets
+/// edited from then on — so correcting a label here next year cannot rewrite
+/// what a programme two years ago says was on channel 6.
+///
+/// `protocol`, `host` and `port` are null for an analog desk and mean nothing
+/// to the app today. They exist because the centre is considering an Allen &
+/// Heath SQ5, which speaks MIDI over TCP; a bridge on a laptop in the hall
+/// would read them. Nothing in the browser can reach a desk on the hall LAN.
+model Desk {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  kind      DeskKind @default(analog)
+  protocol  String?
+  host      String?
+  port      Int?
+  isDefault Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  channels DeskChannel[]
+  sessions Session[]
+}
+
+/// One strip on a desk, as it is numbered on the metal.
+model DeskChannel {
+  id     String @id @default(cuid())
+  deskId String
+
+  /// The channel strip, as printed on the desk.
+  number Int
+  /// The physical input socket when it differs from the strip. It always can
+  /// on a digital desk and never does on the Yamaha.
+  socket Int?
+  label  String
+  kind   ChannelKind @default(vocal)
+  /// For a vocal strip whose mic wears a coloured cushion.
+  colour MicColour?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  desk Desk @relation(fields: [deskId], references: [id], onDelete: Cascade)
+
+  @@unique([deskId, number])
+  @@index([deskId])
+}
+
+/// One channel as it stands FOR ONE PROGRAMME: the strip, and who is on it.
+///
+/// Snapshotted from the desk when one is picked, then edited freely. That copy
+/// is the point: a programme is a record of an evening, and the desk template
+/// changes between evenings.
+model SessionChannel {
+  id        String @id @default(cuid())
+  sessionId String
+
+  number String
+  label  String
+  kind   ChannelKind @default(vocal)
+  colour MicColour?
+
+  /// Who or what is on it. A roster singer, a name typed in, or an instrument
+  /// from the managed list — the same three answers as everywhere else in a
+  /// programme, for the same reason.
+  singerId     String?
+  person       String?
+  instrumentId String?
+  note         String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session    Session              @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  singer     Singer?              @relation(fields: [singerId], references: [id], onDelete: SetNull)
+  instrument Instrument?          @relation(fields: [instrumentId], references: [id], onDelete: SetNull)
+  items      ProgramItemChannel[]
+
+  @@unique([sessionId, number])
+  @@index([sessionId])
+}
+
+/// Which channels are open for one item. The artefact a document cannot hold.
+///
+/// Doubles as the scene plan for a desk that has scenes: one scene per item,
+/// and this is the mute map it would be programmed from.
+model ProgramItemChannel {
+  itemId    String
+  channelId String
+  open      Boolean @default(false)
+  note      String?
+
+  updatedAt DateTime @updatedAt
+
+  item    ProgramItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  channel SessionChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+
+  @@id([itemId, channelId])
+  @@index([channelId])
 }
 
 /// Somebody doing a job at a session rather than singing at it.

@@ -9,6 +9,8 @@ import { DeleteSessionButton } from "@/app/roster/[id]/DeleteSessionButton";
 import { timeLabel } from "@/lib/sessionsOfDay";
 import { ProgramEditor } from "./ProgramEditor";
 import { ProgramCrew } from "./ProgramCrew";
+import { ChannelGrid } from "./ChannelGrid";
+import { sortChannels } from "@/lib/deskChannels";
 
 export const dynamic = "force-dynamic";
 
@@ -34,6 +36,13 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
     include: {
       category: { select: { id: true, name: true } },
       crew: { include: { singer: { select: { id: true, name: true } } } },
+      desk: { select: { id: true, name: true } },
+      channels: {
+        include: {
+          singer: { select: { name: true } },
+          instrument: { select: { name: true } },
+        },
+      },
       programItems: {
         orderBy: { position: "asc" },
         include: {
@@ -48,6 +57,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
               singer: { select: { id: true, name: true } },
             },
           },
+          channels: { select: { channelId: true, open: true } },
         },
       },
     },
@@ -68,7 +78,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
 
   const canEdit = can(role, "editPrograms");
 
-  const [singers, instruments, categories, places] = await Promise.all([
+  const [singers, instruments, categories, places, desks] = await Promise.all([
     prisma.singer.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     prisma.instrument.findMany({
       where: { active: true, scope: { in: ["program", "both"] } },
@@ -88,6 +98,10 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
         take: 20,
       })
       .then((rows) => rows.map((r) => r.location!).filter(Boolean)),
+    prisma.desk.findMany({
+      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+      select: { id: true, name: true, _count: { select: { channels: true } } },
+    }),
   ]);
 
   const heading = new Intl.DateTimeFormat("en-AU", {
@@ -167,6 +181,33 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
         items={items}
         singers={singers}
         instruments={instruments}
+        canEdit={canEdit}
+      />
+
+      <ChannelGrid
+        sessionId={session.id}
+        deskName={session.desk?.name ?? null}
+        desks={desks.map((d) => ({ id: d.id, name: d.name, channels: d._count.channels }))}
+        channels={sortChannels(session.channels).map((c) => ({
+          id: c.id,
+          number: c.number,
+          label: c.label,
+          kind: c.kind,
+          colour: c.colour,
+          singerId: c.singerId,
+          person: c.person,
+          // What to show in brackets: the person on it, or the instrument.
+          who: c.singer?.name ?? c.person ?? c.instrument?.name ?? null,
+        }))}
+        items={session.programItems.map((item) => ({
+          id: item.id,
+          position: item.position,
+          kind: item.kind,
+          title: item.title ?? "",
+          sceneNumber: item.sceneNumber === null ? "" : String(item.sceneNumber),
+          open: item.channels.filter((c) => c.open).map((c) => c.channelId),
+        }))}
+        singers={singers}
         canEdit={canEdit}
       />
 
