@@ -227,7 +227,18 @@ export default function RosterCalendarClient(props: {
   }
 
   const selectedInfo = dayInfo[selected];
-  const selectedLabel = fromISODate(selected).toLocaleDateString(undefined, {
+  /*
+   * "en-AU", not the runtime default.
+   *
+   * `undefined` asks whichever engine is formatting for ITS locale, and the two
+   * engines here do not agree: Node rendered "Sunday, 16 August 2026" and the
+   * browser "Sunday 16 August 2026", one comma apart, which is enough for React
+   * to fail hydration and throw away this whole tree on every visit to /roster.
+   * The group is in Melbourne and every other date in the app is already
+   * formatted en-AU, so saying so fixes the mismatch and changes nothing a
+   * reader sees.
+   */
+  const selectedLabel = fromISODate(selected).toLocaleDateString("en-AU", {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -241,7 +252,7 @@ export default function RosterCalendarClient(props: {
     <div className="grid gap-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm font-semibold">
-          {monthDate.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+          {monthDate.toLocaleDateString("en-AU", { month: "long", year: "numeric" })}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" onClick={() => navMonth(-1)} disabled={isPending}>Prev</Button>
