@@ -6,11 +6,11 @@
  * A cushion belongs to a SINGER within a SESSION, not to a slot: a singer has
  * one mic for the night, so if they sing twice the cushion follows them.
  *
- * The CHORUS mic is the exception, and it is why `green` exists here. That
- * cushion is stored per ROW (SessionSlot.chorusCushion) rather than per person,
- * because the chorus mic is a different mic — the same singer may lead one
- * bhajan on blue and chorus another on green, and a per-person key cannot hold
- * both facts at once.
+ * The CHORUS mics are the exception, and they are why `green` exists here.
+ * Those cushions are stored per BHAJAN (SessionSlotChorus) rather than per
+ * person, because a chorus mic is a different mic — the same singer may lead
+ * one bhajan on blue and chorus another on green, and a per-person key cannot
+ * hold both facts at once.
  */
 
 /** The four lead cushions on the desk. Unchanged — green is not one of them. */
@@ -59,6 +59,20 @@ export function micColourDot(colour: MicColourValue | null): string | null {
   if (colour === null) return null;
   return CHORUS_COLOURS.find((c) => c.value === colour)?.dot ?? null;
 }
+
+/**
+ * One person on one chorus mic for one bhajan, as every view reads it.
+ *
+ * A bhajan may have several — the desk puts more than one person on the chorus
+ * mics and each has its own cushion — so this travels as a list, ordered by
+ * `position` so every device reads them in the same order.
+ */
+export type ChorusMic = {
+  singerId: string;
+  name: string;
+  cushion: MicColourValue | null;
+  position: number;
+};
 
 /** What the client currently believes, per singer. */
 export type CushionEntry = {

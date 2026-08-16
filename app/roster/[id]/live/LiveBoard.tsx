@@ -6,16 +6,14 @@ import { DeitySymbols } from "@/components/DeitySymbol";
 import { useMicCushions, cushionTint } from "@/components/MicCushions";
 import { useSessionVersion } from "@/components/useSessionVersion";
 import { hasMoreBelow, isRowSeen, movedRows } from "@/lib/liveBoard";
-import { MIC_COLOURS, micColourDot, micColourLabel, type MicColourValue } from "@/lib/micCushion";
+import { MIC_COLOURS, micColourDot, micColourLabel, type ChorusMic } from "@/lib/micCushion";
 
 export type LiveSlot = {
   position: number;
   singerId: string | null;
   singerName: string;
-  /** Who is on the chorus mic for this bhajan, if anybody. */
-  chorusName: string | null;
-  /** That mic's cushion colour, which tints the chorus line. */
-  chorusCushion: MicColourValue | null;
+  /** Who is on the chorus mics for this bhajan, and what each cushion is. */
+  chorus: ChorusMic[];
   bhajanTitle: string;
   bhajanId: string | null;
   deities: string[];
@@ -44,20 +42,26 @@ function rowSignature(s: LiveSlot, cushion: string | null): string {
     s.tablaPitch,
     s.raga,
     cushion,
-    // The chorus mic counts for the same reason the lead cushion does: it is a
-    // change made in the hall, by somebody standing in it, that the desk has to
-    // catch.
-    s.chorusName,
-    s.chorusCushion,
+    // The chorus mics count for the same reason the lead cushion does: a change
+    // made in the hall, by somebody standing in it, that the desk has to catch.
+    // Every name and every cushion, so a third mic arriving rings the row and
+    // so does one of the three changing colour.
+    s.chorus.map((c) => `${c.singerId}:${c.cushion ?? ""}`).join(","),
   ].join("\u0000");
 }
 
 /**
- * Who is on the chorus mic, under the singer who is leading.
+ * Who is on the chorus mics, under the singer who is leading.
+ *
+ * SIDE BY SIDE, on one wrapping line, because a bhajan often has two or three
+ * and the desk reads them as one group — "who else is open" — not as a stack of
+ * separate facts. Stacked, three chorus mics cost three lines on every card and
+ * pushed the dense board back to scrolling, which is the thing it was built to
+ * stop.
  *
  * Smaller than the lead singer, because that is the relationship — the desk
- * reads the lead first and the chorus as a qualifier. Tinted with the CHORUS
- * mic's own cushion colour, which is stored on the row rather than against the
+ * reads the lead first and the chorus as a qualifier. Each name is tinted with
+ * ITS OWN cushion colour, which is stored against the bhajan rather than the
  * person: the same singer may lead one bhajan on blue and chorus another on
  * green, and a colour keyed by person could not say both.
  *
@@ -65,38 +69,42 @@ function rowSignature(s: LiveSlot, cushion: string | null): string {
  * is not something to hang a cue on — somebody colour-blind at the desk still
  * has to know which cushion is meant.
  */
-function ChorusLine({
-  name,
-  cushion,
-  dense = false,
-}: {
-  name: string | null;
-  cushion: MicColourValue | null;
-  dense?: boolean;
-}) {
-  if (!name) return null;
-  const dot = micColourDot(cushion);
-  // micColourLabel, not a lookup in MIC_COLOURS: green is the chorus-only
-  // colour and is not in that list at all, so it would never resolve.
-  const label = cushion ? micColourLabel(cushion) : null;
+function ChorusLine({ mics, dense = false }: { mics: ChorusMic[]; dense?: boolean }) {
+  if (mics.length === 0) return null;
 
   return (
     <span
-      className={`flex items-center gap-1 leading-tight ${dense ? "text-[12px]" : "text-sm"}`}
-      style={dot ? { color: dot } : undefined}
-      title={label ? `${label} chorus mic` : "Chorus mic"}
+      className={`flex flex-wrap items-center gap-x-2.5 gap-y-0.5 leading-tight ${
+        dense ? "text-[12px]" : "text-sm"
+      }`}
     >
-      {dot ? (
-        <span
-          aria-hidden
-          className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
-          style={{ background: dot }}
-        />
-      ) : null}
-      <span className={dot ? "" : "text-on-surface-muted"}>{name}</span>
-      <span className="sr-only">
-        {label ? ` on the ${label.toLowerCase()} chorus mic` : " on the chorus mic"}
-      </span>
+      {mics.map((mic) => {
+        const dot = micColourDot(mic.cushion);
+        // micColourLabel, not a lookup in MIC_COLOURS: green is the chorus-only
+        // colour and is not in that list at all, so it would never resolve.
+        const label = mic.cushion ? micColourLabel(mic.cushion) : null;
+
+        return (
+          <span
+            key={mic.singerId}
+            className="flex items-center gap-1"
+            style={dot ? { color: dot } : undefined}
+            title={label ? `${mic.name} — ${label} chorus mic` : `${mic.name} — chorus mic`}
+          >
+            {dot ? (
+              <span
+                aria-hidden
+                className="inline-block h-1.5 w-1.5 shrink-0 rounded-full"
+                style={{ background: dot }}
+              />
+            ) : null}
+            <span className={dot ? "" : "text-on-surface-muted"}>{mic.name}</span>
+            <span className="sr-only">
+              {label ? ` on the ${label.toLowerCase()} chorus mic` : " on a chorus mic"}
+            </span>
+          </span>
+        );
+      })}
     </span>
   );
 }
@@ -343,17 +351,56 @@ export function LiveBoard({
   const [words, setWords] = useState<number | null>(null);
   const openSlot = words === null ? null : (slots.find((s) => s.position === words) ?? null);
 
+  /*
+   * Back — the swipe on a phone — closes the words, rather than leaving.
+   *
+   * The sheet is state and not a route, so the browser knew nothing about it:
+   * a swipe back from the words went past the board entirely and out to the
+   * session page. The Back button in the corner worked, which made the sheet
+   * look like something you could only leave one particular way, and left the
+   * reader on the editing grid mid-session.
+   *
+   * So while the sheet is open it stands on a history entry of its own — same
+   * URL, so nothing moves on screen — and Back spends that entry instead of
+   * the board's. Same idiom as the unsaved-work guard on the session grid.
+   */
+  const wordsGuard = useRef(false);
+  const closeWords = useCallback(() => {
+    // Spend our entry and let popstate do the closing, so the button, the
+    // backdrop, Escape and the swipe all end in exactly the same state.
+    if (wordsGuard.current) window.history.back();
+    else setWords(null);
+  }, []);
+
+  useEffect(() => {
+    if (words === null) return;
+
+    wordsGuard.current = true;
+    window.history.pushState(
+      { ...window.history.state, __liveWords: true },
+      "",
+      window.location.href,
+    );
+
+    const onPop = () => {
+      wordsGuard.current = false;
+      setWords(null);
+    };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, [words]);
+
   // Escape closes the words before it would exit the live view itself.
   useEffect(() => {
     if (openSlot === null) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return;
       e.stopPropagation();
-      setWords(null);
+      closeWords();
     };
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, [openSlot]);
+  }, [openSlot, closeWords]);
 
   /*
    * Three ways to lay this out, decided only by how many bhajans there are.
@@ -610,7 +657,7 @@ export function LiveBoard({
 
                       <span className="flex shrink-0 flex-col items-end leading-tight">
                         <span className="text-[15px] font-medium">{s.singerName}</span>
-                        <ChorusLine name={s.chorusName} cushion={s.chorusCushion} dense />
+                        <ChorusLine mics={s.chorus} dense />
                         {dot ? <span className="sr-only">{dot.label} mic cushion</span> : null}
                       </span>
                     </div>
@@ -700,7 +747,7 @@ export function LiveBoard({
                     <span className="font-medium" style={fill.singer}>
                       {s.singerName}
                     </span>
-                    <ChorusLine name={s.chorusName} cushion={s.chorusCushion} />
+                    <ChorusLine mics={s.chorus} />
                     {dot ? <span className="sr-only">{dot.label} mic cushion</span> : null}
                   </div>
                 </div>
@@ -782,7 +829,7 @@ export function LiveBoard({
           role="dialog"
           aria-modal="true"
           aria-label={`Words for ${openSlot.bhajanTitle}`}
-          onClick={() => setWords(null)}
+          onClick={closeWords}
         >
           <div
             className="mx-auto flex h-full w-full max-w-2xl flex-col p-4 sm:p-6"
@@ -801,7 +848,7 @@ export function LiveBoard({
               </div>
               <button
                 type="button"
-                onClick={() => setWords(null)}
+                onClick={closeWords}
                 className="shrink-0 rounded-key border border-rule px-3 py-1.5 text-sm text-on-ground hover:bg-white/[0.08]"
               >
                 Back

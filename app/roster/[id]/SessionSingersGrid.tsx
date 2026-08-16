@@ -8,7 +8,7 @@ import { DeitySymbols } from "@/components/DeitySymbol";
 import { Button } from "@/components/ui";
 import { deleteSingerRow, upsertSessionSingerRows, type SingerRowInput } from "./actions";
 import { useMicCushions, MicCushionDots, cushionTint } from "@/components/MicCushions";
-import type { MicColourValue } from "@/lib/micCushion";
+import type { ChorusMic } from "@/lib/micCushion";
 import { ChorusCell } from "./ChorusCell";
 import { LeaveWithChangesDialog } from "@/components/LeaveWithChangesDialog";
 import {
@@ -37,8 +37,7 @@ type BhajanLite = {
 
 type RowState = SingerRowInput & {
   /** Read-only here: ChorusCell writes these itself, outside the grid's save. */
-  chorusSingerId?: string | null;
-  chorusCushion?: MicColourValue | null;
+  chorus?: ChorusMic[];
   _localId: string;
   singerName?: string;
   singerGender?: string | null;
@@ -156,9 +155,8 @@ export function SessionSingersGrid(props: {
     recommendedPitch: string | null;
     raga: string | null;
     deities: string[];
-    /** The chorus mic on this bhajan. Written by ChorusCell, not by the save. */
-    chorusSingerId: string | null;
-    chorusCushion: MicColourValue | null;
+    /** The chorus mics on this bhajan. Written by ChorusCell, not by the save. */
+    chorus: ChorusMic[];
     updatedAt: string;
   }>;
   suggestions: {
@@ -193,8 +191,7 @@ export function SessionSingersGrid(props: {
       recommendedPitch: r.recommendedPitch,
       raga: r.raga,
       deities: r.deities,
-      chorusSingerId: r.chorusSingerId,
-      chorusCushion: r.chorusCushion,
+      chorus: r.chorus,
       updatedAt: r.updatedAt,
       _bhajanQuery: r.bhajanTitle ?? r.festivalBhajanTitle ?? "",
     }))
@@ -1234,11 +1231,29 @@ export function SessionSingersGrid(props: {
               <th className="sticky left-0 z-20 w-[190px] border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
                 Singer
               </th>
-              <th className="sticky left-[190px] z-[15] border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
-                Bhajan
-              </th>
+              {/*
+                Bhajan is NOT frozen, and must not be.
+
+                It was sticky at left-[190px] while its body cells were ordinary
+                cells, so the two came apart the moment the table scrolled: the
+                header stopped at the singer column's edge and the bhajan names
+                slid on underneath it, leaving the word "Bhajan" sitting over the
+                pitch buttons. That is what a phone in landscape hits first —
+                wide enough to miss the stacked-card breakpoint at 767px, too
+                narrow for the table's 720px minimum not to scroll.
+
+                Freezing the body cells too would fix the mismatch and cost more
+                than it is worth: singer plus bhajan is around 300px of an 844px
+                landscape screen held still, and bhajan is the column sized from
+                whatever the others leave, so its sticky offset would be a
+                guess. One frozen column — the singer, which is what a row is
+                read by — is the whole of what this table needs.
+              */}
+              <th className="border-r bg-panel px-3 py-2 text-left font-semibold">Bhajan</th>
               <th className="w-[168px] px-2 py-1.5 text-left font-semibold">Pitch</th>
-              <th className="w-[132px] px-2 py-1.5 text-left font-semibold">Chorus mic</th>
+              {/* Wider than it was: the column now stacks a name and its row of
+                  cushion dots per person, not one of each. */}
+              <th className="w-[158px] px-2 py-1.5 text-left font-semibold">Chorus mics</th>
               <th className="w-[108px] whitespace-nowrap px-2 py-1.5 text-left font-semibold">
                 Recommended
               </th>
@@ -1600,13 +1615,12 @@ export function SessionSingersGrid(props: {
                     )}
                   </td>
 
-                  {/* Recommended — derived, never editable. Plain text. */}
-                  <td data-label="Chorus mic" className="px-2 py-1.5 align-top">
+                  {/* Chorus mics — written by the cell itself, not by the save. */}
+                  <td data-label="Chorus mics" className="px-2 py-1.5 align-top">
                     <ChorusCell
                       slotId={r.id ?? null}
                       singers={props.singers}
-                      chorusSingerId={r.chorusSingerId ?? null}
-                      chorusCushion={r.chorusCushion ?? null}
+                      mics={r.chorus ?? []}
                       canAssign={props.canAssign}
                       canSetCushion={props.canSetMicCushion}
                     />

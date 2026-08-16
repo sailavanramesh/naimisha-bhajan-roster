@@ -217,7 +217,7 @@ model Singer {
   updatedAt    DateTime @updatedAt
 
   slots              SessionSlot[]
-  chorusSlots        SessionSlot[]           @relation("ChorusSinger")
+  chorusMics         SessionSlotChorus[]     @relation("ChorusSinger")
   repertoire         SingerRepertoire[]
   availability       SingerAvailability[]
   micCushions        MicCushion[]
@@ -493,33 +493,64 @@ model SessionSlot {
 
   alternativeTablaPitch String?
 
-  /// Who is on the chorus mic for THIS bhajan, and what colour that mic's
-  /// cushion is.
-  ///
-  /// The colour lives on the row rather than on the person, unlike MicCushion.
-  /// That table is keyed (session, singer) because a singer has one mic for a
-  /// whole session — but the chorus mic is a different mic, and the same person
-  /// may lead bhajan 1 on blue and chorus bhajan 3. Keyed by person, those two
-  /// facts cannot both be true.
-  ///
-  /// SetNull like `singerId`, and for the same reason: removing somebody from
-  /// the roster must never delete the row that holds a confirmed pitch.
-  chorusSingerId String?
-  chorusCushion  MicColour?
-
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  session      Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  singer       Singer? @relation(fields: [singerId], references: [id], onDelete: SetNull)
-  chorusSinger Singer? @relation("ChorusSinger", fields: [chorusSingerId], references: [id], onDelete: SetNull)
-  bhajan       Bhajan? @relation(fields: [bhajanId], references: [id], onDelete: SetNull)
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  singer  Singer? @relation(fields: [singerId], references: [id], onDelete: SetNull)
+  bhajan  Bhajan? @relation(fields: [bhajanId], references: [id], onDelete: SetNull)
+
+  /// Who is on a chorus mic for this bhajan. See SessionSlotChorus.
+  chorus SessionSlotChorus[]
 
   @@unique([sessionId, position])
   @@index([sessionId])
   @@index([singerId])
-  @@index([chorusSingerId])
   @@index([bhajanId])
+}
+
+/// One person on one chorus mic, for one bhajan.
+///
+/// This began as two columns on SessionSlot — `chorusSingerId` and
+/// `chorusCushion` — which said one person choruses a bhajan. In real use more
+/// than one does, each on their own mic with its own cushion, so the pair
+/// became a table (2026-08-17). The four dev rows that existed were carried
+/// across as first entries.
+///
+/// The cushion stays HERE rather than on the singer, which is the same reason
+/// the columns were on the row before. MicCushion is keyed (session, singer)
+/// because a lead singer has one mic for the whole evening; a chorus mic is a
+/// different mic, and the same person may lead bhajan 1 on blue and chorus
+/// bhajan 3 on green. Keyed by person, those two facts cannot both be true.
+///
+/// Cascade on both sides, unlike SessionSlot.singerId, and it is safe here for
+/// a reason that does not apply there: this row holds no history. It records
+/// who is on a mic tonight, so removing the bhajan or the singer should take it
+/// with them — whereas a SessionSlot holds `confirmedPitch`, which must survive
+/// a singer being removed.
+model SessionSlotChorus {
+  id       String @id @default(cuid())
+  slotId   String
+  singerId String
+
+  /// The colour of THIS mic's cushion. Null is "no cushion", which is a state
+  /// somebody can deliberately choose, exactly as with the lead mics.
+  cushion MicColour?
+
+  /// Ordered from 1, so the live board reads the mics in the same order on
+  /// every device rather than in whatever order the rows come back.
+  position Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  slot   SessionSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  singer Singer      @relation("ChorusSinger", fields: [singerId], references: [id], onDelete: Cascade)
+
+  /// One person cannot be on two chorus mics for the same bhajan.
+  @@unique([slotId, singerId])
+  @@index([slotId])
+  @@index([singerId])
 }
 
 model SessionInstrument {

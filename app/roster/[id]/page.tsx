@@ -108,6 +108,10 @@ export default async function RosterSessionPage({
         include: {
           singer: true,
           bhajan: { include: { deities: { include: { deity: true } } } },
+          chorus: {
+            include: { singer: { select: { name: true } } },
+            orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+          },
         },
         orderBy: [{ position: "asc" }, { createdAt: "asc" }],
       },
@@ -303,10 +307,14 @@ export default async function RosterSessionPage({
       computeRecommendedPitch(x.singer?.gender ?? null, x.bhajan) || x.historicalRecommendedPitch || null,
     raga: x.bhajan?.raga ?? null,
     deities: x.bhajan?.deities.map((d) => d.deity.name) ?? [],
-    // The chorus mic. Read here, written by ChorusCell on its own — never
+    // The chorus mics. Read here, written by ChorusCell on its own — never
     // through the grid's save, which carries the historical record.
-    chorusSingerId: x.chorusSingerId,
-    chorusCushion: x.chorusCushion,
+    chorus: x.chorus.map((c) => ({
+      singerId: c.singerId,
+      name: c.singer.name,
+      cushion: c.cushion,
+      position: c.position,
+    })),
   }));
 
   const suggestions = await getPitchSuggestions();
