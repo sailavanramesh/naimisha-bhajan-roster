@@ -168,6 +168,64 @@ export function channelLabel(channel: {
 }
 
 /**
+ * Which item the desk view is showing, from the position stored on the session.
+ *
+ * A position rather than an id is what is stored (see Session.
+ * currentItemPosition), so this is where that choice is paid for: the stored
+ * number may name an item that has since been deleted, or one that never
+ * existed, and the desk must still show something.
+ *
+ *   - No items at all → null. The caller says "nothing in the running order".
+ *   - Nothing stored yet → the FIRST item. A desk view opened before anybody
+ *     has pressed anything should show the programme about to start, not a
+ *     blank screen asking to be told where it is.
+ *   - A position that exists → that item.
+ *   - A position that does not → the nearest one that does, which for a deleted
+ *     item is whatever moved up into its place, and for a number past the end is
+ *     the last item. Never null while items exist.
+ */
+export function currentItemOf<T extends { position: number }>(
+  items: readonly T[],
+  stored: number | null | undefined,
+): T | null {
+  if (items.length === 0) return null;
+
+  const ordered = [...items].sort((a, b) => a.position - b.position);
+  if (stored === null || stored === undefined) return ordered[0];
+
+  const exact = ordered.find((i) => i.position === stored);
+  if (exact) return exact;
+
+  // The first item at or after the missing position, else the last one.
+  return ordered.find((i) => i.position > stored) ?? ordered[ordered.length - 1];
+}
+
+/**
+ * The position one step forward or back from where the desk is now.
+ *
+ * Steps through the items that EXIST rather than doing arithmetic on the stored
+ * number, so a gap left by a deleted item is not a press that appears to do
+ * nothing. Stops at both ends rather than wrapping: a programme is not a loop,
+ * and Next on the last item bouncing back to the first mid-performance would be
+ * a genuinely bad moment.
+ *
+ * Returns null when there is nowhere to go, which is what disables the button.
+ */
+export function stepItem<T extends { position: number }>(
+  items: readonly T[],
+  stored: number | null | undefined,
+  delta: 1 | -1,
+): number | null {
+  const here = currentItemOf(items, stored);
+  if (!here) return null;
+
+  const ordered = [...items].sort((a, b) => a.position - b.position);
+  const at = ordered.findIndex((i) => i.position === here.position);
+  const next = ordered[at + delta];
+  return next ? next.position : null;
+}
+
+/**
  * A default strip list for a desk with no channels yet.
  *
  * Numbers only, unlabelled. The centre's Yamaha MG20XU has twenty inputs, but

@@ -368,6 +368,18 @@ model Session {
   rosterChangedAt DateTime?
   /// Which desk this programme is mixed on. Null until one is picked.
   deskId          String?
+  /// Which item in the running order the programme is ON right now.
+  ///
+  /// A POSITION, not an item id, so it survives an item being deleted mid-
+  /// programme — the desk lands on whatever now holds that place rather than on
+  /// nothing at all. Read through `currentItemOf`, which clamps it to the items
+  /// that actually exist.
+  ///
+  /// Shared deliberately: the point of the desk view is that the desk, the
+  /// stage and anybody watching are on the same item, so this is one fact about
+  /// the programme rather than one per device. Null until somebody starts, which
+  /// reads as "we have not begun".
+  currentItemPosition Int?
   type            SessionType   @default(Weekday)
   /// See SessionFormat. Defaults to `bhajans` so every existing row is
   /// unaffected by this column arriving.

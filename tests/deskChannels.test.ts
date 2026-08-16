@@ -1,10 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
   blankStrips,
+  currentItemOf,
   channelLabel,
   proposeChannels,
   proposeOpenChannels,
   sortChannels,
+  stepItem,
   type ItemPeople,
 } from "../lib/deskChannels";
 
@@ -173,5 +175,70 @@ describe("blankStrips", () => {
     expect(blankStrips(0)).toEqual([]);
     expect(blankStrips(-5)).toEqual([]);
     expect(blankStrips(9999)).toHaveLength(64);
+  });
+});
+
+describe("currentItemOf", () => {
+  const items = [{ position: 1 }, { position: 2 }, { position: 3 }];
+
+  it("shows the first item before anybody has pressed anything", () => {
+    expect(currentItemOf(items, null)).toEqual({ position: 1 });
+    expect(currentItemOf(items, undefined)).toEqual({ position: 1 });
+  });
+
+  it("shows the item at the stored position", () => {
+    expect(currentItemOf(items, 2)).toEqual({ position: 2 });
+  });
+
+  it("has nothing to show when the running order is empty", () => {
+    expect(currentItemOf([], 1)).toBeNull();
+    expect(currentItemOf([], null)).toBeNull();
+  });
+
+  /*
+   * The case a stored POSITION exists to survive: the item the desk was on is
+   * deleted mid-programme. Whatever took its place is what to show.
+   */
+  it("lands on what moved up when the item it was on is gone", () => {
+    expect(currentItemOf([{ position: 1 }, { position: 3 }], 2)).toEqual({ position: 3 });
+  });
+
+  it("lands on the last item when the position is past the end", () => {
+    expect(currentItemOf(items, 99)).toEqual({ position: 3 });
+  });
+
+  it("does not care what order the items arrive in", () => {
+    expect(currentItemOf([{ position: 3 }, { position: 1 }, { position: 2 }], null)).toEqual({
+      position: 1,
+    });
+  });
+});
+
+describe("stepItem", () => {
+  const items = [{ position: 1 }, { position: 2 }, { position: 3 }];
+
+  it("goes forward and back one item at a time", () => {
+    expect(stepItem(items, 1, 1)).toBe(2);
+    expect(stepItem(items, 2, -1)).toBe(1);
+  });
+
+  it("stops at both ends rather than wrapping", () => {
+    expect(stepItem(items, 3, 1)).toBeNull();
+    expect(stepItem(items, 1, -1)).toBeNull();
+  });
+
+  it("steps over a gap left by a deleted item", () => {
+    const gappy = [{ position: 1 }, { position: 4 }, { position: 5 }];
+    expect(stepItem(gappy, 1, 1)).toBe(4);
+    expect(stepItem(gappy, 4, -1)).toBe(1);
+  });
+
+  it("starts from the first item when nothing is stored", () => {
+    expect(stepItem(items, null, 1)).toBe(2);
+    expect(stepItem(items, null, -1)).toBeNull();
+  });
+
+  it("has nowhere to go in an empty running order", () => {
+    expect(stepItem([], null, 1)).toBeNull();
   });
 });

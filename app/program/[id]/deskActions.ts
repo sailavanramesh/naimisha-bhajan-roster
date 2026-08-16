@@ -30,6 +30,59 @@ const Text = (max: number) =>
 async function refresh(sessionId: string) {
   revalidatePath(`/program/${sessionId}`);
   revalidatePath(`/program/${sessionId}/print`);
+  revalidatePath(`/program/${sessionId}/desk`);
+}
+
+/**
+ * Move the programme on to another item.
+ *
+ * Gated on `setMicCushion`, not `editPrograms`, and the difference is the whole
+ * point. Deciding the running order is an editor's job; saying which item the
+ * room is on right now is live desk state, done mid-performance by whoever is
+ * standing at the desk — the same reasoning that lets any signed-in person move
+ * a mic cushion. Somebody trusted to run the sound is not thereby trusted to
+ * rewrite the programme, and does not need to be.
+ *
+ * Writes a POSITION and does not check it names an item, deliberately: the
+ * caller has just derived it with `stepItem`, and `currentItemOf` clamps on the
+ * way back out, so an item deleted between the press and the write lands
+ * somewhere sensible instead of failing in front of an audience.
+ */
+export async function setCurrentItem(input: {
+  sessionId: string;
+  position: number | null;
+}): Promise<Result> {
+  await requireCapability("setMicCushion");
+
+  const parsed = z
+    .object({
+      sessionId: Id,
+      // Bounded so a malformed client cannot store something that reads as a
+      // position but is not one. Null is "we have not begun".
+      position: z.union([z.number().int().min(1).max(500), z.null()]),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: "That is not an item." };
+
+  const session = await prisma.session.findUnique({
+    where: { id: parsed.data.sessionId },
+    select: { id: true, format: true },
+  });
+  if (!session) return { ok: false, error: "That programme is gone." };
+  if (session.format !== "program") return { ok: false, error: "That is not a programme." };
+
+  await prisma.session.update({
+    where: { id: session.id },
+    data: { currentItemPosition: parsed.data.position },
+  });
+
+  /*
+   * The session row's own updatedAt moves with this write, which is what the
+   * version stamp other devices poll is built on — so pressing Next here is
+   * what puts every other screen on the same item.
+   */
+  await refresh(session.id);
+  return ok;
 }
 
 /**

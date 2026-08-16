@@ -24,7 +24,7 @@ export async function GET(req: Request) {
   const [session, slots] = await Promise.all([
     prisma.session.findUnique({
       where: { id },
-      select: { updatedAt: true },
+      select: { updatedAt: true, format: true },
     }),
     prisma.sessionSlot.aggregate({
       where: { sessionId: id },
@@ -36,11 +36,50 @@ export async function GET(req: Request) {
 
   // A deletion moves the count without moving any surviving row's timestamp,
   // which is why the count is part of the stamp rather than a nicety.
-  const version = [
+  const parts: (number | string)[] = [
     session.updatedAt.getTime(),
     slots._max.updatedAt?.getTime() ?? 0,
     slots._count._all,
-  ].join(":");
+  ];
 
-  return NextResponse.json({ version });
+  /*
+   * A programme's content is not in SessionSlot, so the three numbers above say
+   * nothing about it — and the desk view watches exactly the things they miss.
+   * Opening a channel on an item touches ProgramItemChannel and nothing else,
+   * so without this a tick made on the editor would never reach the desk screen
+   * standing next to it.
+   *
+   * Only for programmes. A bhajan session pays for none of it, which matters:
+   * this is polled every ten seconds by every board left open on a music stand.
+   */
+  if (session.format === "program") {
+    const [items, channels, open] = await Promise.all([
+      prisma.programItem.aggregate({
+        where: { sessionId: id },
+        _max: { updatedAt: true },
+        _count: { _all: true },
+      }),
+      prisma.sessionChannel.aggregate({
+        where: { sessionId: id },
+        _max: { updatedAt: true },
+        _count: { _all: true },
+      }),
+      prisma.programItemChannel.aggregate({
+        where: { item: { sessionId: id } },
+        _max: { updatedAt: true },
+        _count: { _all: true },
+      }),
+    ]);
+
+    parts.push(
+      items._max.updatedAt?.getTime() ?? 0,
+      items._count._all,
+      channels._max.updatedAt?.getTime() ?? 0,
+      channels._count._all,
+      open._max.updatedAt?.getTime() ?? 0,
+      open._count._all,
+    );
+  }
+
+  return NextResponse.json({ version: parts.join(":") });
 }

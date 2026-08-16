@@ -175,13 +175,25 @@ export function ChannelGrid({
               should be open.
             </p>
           </div>
-          <Link
-            href={`/program/${sessionId}/print`}
-            target="_blank"
-            className="text-sm text-on-ground-muted underline underline-offset-2 hover:text-on-ground"
-          >
-            Printable sheet ↗
-          </Link>
+          <div className="flex flex-wrap items-center gap-3">
+            {/*
+              The desk view first: it is what somebody opens ON THE NIGHT,
+              whereas the sheet is what they printed the day before.
+            */}
+            <Link
+              href={`/program/${sessionId}/desk`}
+              className="text-sm font-semibold text-brass-ink underline underline-offset-2"
+            >
+              Desk view →
+            </Link>
+            <Link
+              href={`/program/${sessionId}/print`}
+              target="_blank"
+              className="text-sm text-on-ground-muted underline underline-offset-2 hover:text-on-ground"
+            >
+              Printable sheet ↗
+            </Link>
+          </div>
         </div>
 
         {/*
