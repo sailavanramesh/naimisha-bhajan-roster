@@ -2,7 +2,16 @@
 
 import { useState, useTransition } from "react";
 import { Button, Input } from "@/components/ui";
-import { sectionsFor, type SectionStyle } from "@/lib/songVerses";
+import { sectionsFor } from "@/lib/songVerses";
+
+/**
+ * The section families, named by what they contain rather than by the tradition
+ * they come from — "Western" told you nothing about where Chorus lived.
+ */
+const SECTION_GROUPS = [
+  { label: "Pallavi / charanam", sections: sectionsFor("carnatic") },
+  { label: "Verse / chorus", sections: sectionsFor("western") },
+] as const;
 import { addVerse, moveVerse, pasteVerses, removeVerse, updateVerse } from "@/app/songs/actions";
 import type { VerseView } from "./Verses";
 
@@ -28,7 +37,6 @@ export function VerseEditor({
   verses: VerseView[];
   canEdit: boolean;
 }) {
-  const [style, setStyle] = useState<SectionStyle>("carnatic");
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [pasting, setPasting] = useState(false);
@@ -40,46 +48,63 @@ export function VerseEditor({
 
   return (
     <div className="grid gap-4 border-t border-rule-surface pt-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs uppercase tracking-wide text-on-surface-muted">Add a section</span>
-        <select
-          value={style}
-          aria-label="Which kind of song"
-          className="h-8 rounded-key border border-rule-surface bg-field px-2 text-xs"
-          onChange={(e) => setStyle(e.target.value as SectionStyle)}
-        >
-          <option value="carnatic">Carnatic</option>
-          <option value="western">Western</option>
-        </select>
-        {sectionsFor(style).map((section) => (
+      {/*
+        BOTH families of section, shown at once.
+
+        This was a dropdown — "Carnatic" or "Western" — defaulting to Carnatic,
+        so Verse and Chorus existed and were invisible unless you happened to
+        change a control that named a musical tradition rather than the sections
+        inside it. Sailavan asked for "another category of song with verse and
+        chorus"; it was already there, behind that.
+
+        Seven buttons is not a lot, and a mode that hides half of them to save
+        four is a bad trade — especially when a programme can hold both kinds of
+        song and somebody would otherwise be flicking the selector back and forth
+        between two items.
+      */}
+      <div className="grid gap-1.5">
+        <span className="text-xs uppercase tracking-wide text-on-surface-muted">
+          Add a section
+        </span>
+
+        {SECTION_GROUPS.map((group) => (
+          <div key={group.label} className="flex flex-wrap items-center gap-2">
+            <span className="w-24 shrink-0 text-[11px] text-on-surface-muted">{group.label}</span>
+            {group.sections.map((section) => (
+              <Button
+                key={section}
+                type="button"
+                className="h-8 text-xs"
+                disabled={pending}
+                onClick={() =>
+                  startTransition(async () => {
+                    const res = await addVerse({ songId, section });
+                    say(res, `Added a ${section.toLowerCase()}.`);
+                  })
+                }
+              >
+                {section}
+              </Button>
+            ))}
+          </div>
+        ))}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="w-24 shrink-0 text-[11px] text-on-surface-muted">No heading</span>
           <Button
-            key={section}
             type="button"
             className="h-8 text-xs"
             disabled={pending}
             onClick={() =>
               startTransition(async () => {
-                const res = await addVerse({ songId, section });
-                say(res, `Added a ${section.toLowerCase()}.`);
+                const res = await addVerse({ songId, section: "" });
+                say(res, "Added a verse.");
               })
             }
           >
-            {section}
+            Unlabelled
           </Button>
-        ))}
-        <Button
-          type="button"
-          className="h-8 text-xs"
-          disabled={pending}
-          onClick={() =>
-            startTransition(async () => {
-              const res = await addVerse({ songId, section: "" });
-              say(res, "Added a verse.");
-            })
-          }
-        >
-          Unlabelled
-        </Button>
+        </div>
       </div>
 
       <ol className="grid grid-cols-[minmax(0,1fr)] gap-3">
