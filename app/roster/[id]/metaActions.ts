@@ -13,6 +13,12 @@ const Input = z.object({
   location: z.string().max(120),
   /** "HH:MM", or "" for none. */
   startsAt: z.string().regex(/^$|^([01]\d|2[0-3]):[0-5]\d$/, "Use a time like 19:00."),
+  /**
+   * "YYYY-MM-DD". A session put on the wrong day has to be movable — Sailavan,
+   * 2026-08-17 — and the alternative was delete and rebuild, which throws away
+   * the roster with the mistake.
+   */
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date like 2026-08-18."),
 });
 
 /**
@@ -25,25 +31,46 @@ const Input = z.object({
  * kept somewhere else, and it should cost nothing to everybody who never opens
  * it.
  */
-export async function updateSessionMeta(input: {
-  sessionId: string;
-  categoryId: string;
-  topic: string;
-  location: string;
-  startsAt: string;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+/*
+ * The declared input is DERIVED from the schema rather than written out beside
+ * it. Written out, the two drifted the moment `date` was added: the schema
+ * required it, the type did not mention it, so the compiler was happy while
+ * every save failed validation on a field the caller had no reason to send.
+ */
+export async function updateSessionMeta(
+  input: z.infer<typeof Input>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   await requireCapability("editSessionNotes");
 
   const parsed = Input.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Could not save." };
+    /*
+     * Name the field. A bare "Required" is what this said when the date became
+     * editable and the form was not yet sending it — an error that pointed at
+     * nothing on screen, under a form where every visible box was filled in.
+     */
+    const issue = parsed.error.issues[0];
+    const field = issue?.path.join(".");
+    return {
+      ok: false,
+      error: field ? `${field}: ${issue.message}` : (issue?.message ?? "Could not save."),
+    };
   }
-  const { sessionId, categoryId, topic, location, startsAt } = parsed.data;
+  const { sessionId, categoryId, topic, location, startsAt, date } = parsed.data;
 
   if (categoryId) {
     const exists = await prisma.sessionCategory.count({ where: { id: categoryId } });
     if (exists === 0) return { ok: false, error: "That category no longer exists." };
   }
+
+  /*
+   * Midnight UTC, like every other date written here. The column is @db.Date
+   * and the group is in Melbourne: building the Date any other way lets the
+   * local zone shift the session onto the day before, which is the bug the
+   * date column exists to avoid (CLAUDE.md, "Dates are session dates").
+   */
+  const when = new Date(`${date}T00:00:00.000Z`);
+  if (Number.isNaN(when.getTime())) return { ok: false, error: "That is not a date." };
 
   await prisma.session.update({
     where: { id: sessionId },
@@ -52,10 +79,15 @@ export async function updateSessionMeta(input: {
       topic: topic.trim() || null,
       location: location.trim() || null,
       startsAt: startsAt || null,
+      date: when,
     },
   });
 
   revalidatePath(`/roster/${sessionId}`);
+  revalidatePath(`/program/${sessionId}`);
+  // The calendar and the month strip both read by date, so a session that has
+  // moved has moved on them too.
+  revalidatePath("/roster");
   return { ok: true };
 }
 
@@ -234,20 +266,28 @@ export async function bulkDeleteSessions(
   return { ok: true, deleted: res.count, kept };
 }
 
-const CategoryInput = z.object({ name: z.string().trim().min(1).max(60) });
+const CategoryInput = z.object({
+  name: z.string().trim().min(1).max(60),
+  scope: z.enum(["bhajans", "program"]).default("bhajans"),
+});
 
 /**
  * Add a category.
  *
  * Editors, not owners: naming the kinds of session the centre runs is part of
  * running the roster, unlike deciding when the app buzzes people.
+ *
+ * `scope` says which vocabulary it joins — the kinds of bhajan session, or the
+ * kinds of music program. The name is checked across BOTH, because two kinds
+ * sharing a name would be indistinguishable everywhere either is shown.
  */
 export async function addSessionCategory(
   name: string,
+  scope: "bhajans" | "program" = "bhajans",
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   await requireCapability("manageAllocations");
 
-  const parsed = CategoryInput.safeParse({ name });
+  const parsed = CategoryInput.safeParse({ name, scope });
   if (!parsed.success) return { ok: false, error: "Give it a name." };
 
   const existing = await prisma.sessionCategory.findFirst({
@@ -255,9 +295,14 @@ export async function addSessionCategory(
   });
   if (existing) return { ok: false, error: `"${existing.name}" is already there.` };
 
-  const last = await prisma.sessionCategory.findFirst({ orderBy: { order: "desc" } });
+  // Ordering is per scope, so adding a program kind does not push its number
+  // past the end of the bhajan list and leave gaps in both.
+  const last = await prisma.sessionCategory.findFirst({
+    where: { scope: parsed.data.scope },
+    orderBy: { order: "desc" },
+  });
   await prisma.sessionCategory.create({
-    data: { name: parsed.data.name, order: (last?.order ?? -1) + 1 },
+    data: { name: parsed.data.name, scope: parsed.data.scope, order: (last?.order ?? -1) + 1 },
   });
 
   revalidatePath("/admin");

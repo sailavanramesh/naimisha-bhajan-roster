@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import Link from "next/link";
+import { KeepScroll } from "@/components/KeepScroll";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from "@/components/ui";
 import { DeitySymbols } from "@/components/DeitySymbol";
@@ -88,6 +90,11 @@ export default async function ExplorePage({ searchParams }: { searchParams: Prom
 
   return (
     <div className="grid gap-4">
+      {/* Open a bhajan from here and come back to the same place, not the top.
+          See components/KeepScroll.tsx. */}
+      <Suspense fallback={null}>
+        <KeepScroll prefix="explore" />
+      </Suspense>
       <Card>
         <CardHeader>
           <CardTitle>Explore bhajans</CardTitle>

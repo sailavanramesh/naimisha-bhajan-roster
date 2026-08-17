@@ -24,7 +24,17 @@ export type DaySession = {
   startsAt: string | null;
   categoryName?: string | null;
   entries?: number;
+  /**
+   * See Session.format. Optional because most callers here predate programs and
+   * pass bhajan sessions only; absent is read as `bhajans`.
+   */
+  format?: "bhajans" | "program";
 };
+
+/** A music program, which most of this module deliberately steps around. */
+function isProgram(session: DaySession): boolean {
+  return session.format === "program";
+}
 
 /** Minutes from midnight. Null means the usual evening, not midnight. */
 export function startMinutes(startsAt: string | null | undefined): number {
@@ -52,12 +62,21 @@ export function sortByStart<T extends DaySession>(sessions: readonly T[]): T[] {
  * have handed a 9am festival session every link meant for the evening one.
  * Not "the last", either — that would pick a 9pm overflow over the 7pm the
  * group actually meets at.
+ *
+ * MUSIC PROGRAMS ARE NOT ELIGIBLE. Every caller of this is asking "which
+ * bhajan session does this day mean" — to roster singers onto, to copy rows
+ * into, to open when somebody taps the day. A program has no slots to do any of
+ * that with, and a Guru Poornima offering at 7pm would otherwise beat the
+ * bhajan session at 6 and hand every one of those paths a session it cannot
+ * use. Returns null when a day holds nothing but programs, which is a true
+ * answer to the question being asked.
  */
 export function defaultSessionOf<T extends DaySession>(sessions: readonly T[]): T | null {
-  if (sessions.length === 0) return null;
+  const eligible = sessions.filter((s) => !isProgram(s));
+  if (eligible.length === 0) return null;
   const target = toMinutes(USUAL_START);
 
-  return sortByStart(sessions).reduce((best, s) => {
+  return sortByStart(eligible).reduce((best, s) => {
     const d = Math.abs(startMinutes(s.startsAt) - target);
     const bestD = Math.abs(startMinutes(best.startsAt) - target);
     return d < bestD ? s : best;

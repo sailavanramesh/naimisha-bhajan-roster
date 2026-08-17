@@ -50,6 +50,30 @@ export function vapidPublicKey(): string {
  * Other failures are left alone. A 500 from a push service is transient and
  * deleting the subscription would lose a real device over a temporary fault.
  */
+/**
+ * Is this subscription beyond saving, as opposed to merely failing today?
+ *
+ * 404 and 410 are the documented "this endpoint is gone" answers and have
+ * always been pruned. The third case was found by testing on 2026-08-17: Apple
+ * refuses a subscription made against a DIFFERENT VAPID public key with
+ *
+ *     400 {"reason":"VapidPkHashMismatch"}
+ *
+ * which is just as permanent — the keys cannot be un-rotated, so that endpoint
+ * can never be delivered to again — but is not a status anything treated as
+ * dead. So the row sat there failing on every send, forever, while the device
+ * showed notifications as on. The browser makes a fresh subscription once it
+ * notices (see lib/pushKeys.ts); this clears away the one it replaces.
+ *
+ * Deliberately narrow. A 400 on its own is NOT taken as dead — that is the
+ * status a malformed payload of our own making would return, and pruning
+ * everybody's subscription over our own bug is not a mistake worth risking.
+ */
+function isGone(status: number | undefined, body: string | undefined): boolean {
+  if (status === 404 || status === 410) return true;
+  return status === 400 && /VapidPkHashMismatch/i.test(body ?? "");
+}
+
 export async function pushToSingers(
   singerIds: readonly string[],
   notification: Notification,
@@ -64,9 +88,19 @@ export async function pushToSingers(
   if (subs.length === 0) return { sent: 0, failed: 0, pruned: 0 };
 
   const payload = JSON.stringify(notification);
-  let sent = 0;
   let failed = 0;
   const dead: string[] = [];
+  /*
+   * WHICH subscriptions delivered, not how many.
+   *
+   * `lastOkAt` lives on the subscription row, so it has to mean "this device
+   * received something". It was stamped on every subscription belonging to
+   * every recipient whenever any single send succeeded — so one working phone
+   * marked a person's broken one healthy, and a device that had never received
+   * anything looked fine. That is exactly backwards for a column whose only job
+   * is to let somebody find the dead device.
+   */
+  const delivered: string[] = [];
 
   await Promise.all(
     subs.map(async (s) => {
@@ -81,10 +115,10 @@ export async function pushToSingers(
             TTL: 60 * 60 * 24,
           },
         );
-        sent++;
+        delivered.push(s.id);
       } catch (e: unknown) {
-        const status = (e as { statusCode?: number })?.statusCode;
-        if (status === 404 || status === 410) dead.push(s.id);
+        const err = e as { statusCode?: number; body?: string };
+        if (isGone(err.statusCode, err.body)) dead.push(s.id);
         else failed++;
       }
     }),
@@ -93,12 +127,12 @@ export async function pushToSingers(
   if (dead.length > 0) {
     await prisma.pushSubscription.deleteMany({ where: { id: { in: dead } } });
   }
-  if (sent > 0) {
+  if (delivered.length > 0) {
     await prisma.pushSubscription.updateMany({
-      where: { singerId: { in: [...singerIds] }, id: { notIn: dead } },
+      where: { id: { in: delivered } },
       data: { lastOkAt: new Date() },
     });
   }
 
-  return { sent, failed, pruned: dead.length };
+  return { sent: delivered.length, failed, pruned: dead.length };
 }

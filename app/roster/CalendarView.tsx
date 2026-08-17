@@ -16,7 +16,7 @@ function pad2(n: number) {
 }
 
 function monthLabel(d: Date) {
-  return d.toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return d.toLocaleDateString("en-AU", { month: "long", year: "numeric" });
 }
 
 function yyyymm(d: Date) {
@@ -214,7 +214,7 @@ export function CalendarView(props: { initialMonth: string; sessions: CalSession
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <div className="text-sm font-semibold text-gray-900">
-              {new Date(selectedKey).toLocaleDateString(undefined, {
+              {new Date(selectedKey).toLocaleDateString("en-AU", {
                 weekday: "long",
                 year: "numeric",
                 month: "short",

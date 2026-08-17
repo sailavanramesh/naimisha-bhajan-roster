@@ -8,6 +8,8 @@ import { DeitySymbols } from "@/components/DeitySymbol";
 import { Button } from "@/components/ui";
 import { deleteSingerRow, upsertSessionSingerRows, type SingerRowInput } from "./actions";
 import { useMicCushions, MicCushionDots, cushionTint } from "@/components/MicCushions";
+import type { ChorusMic } from "@/lib/micCushion";
+import { ChorusCell } from "./ChorusCell";
 import { LeaveWithChangesDialog } from "@/components/LeaveWithChangesDialog";
 import {
   describeChanges,
@@ -34,6 +36,8 @@ type BhajanLite = {
 };
 
 type RowState = SingerRowInput & {
+  /** Read-only here: ChorusCell writes these itself, outside the grid's save. */
+  chorus?: ChorusMic[];
   _localId: string;
   singerName?: string;
   singerGender?: string | null;
@@ -151,6 +155,8 @@ export function SessionSingersGrid(props: {
     recommendedPitch: string | null;
     raga: string | null;
     deities: string[];
+    /** The chorus mics on this bhajan. Written by ChorusCell, not by the save. */
+    chorus: ChorusMic[];
     updatedAt: string;
   }>;
   suggestions: {
@@ -185,6 +191,7 @@ export function SessionSingersGrid(props: {
       recommendedPitch: r.recommendedPitch,
       raga: r.raga,
       deities: r.deities,
+      chorus: r.chorus,
       updatedAt: r.updatedAt,
       _bhajanQuery: r.bhajanTitle ?? r.festivalBhajanTitle ?? "",
     }))
@@ -857,7 +864,32 @@ export function SessionSingersGrid(props: {
   }
 
   async function onPickBhajan(localId: string, bhajanId: string) {
-    const b = await fetchBhajan(bhajanId);
+    const row = rows.find((r) => r._localId === localId);
+
+    /*
+     * A SHRUTI THE SINGER SAVED ON THEIR OWN LIST COMES IN WITH THE BHAJAN.
+     *
+     * Sailavan: "if someone populates the 'shruti you want', it should come in as
+     * the pre-selected pitch for the song when adding to the roster."
+     *
+     * This does not break the rule that a guess is never written into
+     * `confirmedPitch`, because a saved shruti is not a guess — it is the singer
+     * saying what they sing this at, which is the same standing they have when
+     * they say it out loud on the night. The assign panel has always carried it
+     * across for the same reason; the grid was the inconsistent one.
+     *
+     * Three limits keep it honest:
+     *   - Only the SAVED value. The prediction beside it stays a chip to tap.
+     *   - Only into an EMPTY pitch. Nothing already recorded is touched.
+     *   - Only when a bhajan is PICKED, never on load, so opening a session does
+     *     not quietly fill in ten pitches and leave the page dirty.
+     * And it lands as an unsaved change like any other, visible in the save
+     * summary before it becomes history.
+     */
+    const [b, saved] = await Promise.all([
+      fetchBhajan(bhajanId),
+      row?.singerId && !row.confirmedPitch ? savedListPitch(row.singerId, bhajanId) : null,
+    ]);
 
     setRows((prev) =>
       prev.map((r) => {
@@ -872,11 +904,39 @@ export function SessionSingersGrid(props: {
           festivalBhajanTitle: null,
           _bhajanQuery: b?.title ?? "",
           recommendedPitch: pickRecommendedPitch(r.singerGender ?? null, b) || null,
+          ...(saved && !r.confirmedPitch
+            ? {
+                confirmedPitch: saved,
+                alternativeTablaPitch: props.suggestions.pitchToTabla[saved] ?? null,
+              }
+            : {}),
         };
       })
     );
 
+    if (saved) setPitchUI((prev) => ({ ...prev, [localId]: { q: saved, open: false } }));
     setBhPortal((p) => ({ ...p, open: false }));
+  }
+
+  /**
+   * The shruti this singer has SAVED for this bhajan on their own list, or null.
+   *
+   * Only `onList.preferredPitch` — not the suggestion, which folds in history and
+   * a prediction. Those two are offered as a chip to tap and must stay that way;
+   * this one is a decision already made.
+   */
+  async function savedListPitch(singerId: string, bhajanId: string): Promise<string | null> {
+    try {
+      const res = await fetch(
+        `/api/pitch/suggest?singerId=${encodeURIComponent(singerId)}&bhajanId=${encodeURIComponent(bhajanId)}`,
+      );
+      if (!res.ok) return null;
+      const data = await res.json();
+      const pitch: unknown = data?.onList?.preferredPitch;
+      return typeof pitch === "string" && pitch.trim().length > 0 ? pitch : null;
+    } catch {
+      return null;
+    }
   }
 
   function onConfirmedPitchChange(localId: string, confirmed: string) {
@@ -1224,10 +1284,29 @@ export function SessionSingersGrid(props: {
               <th className="sticky left-0 z-20 w-[190px] border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
                 Singer
               </th>
-              <th className="sticky left-[190px] z-[15] border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
-                Bhajan
-              </th>
+              {/*
+                Bhajan is NOT frozen, and must not be.
+
+                It was sticky at left-[190px] while its body cells were ordinary
+                cells, so the two came apart the moment the table scrolled: the
+                header stopped at the singer column's edge and the bhajan names
+                slid on underneath it, leaving the word "Bhajan" sitting over the
+                pitch buttons. That is what a phone in landscape hits first —
+                wide enough to miss the stacked-card breakpoint at 767px, too
+                narrow for the table's 720px minimum not to scroll.
+
+                Freezing the body cells too would fix the mismatch and cost more
+                than it is worth: singer plus bhajan is around 300px of an 844px
+                landscape screen held still, and bhajan is the column sized from
+                whatever the others leave, so its sticky offset would be a
+                guess. One frozen column — the singer, which is what a row is
+                read by — is the whole of what this table needs.
+              */}
+              <th className="border-r bg-panel px-3 py-2 text-left font-semibold">Bhajan</th>
               <th className="w-[168px] px-2 py-1.5 text-left font-semibold">Pitch</th>
+              {/* Wider than it was: the column now stacks a name and its row of
+                  cushion dots per person, not one of each. */}
+              <th className="w-[158px] px-2 py-1.5 text-left font-semibold">Chorus mics</th>
               <th className="w-[108px] whitespace-nowrap px-2 py-1.5 text-left font-semibold">
                 Recommended
               </th>
@@ -1589,7 +1668,17 @@ export function SessionSingersGrid(props: {
                     )}
                   </td>
 
-                  {/* Recommended — derived, never editable. Plain text. */}
+                  {/* Chorus mics — written by the cell itself, not by the save. */}
+                  <td data-label="Chorus mics" className="px-2 py-1.5 align-top">
+                    <ChorusCell
+                      slotId={r.id ?? null}
+                      singers={props.singers}
+                      mics={r.chorus ?? []}
+                      canAssign={props.canAssign}
+                      canSetCushion={props.canSetMicCushion}
+                    />
+                  </td>
+
                   <td data-label="Recommended" className="whitespace-nowrap px-2 py-1.5 text-[12px] text-on-surface-muted">
                     {r.recommendedPitch ?? "—"}
                   </td>

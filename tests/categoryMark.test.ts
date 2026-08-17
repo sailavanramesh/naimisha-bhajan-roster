@@ -79,10 +79,24 @@ describe("dayMarks", () => {
     expect(marks[0]).toMatchObject({ src: null, initials: "RT", name: "Routine Thursday" });
   });
 
-  it("shows nothing for a session with no kind set", () => {
-    // The bar under the cell already says a session is there.
+  /*
+   * It used to show nothing here, on the argument that the cell's wash already
+   * said a session was there. It does not say it loudly enough: Sailavan's
+   * 18 August session read as "slightly darker but not discernible", because
+   * one to three bhajans is the wash's lightest step and nothing sat beside it.
+   */
+  it("marks a session with no kind rather than leaving the day bare", () => {
     const { marks } = dayMarks([{ categoryId: null }, { categoryId: undefined }], kinds);
-    expect(marks).toEqual([]);
+    expect(marks).toEqual([
+      { id: null, name: "Kind not set", initials: "?", src: null, count: 2 },
+    ]);
+  });
+
+  it("keeps a real kind ahead of an untyped session when only one fits", () => {
+    const { marks, overflow } = dayMarks([{ categoryId: null }, { categoryId: "r" }], kinds, 1);
+    expect(marks).toHaveLength(1);
+    expect(marks[0].name).toBe("Ramayana");
+    expect(overflow).toBe(1);
   });
 
   it("counts what will not fit rather than dropping it silently", () => {
@@ -182,8 +196,13 @@ describe("dayTooltip", () => {
     expect(dayTooltip(marks, 7, 2)).toBe("Ramayana ×2 · 2 sessions · 7 bhajans");
   });
 
-  it("still says something for a session with no kind set", () => {
+  it("still says something when a day somehow has no marks at all", () => {
     expect(dayTooltip([], 3, 1)).toBe("3 bhajans");
+  });
+
+  it("names the untyped session in the tooltip", () => {
+    const { marks } = dayMarks([{ categoryId: null }], kinds);
+    expect(dayTooltip(marks, 3, 1)).toBe("Kind not set · 3 bhajans");
   });
 
   it("is empty when the day holds no session", () => {

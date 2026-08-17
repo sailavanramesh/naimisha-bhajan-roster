@@ -1,6 +1,10 @@
 import Link from "next/link";
 import { prisma } from "@/lib/db";
-import { RepertoireKind } from "@prisma/client";
+import { Gender, RepertoireKind } from "@prisma/client";
+import { suggestPitch, type PitchSource } from "@/lib/suggestedPitch";
+import { predictForSinger } from "@/lib/singerProfile";
+import { getSingerProfile } from "@/lib/pitchQueries";
+import { historyCutoff } from "@/lib/dates";
 import { Button, Textarea, Badge } from "@/components/ui";
 import { DeitySymbols } from "@/components/DeitySymbol";
 import { upsertLearning, removeLearning } from "@/app/my-list/actions";
@@ -34,6 +38,27 @@ import { AddToListForm } from "@/components/AddToListForm";
  * a bhajan makes it start appearing in suggestions with no separate wiring.
  */
 
+/**
+ * Where a suggested shruti came from, in the singer's own terms.
+ *
+ * Deliberately NOT the same words as a saved shruti. Sailavan: the saved value
+ * "should say something different to predicted or recommended pitch to highlight
+ * its been saved" — and the distinction is the whole point of the pair of them.
+ * One is what this person decided; the other is the app's guess at it, and a
+ * guess that dresses itself up as a decision is how a guess ends up in the
+ * history.
+ *
+ * "list" cannot appear here: the suggestion is computed WITHOUT the saved value
+ * on purpose, so it stays a second opinion rather than an echo.
+ */
+const HINT_WORDS: Record<PitchSource, string> = {
+  list: "saved",
+  sung: "you have sung it here",
+  predicted: "predicted for you",
+  reference: "the masterlist reference",
+  none: "",
+};
+
 export const STAGES: Array<{ kind: RepertoireKind; title: string; blurb: string }> = [
   {
     kind: RepertoireKind.wantToLearn,
@@ -61,7 +86,7 @@ export async function LearningList({
   singerName: string;
   canEdit: boolean;
 }) {
-  const [entries, labels] = await Promise.all([
+  const [entries, labels, singer] = await Promise.all([
     prisma.singerRepertoire.findMany({
       where: {
         singerId,
@@ -76,7 +101,63 @@ export async function LearningList({
       orderBy: [{ step: "asc" }, { series: "asc" }],
       select: { label: true },
     }),
+    prisma.singer.findUnique({ where: { id: singerId }, select: { gender: true } }),
   ]);
+
+  /*
+   * WHAT WOULD THIS PERSON SING EACH OF THESE AT?
+   *
+   * Sailavan asked for the predicted pitch to appear in all three stages, above
+   * "Shruti you want" — because the question the field asks is one most people
+   * cannot answer cold, and the app has been able to answer it for a while in
+   * the roster grid and nowhere else.
+   *
+   * Computed WITHOUT the saved value, deliberately. Feeding `listPitch` back in
+   * would make the hint agree with the field it sits above every time, which
+   * tells nobody anything; leaving it out keeps it a second opinion, and lets a
+   * saved shruti be checked against what the singer has actually done.
+   *
+   * One extra query for the whole list — every pitch this singer has confirmed
+   * for any bhajan on it — rather than one per row.
+   */
+  const bhajanIds = entries.map((e) => e.bhajanId).filter((x): x is string => Boolean(x));
+  const [sung, profileRow] = await Promise.all([
+    bhajanIds.length > 0
+      ? prisma.sessionSlot.findMany({
+          // Only what has actually happened. A pitch typed onto next Thursday is
+          // a plan, and a plan is not evidence of anything (lib/dates.ts).
+          where: {
+            singerId,
+            bhajanId: { in: bhajanIds },
+            session: { date: { lte: historyCutoff() } },
+          },
+          select: { bhajanId: true, confirmedPitch: true },
+        })
+      : Promise.resolve([]),
+    getSingerProfile(singerId, singerName),
+  ]);
+
+  const sungPitches = new Map<string, string[]>();
+  for (const s of sung) {
+    if (!s.bhajanId || !s.confirmedPitch) continue;
+    sungPitches.set(s.bhajanId, [...(sungPitches.get(s.bhajanId) ?? []), s.confirmedPitch]);
+  }
+
+  const labelStrings = labels.map((l) => l.label);
+  const hintFor = (e: (typeof entries)[number]) => {
+    if (!e.bhajan) return null;
+    const reference =
+      singer?.gender === Gender.Ladies
+        ? e.bhajan.referenceLadiesPitch
+        : e.bhajan.referenceGentsPitch;
+    const predicted = predictForSinger(profileRow.profile, reference, e.bhajan.raga, labelStrings);
+    const hint = suggestPitch({
+      sungPitches: sungPitches.get(e.bhajan.id) ?? [],
+      predicted: predicted.predicted ? predicted.label : null,
+      reference,
+    });
+    return hint.pitch ? hint : null;
+  };
 
   const byStage = new Map(STAGES.map((s) => [s.kind, entries.filter((e) => e.kind === s.kind)]));
 
@@ -123,7 +204,9 @@ export async function LearningList({
               {rows.length === 0 ? (
                 <p className="text-sm text-on-surface-muted">Nothing here yet.</p>
               ) : (
-                rows.map((e) => (
+                rows.map((e) => {
+                  const hint = hintFor(e);
+                  return (
                   <div
                     key={e.id}
                     className="rounded-[12px] border border-rule-surface bg-panel p-3"
@@ -153,11 +236,40 @@ export async function LearningList({
                           and now that every row is at exactly one stage it is
                           a label nobody acts on. The flag is still stored.
                         */}
-                        {e.preferredPitch ? (
-                          <div className="mt-1 font-mono text-xs tabular text-on-surface-muted">
-                            shruti {e.preferredPitch}
-                          </div>
-                        ) : null}
+                        {/*
+                          THE SHRUTI, AND HOW MUCH IT IS WORTH.
+
+                          Two different claims, and they must not look alike. A
+                          saved shruti is this singer's own decision and reads
+                          like one — solid border, "saved". A hint is the app's
+                          guess and reads like a guess: dashed, quieter, and
+                          named after where it came from. Sailavan: the saved one
+                          "should say something different to predicted or
+                          recommended pitch to highlight its been saved".
+
+                          The hint stays visible alongside a saved shruti when the
+                          two disagree, because that disagreement is worth seeing
+                          — it is usually either a voice that has moved or a value
+                          saved in a hurry.
+                        */}
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                          {e.preferredPitch ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-[8px] border border-brass/45 bg-brass/[0.08] px-1.5 py-0.5 text-xs">
+                              <span className="font-mono tabular font-semibold">
+                                {e.preferredPitch}
+                              </span>
+                              <span className="text-[10px] text-on-surface-muted">
+                                your shruti · saved
+                              </span>
+                            </span>
+                          ) : null}
+                          {hint && hint.pitch !== e.preferredPitch ? (
+                            <span className="inline-flex items-center gap-1.5 rounded-[8px] border border-dashed border-rule-surface bg-field px-1.5 py-0.5 text-xs text-on-surface-muted">
+                              <span className="font-mono tabular">{hint.pitch}</span>
+                              <span className="text-[10px]">{HINT_WORDS[hint.source]}</span>
+                            </span>
+                          ) : null}
+                        </div>
                         {e.note ? (
                           <p className="mt-1 whitespace-pre-wrap text-sm">{e.note}</p>
                         ) : null}
@@ -252,6 +364,26 @@ export async function LearningList({
                               </select>
                             </label>
                             <label className="grid gap-1">
+                              {/*
+                                The suggestion sits ABOVE the field it is for, as
+                                Sailavan asked, because it is the answer to the
+                                question the field asks and reading it afterwards
+                                is no use.
+
+                                Offered as the first option as well as stated, so
+                                taking it is one tap. Never PRE-SELECTED: a
+                                pre-selected guess is saved by anybody who came
+                                here to change the note, and then it is
+                                indistinguishable from a decision.
+                              */}
+                              {hint ? (
+                                <span className="text-[11px] text-on-surface-muted">
+                                  {HINT_WORDS[hint.source]}:{" "}
+                                  <span className="font-mono tabular text-on-surface">
+                                    {hint.pitch}
+                                  </span>
+                                </span>
+                              ) : null}
                               <span className="text-[11px] text-on-surface-muted">
                                 Shruti you want
                               </span>
@@ -261,11 +393,18 @@ export async function LearningList({
                                 className="h-11 rounded-[10px] border border-rule-surface bg-field px-3 text-sm"
                               >
                                 <option value="">—</option>
-                                {labels.map((l) => (
-                                  <option key={l.label} value={l.label}>
-                                    {l.label}
-                                  </option>
-                                ))}
+                                {hint?.pitch && hint.pitch !== e.preferredPitch ? (
+                                  <optgroup label={HINT_WORDS[hint.source]}>
+                                    <option value={hint.pitch}>{hint.pitch}</option>
+                                  </optgroup>
+                                ) : null}
+                                <optgroup label="Every shruti">
+                                  {labels.map((l) => (
+                                    <option key={l.label} value={l.label}>
+                                      {l.label}
+                                    </option>
+                                  ))}
+                                </optgroup>
                               </select>
                             </label>
                           </div>
@@ -287,7 +426,8 @@ export async function LearningList({
                       </details>
                     ) : null}
                   </div>
-                ))
+                  );
+                })
               )}
             </div>
           </details>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle, Input, Button } from "@/components/ui";
 import { SessionSingersGrid } from "./SessionSingersGrid";
@@ -15,6 +16,7 @@ import { DeleteSessionButton } from "./DeleteSessionButton";
 import { NotifyPanel } from "./NotifyPanel";
 import { melbourneTodayISO } from "@/lib/dates";
 import { sortByStart, sessionLabel, hasSeveral } from "@/lib/sessionsOfDay";
+import { resolveSessionView, jobBanner } from "@/lib/sessionView";
 import { missingParts } from "@/lib/notify";
 import type { NotifyPerson } from "./NotifyPanel";
 
@@ -106,6 +108,10 @@ export default async function RosterSessionPage({
         include: {
           singer: true,
           bhajan: { include: { deities: { include: { deity: true } } } },
+          chorus: {
+            include: { singer: { select: { name: true } } },
+            orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+          },
         },
         orderBy: [{ position: "asc" }, { createdAt: "asc" }],
       },
@@ -114,6 +120,14 @@ export default async function RosterSessionPage({
   });
 
   if (!session) return <div>Not found</div>;
+
+  /*
+   * A music program has no slots, so this page would render an empty roster
+   * grid over it and offer to roster singers into a session that has no such
+   * thing. It belongs in its own editor; the matching redirect lives there, so
+   * the two URLs are interchangeable and neither can strand somebody.
+   */
+  if (session.format === "program") redirect(`/program/${session.id}`);
 
   const sid = session.id;
 
@@ -143,10 +157,32 @@ export default async function RosterSessionPage({
    * paying for a control they never see.
    */
   // Cheap: four rows the centre owns, and the session already has its own.
+  // Bhajan kinds only — the program vocabulary is a different list, and
+  // offering "Musical offering" as a kind of Thursday would be nonsense.
   const sessionCategories = await prisma.sessionCategory.findMany({
+    where: { scope: "bhajans" },
     orderBy: [{ order: "asc" }, { name: "asc" }],
     select: { id: true, name: true },
   });
+
+  /*
+   * The jobs this person holds tonight, if any.
+   *
+   * Shown as an offer rather than acted on as a redirect. Sending somebody
+   * straight to the live board would make the session page unreachable for the
+   * coordinator who is also on sound — the board's exit button comes back
+   * here, and it would bounce them out again. One prominent line does the
+   * useful part of the job, which is not having to hunt for the right screen.
+   */
+  const myJobs = me
+    ? (
+        await prisma.sessionCrew.findMany({
+          where: { sessionId, singerId: me.id },
+          select: { job: true },
+        })
+      ).map((c) => c.job)
+    : [];
+  const myView = resolveSessionView({ sessionId, format: "bhajans", jobs: myJobs });
 
   // Venues already used, so the field suggests rather than asks people to
   // retype "Naimisha Sai Centre" every week.
@@ -271,6 +307,14 @@ export default async function RosterSessionPage({
       computeRecommendedPitch(x.singer?.gender ?? null, x.bhajan) || x.historicalRecommendedPitch || null,
     raga: x.bhajan?.raga ?? null,
     deities: x.bhajan?.deities.map((d) => d.deity.name) ?? [],
+    // The chorus mics. Read here, written by ChorusCell on its own — never
+    // through the grid's save, which carries the historical record.
+    chorus: x.chorus.map((c) => ({
+      singerId: c.singerId,
+      name: c.singer.name,
+      cushion: c.cushion,
+      position: c.position,
+    })),
   }));
 
   const suggestions = await getPitchSuggestions();
@@ -317,6 +361,18 @@ export default async function RosterSessionPage({
 
   return (
     <div className="grid gap-4">
+      {myView.forJob ? (
+        <Link
+          href={myView.href}
+          className="flex items-center justify-between gap-3 rounded-[14px] border border-brass/50 bg-surface px-4 py-2.5 text-sm hover:border-brass"
+        >
+          <span>{jobBanner(myView.forJob)}</span>
+          <span className="shrink-0 text-brass-ink underline underline-offset-2">
+            Open the live board →
+          </span>
+        </Link>
+      ) : null}
+
       {tablaPlan ? (
         <TablaPanel
         sessionId={sessionId}
@@ -511,6 +567,8 @@ export default async function RosterSessionPage({
               categoryId: session.categoryId,
               topic: session.topic,
               location: session.location,
+              // The column is @db.Date, so the ISO day is the whole value.
+              date: session.date.toISOString().slice(0, 10),
               startsAt: session.startsAt,
             }}
           />

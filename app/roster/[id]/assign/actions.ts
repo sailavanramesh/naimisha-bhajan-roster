@@ -9,6 +9,7 @@ import { defaultSessionOf, USUAL_START } from "@/lib/sessionsOfDay";
 import { recordSungAsKnown } from "@/lib/repertoireFromHistory";
 import { noteRosterChange } from "@/lib/rosterChange";
 import { announceRosterIfSettled } from "@/lib/announceRosters";
+import { notifyHarmoniumIfReady } from "@/lib/notifyHarmonium";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -69,6 +70,9 @@ export async function applyAssignments(formData: FormData): Promise<void> {
   await notifyAboutSession(sessionId);
   await recordSungAsKnown(sessionId);
   await announceRosterIfSettled(sessionId);
+  // Same moment, different audience: the harmonium wants the bhajans and
+  // shrutis, and only once every row has both. See lib/notifyHarmonium.ts.
+  await notifyHarmoniumIfReady(sessionId);
 
   revalidatePath(`/roster/${sessionId}`);
   redirect(`/roster/${sessionId}`);
@@ -210,6 +214,9 @@ export async function addSingerSlot(input: {
   await notifyAboutSession(sessionId);
   await recordSungAsKnown(sessionId);
   await announceRosterIfSettled(sessionId);
+  // Same moment, different audience: the harmonium wants the bhajans and
+  // shrutis, and only once every row has both. See lib/notifyHarmonium.ts.
+  await notifyHarmoniumIfReady(sessionId);
 
   revalidatePath(`/roster/${sessionId}`);
   revalidatePath(`/roster/${sessionId}/assign`);
@@ -296,10 +303,11 @@ export async function goToSessionForDate(formData: FormData): Promise<void> {
   const day = new Date(`${parsed.data.date}T00:00:00.000Z`);
 
   // "Go to Thursday" means the usual evening session, not whatever happens to
-  // start earliest — a 9am festival session must not capture the jump.
+  // start earliest — a 9am festival session must not capture the jump, and
+  // `format` keeps a music program from capturing it either.
   const onThatDay = await prisma.session.findMany({
     where: { date: day },
-    select: { id: true, startsAt: true },
+    select: { id: true, startsAt: true, format: true },
   });
   const session =
     defaultSessionOf(onThatDay) ??
@@ -394,6 +402,9 @@ export async function autoAddFairestSingers(input: {
   await notifyAboutSession(sessionId);
   await recordSungAsKnown(sessionId);
   await announceRosterIfSettled(sessionId);
+  // Same moment, different audience: the harmonium wants the bhajans and
+  // shrutis, and only once every row has both. See lib/notifyHarmonium.ts.
+  await notifyHarmoniumIfReady(sessionId);
 
   revalidatePath(`/roster/${sessionId}`);
   revalidatePath(`/roster/${sessionId}/assign`);

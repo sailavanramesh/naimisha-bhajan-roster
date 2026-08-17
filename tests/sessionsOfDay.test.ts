@@ -48,6 +48,30 @@ describe("defaultSessionOf", () => {
     expect(defaultSessionOf([])).toBeNull();
   });
 
+  it("steps around a music program even when it is the closest to 7pm", () => {
+    // Guru Poornima at 7 and the bhajan session at 6: every caller of this is
+    // asking which BHAJAN session the day means — to roster onto, to copy rows
+    // into, to open on a tap — and a program has no slots to do any of it with.
+    const day = [
+      { id: "bhajans", startsAt: "18:00", format: "bhajans" as const },
+      { id: "offering", startsAt: "19:00", format: "program" as const },
+    ];
+    expect(defaultSessionOf(day)?.id).toBe("bhajans");
+  });
+
+  it("answers null on a day that holds nothing but a program", () => {
+    // A true answer to the question asked, and the callers create a session
+    // when they get it — which is the right outcome, not a bug.
+    const day = [{ id: "offering", startsAt: "19:00", format: "program" as const }];
+    expect(defaultSessionOf(day)).toBeNull();
+  });
+
+  it("reads a session with no format at all as a bhajan session", () => {
+    // Most callers predate programs and select no format column. Absent must
+    // mean bhajans, or every one of them would start returning null.
+    expect(defaultSessionOf([s("only", "19:00")])?.id).toBe("only");
+  });
+
   it("does not depend on the order it is given", () => {
     const day = [s("morning", "09:00"), s("evening", "19:00"), s("noon", "12:00")];
     expect(defaultSessionOf(day)?.id).toBe("evening");

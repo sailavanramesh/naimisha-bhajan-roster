@@ -52,9 +52,18 @@ async function shrinkToDataUrl(file: File, size = 256): Promise<string> {
 export function SessionCategories({
   categories,
   canEdit,
+  scope = "bhajans",
+  placeholder = "New category, e.g. Ladies Day",
 }: {
   categories: { id: string; name: string; sessions: number; image: string | null }[];
   canEdit: boolean;
+  /**
+   * Which vocabulary this list is. Defaults to the bhajan kinds, which is what
+   * every existing caller means and what every existing row is.
+   */
+  scope?: "bhajans" | "program";
+  /** What the "add" box suggests. The two vocabularies read nothing alike. */
+  placeholder?: string;
 }) {
   const [name, setName] = useState("");
   const [pending, startTransition] = useTransition();
@@ -62,7 +71,7 @@ export function SessionCategories({
 
   const add = () =>
     startTransition(async () => {
-      const res = await addSessionCategory(name);
+      const res = await addSessionCategory(name, scope);
       setMessage(res.ok ? { ok: true, text: `Added "${name}".` } : { ok: false, text: res.error });
       if (res.ok) setName("");
     });
@@ -174,8 +183,8 @@ export function SessionCategories({
           <Input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="New category, e.g. Ladies Day"
-            aria-label="New session category"
+            placeholder={placeholder}
+            aria-label={scope === "program" ? "New program kind" : "New session category"}
             className="h-9 w-56"
           />
           <Button

@@ -1,0 +1,437 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import { Button, Input } from "@/components/ui";
+import { CHORUS_COLOURS, type MicColourValue } from "@/lib/micCushion";
+import { stripNumber, overlappedStrips } from "@/lib/deskChannels";
+import {
+  absorbOverlappingStrip,
+  addDesk,
+  duplicateDesk,
+  removeDesk,
+  updateDeskChannel,
+} from "./deskActions";
+
+export type DeskRow = {
+  id: string;
+  name: string;
+  kind: "analog" | "digital";
+  isDefault: boolean;
+  usedBy: number;
+  /** How many inputs are mono before the rest can pair. Twelve on the MG20XU. */
+  monoInputs: number;
+  channels: {
+    id: string;
+    number: number;
+    label: string;
+    kind: string;
+    /** The cushion fixed to this strip. Null is a mic with no cushion. */
+    colour: MicColourValue | null;
+    /** Which mic is on it — "Wired", "Pegasus", "WL1", "Rode". */
+    mic: string | null;
+    /** A mono/stereo pair — 13/14 on the MG20XU. Its number is the first one. */
+    stereo: boolean;
+  }[];
+};
+
+const KINDS = ["vocal", "instrument", "track", "spare"] as const;
+
+/**
+ * The desks the centre mixes on.
+ *
+ * A template only: a programme copies these strips when it picks a desk, and
+ * edits its own copy from then on — so correcting a label here next year cannot
+ * rewrite what a programme two years ago says was on channel 6.
+ */
+export function Desks({ desks, canEdit }: { desks: DeskRow[]; canEdit: boolean }) {
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState<"analog" | "digital">("analog");
+  const [channels, setChannels] = useState("20");
+  const [open, setOpen] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  const say = (res: { ok: boolean; error?: string }, good: string) =>
+    setMessage(res.ok ? { ok: true, text: good } : { ok: false, text: res.error ?? "Failed." });
+
+  return (
+    <div className="grid gap-3">
+      {desks.length === 0 ? (
+        <p className="text-sm text-on-surface-muted">No desks yet.</p>
+      ) : (
+        <ul className="grid gap-2">
+          {desks.map((desk) => (
+            <li key={desk.id} className="rounded-[10px] border border-rule-surface p-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  className="min-w-0 flex-1 text-left"
+                  aria-expanded={open === desk.id}
+                  onClick={() => setOpen(open === desk.id ? null : desk.id)}
+                >
+                  <span className="font-medium">{desk.name}</span>
+                  <span className="ml-2 text-xs text-on-surface-muted">
+                    {desk.kind === "analog" ? "analog" : "digital"} · {desk.channels.length} channels
+                    {desk.usedBy > 0
+                      ? ` · used by ${desk.usedBy} programme${desk.usedBy === 1 ? "" : "s"}`
+                      : ""}
+                  </span>
+                </button>
+                {canEdit ? (
+                  <Button
+                    type="button"
+                    className="h-8 text-xs"
+                    disabled={pending}
+                    onClick={() => {
+                      /*
+                        A copy is how a desk gets a second version — a festival
+                        patch beside an ordinary Thursday — which a programme
+                        then picks between. A full copy rather than a layer:
+                        the picker, the snapshot and the printed sheet all work
+                        on a second desk with no new machinery anywhere.
+                      */
+                      const name = prompt(
+                        `Name for the copy of "${desk.name}"`,
+                        `${desk.name} (festival)`,
+                      );
+                      if (!name?.trim()) return;
+                      startTransition(async () => {
+                        const res = await duplicateDesk({ id: desk.id, name });
+                        say(res, `Copied to "${name.trim()}".`);
+                      });
+                    }}
+                  >
+                    Duplicate
+                  </Button>
+                ) : null}
+                {canEdit ? (
+                  <Button
+                    type="button"
+                    variant="danger"
+                    className="h-8 text-xs"
+                    disabled={pending}
+                    onClick={() => {
+                      if (!confirm(`Remove "${desk.name}"?`)) return;
+                      startTransition(async () => {
+                        const res = await removeDesk({ id: desk.id });
+                        say(
+                          res,
+                          res.ok && res.usedBy > 0
+                            ? `Removed "${desk.name}". The ${res.usedBy} programme${res.usedBy === 1 ? "" : "s"} that used it keep their own channels.`
+                            : `Removed "${desk.name}".`,
+                        );
+                      });
+                    }}
+                  >
+                    Remove
+                  </Button>
+                ) : null}
+              </div>
+
+              {/*
+                Two strips cannot both claim input 20 — see overlappedStrips. The
+                condition is flagged on the row itself with the repair beside it,
+                rather than left for somebody to deduce from a channel list that
+                reads "19/20" and then "20".
+              */}
+              {open === desk.id ? (
+                <ul className="mt-2 grid gap-1 border-t border-rule-surface pt-2">
+                  {desk.channels.map((c) => (
+                    <ChannelRow
+                    key={c.id}
+                    channel={c}
+                    monoInputs={desk.monoInputs}
+                    canEdit={canEdit}
+                    overlapped={overlappedStrips(desk.channels).includes(c.number)}
+                    onMessage={setMessage}
+                  />
+                  ))}
+                </ul>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {canEdit ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="New desk, e.g. Yamaha MG20XU"
+            aria-label="New desk name"
+            className="h-9 w-56"
+          />
+          <select
+            value={kind}
+            aria-label="Desk kind"
+            className="h-9 rounded-key border border-rule-surface bg-field px-2 text-sm"
+            onChange={(e) => setKind(e.target.value as "analog" | "digital")}
+          >
+            <option value="analog">analog</option>
+            <option value="digital">digital</option>
+          </select>
+          <Input
+            value={channels}
+            onChange={(e) => setChannels(e.target.value)}
+            aria-label="How many channels"
+            inputMode="numeric"
+            className="h-9 w-20"
+          />
+          <span className="text-xs text-on-surface-muted">
+            inputs
+            <span className="ms-1 opacity-70">(20 makes 16 strips: 12 mono, 4 stereo)</span>
+          </span>
+          <Button
+            type="button"
+            variant="primary"
+            className="h-9"
+            disabled={pending || name.trim().length === 0}
+            onClick={() =>
+              startTransition(async () => {
+                const res = await addDesk({
+                  name,
+                  kind,
+                  channels: Number(channels) || 0,
+                });
+                say(res, `Added "${name.trim()}".`);
+                if (res.ok) setName("");
+              })
+            }
+          >
+            Add
+          </Button>
+        </div>
+      ) : null}
+
+      {message ? (
+        <p role="status" className={message.ok ? "text-xs text-brass-ink" : "text-xs text-warn"}>
+          {message.text}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * One strip on a desk.
+ *
+ * The cushion sits HERE, on the desk, rather than on a programme, because the
+ * cushions do not move — channel 1 is the blue cushion every week. A programme
+ * copies the allocation when it picks the desk and may correct its own copy;
+ * this is the standing truth the copy is taken from.
+ */
+function ChannelRow({
+  channel,
+  monoInputs,
+  canEdit,
+  overlapped,
+  onMessage,
+}: {
+  channel: DeskRow["channels"][number];
+  monoInputs: number;
+  canEdit: boolean;
+  /** Its input is already claimed by the stereo pair below it. */
+  overlapped: boolean;
+  onMessage: (m: { ok: boolean; text: string } | null) => void;
+}) {
+  const [label, setLabel] = useState(channel.label);
+  // Typed to the enum rather than to `string`: every save carries the kind
+  // alongside whatever it is actually changing, so a loose type here would
+  // spread through all four of them.
+  const [kind, setKind] = useState(channel.kind as (typeof KINDS)[number]);
+  const [colour, setColour] = useState<MicColourValue | null>(channel.colour);
+  const [mic, setMic] = useState(channel.mic ?? "");
+  const [stereo, setStereo] = useState(channel.stereo);
+  const [pending, startTransition] = useTransition();
+
+  /*
+   * The row is held and saved on a button, not written on every keystroke and
+   * every dot. Sailavan asked for the button, and it earns itself here: a strip
+   * is four decisions — name, what it carries, cushion, mic — usually changed
+   * together, and pairing two channels DELETES the one above, which is not a
+   * thing to do on the way past a checkbox.
+   */
+  const dirty =
+    label !== channel.label ||
+    kind !== channel.kind ||
+    colour !== channel.colour ||
+    mic !== (channel.mic ?? "") ||
+    stereo !== channel.stereo;
+
+  const save = () =>
+    startTransition(async () => {
+      const res = await updateDeskChannel({
+        id: channel.id,
+        label,
+        kind,
+        colour,
+        mic,
+        stereo,
+      });
+      if (!res.ok) onMessage({ ok: false, text: res.error });
+      else onMessage(null);
+    });
+
+  /*
+   * A strip the pair below it has already swallowed. Editing its label or cushion
+   * would be writing on a fader that is not there, so the row offers the one
+   * thing worth doing to it.
+   */
+  if (overlapped) {
+    return (
+      <li className="flex flex-wrap items-center gap-2 rounded-key border border-warn/40 bg-warn/5 px-2 py-1.5 text-sm">
+        <span className="w-12 shrink-0 text-right font-mono text-xs text-on-surface-muted">
+          {channel.number}
+        </span>
+        <span className="min-w-0 text-xs text-on-surface-muted">
+          <strong className="text-on-surface">{channel.label}</strong> — input{" "}
+          {channel.number} is already part of the {channel.number - 1}/{channel.number} pair
+          above.
+        </span>
+        {canEdit ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="ms-auto h-7 text-xs"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                const res = await absorbOverlappingStrip({ id: channel.id });
+                onMessage(res.ok ? null : { ok: false, text: res.error });
+              })
+            }
+          >
+            Remove this row
+          </Button>
+        ) : null}
+      </li>
+    );
+  }
+
+  if (!canEdit) {
+    return (
+      <li className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="w-12 shrink-0 text-right font-mono text-xs text-on-surface-muted">
+          {stripNumber(String(channel.number), channel.stereo)}
+        </span>
+        <span>
+          {channel.label}
+          <span className="ml-2 text-xs text-on-surface-muted">
+            {channel.kind}
+            {channel.mic ? ` · ${channel.mic}` : ""}
+          </span>
+        </span>
+      </li>
+    );
+  }
+
+  return (
+    <li className="flex flex-wrap items-center gap-2 text-sm">
+      <span className="w-12 shrink-0 text-right font-mono text-xs text-on-surface-muted">
+        {stripNumber(String(channel.number), stereo)}
+      </span>
+
+      <Input
+        value={label}
+        aria-label={`Label for channel ${channel.number}`}
+        className="h-8 w-40"
+        onChange={(e) => setLabel(e.target.value)}
+      />
+
+      <select
+        value={kind}
+        aria-label={`What channel ${channel.number} carries`}
+        disabled={pending}
+        className="h-8 rounded-key border border-rule-surface bg-field px-2 text-xs"
+        onChange={(e) => setKind(e.target.value as (typeof KINDS)[number])}
+      >
+        {KINDS.map((k) => (
+          <option key={k} value={k}>
+            {k}
+          </option>
+        ))}
+      </select>
+
+      {/*
+        The cushion, on vocal strips only. An instrument strip has no cushion to
+        put a colour on, and offering one there would invite somebody to record
+        a thing that does not exist.
+      */}
+      {kind === "vocal" ? (
+        <span className="flex items-center gap-1">
+          {CHORUS_COLOURS.map((c) => {
+            const on = colour === c.value;
+            return (
+              <button
+                key={c.value}
+                type="button"
+                disabled={pending}
+                aria-pressed={on}
+                aria-label={`${c.label} cushion on channel ${channel.number}`}
+                title={`${c.label} cushion on channel ${channel.number}`}
+                className={`h-4 w-4 rounded-full border transition-transform ${
+                  on ? "scale-110 border-on-surface" : "border-rule-surface opacity-70"
+                } hover:opacity-100`}
+                style={{ background: c.dot }}
+                onClick={() =>
+                  // A second tap on the colour it already is clears it, which
+                  // is how every other cushion control in the app behaves —
+                  // and "no cushion" is a real state: channel 4 is one.
+                  setColour(on ? null : (c.value as MicColourValue))
+                }
+              />
+            );
+          })}
+        </span>
+      ) : null}
+
+      {/*
+        A mono/stereo strip. The MG20XU's last four are 13/14, 15/16, 17/18 and
+        19/20 — Yamaha's "Mono: 12; Mono/Stereo: 4" — and marking it here is
+        what makes the strip print as a pair. Whether a given programme USES it
+        as a pair is a separate decision, taken on the programme.
+      */}
+      {/*
+        Offered only where the desk can actually do it. On the MG20XU the first
+        twelve inputs are mono and the last four pair up, so a tick box on
+        channel 1 was offering something the hardware does not have.
+      */}
+      <label
+        className={`flex items-center gap-1 text-[11px] text-on-surface-muted ${
+          channel.number > monoInputs ? "" : "invisible"
+        }`}
+      >
+        <input
+          type="checkbox"
+          checked={stereo}
+          disabled={pending || channel.number <= monoInputs}
+          aria-label={`Channel ${channel.number} is a stereo pair`}
+          className="h-3.5 w-3.5"
+          onChange={(e) => setStereo(e.target.checked)}
+        />
+        stereo
+      </label>
+
+      {/* Which mic is actually on it. Free text: it is the sound person's own
+          shorthand for their own gear, and nothing computes on it. */}
+      <Input
+        value={mic}
+        aria-label={`Mic on channel ${channel.number}`}
+        placeholder="mic"
+        className="h-8 w-28"
+        onChange={(e) => setMic(e.target.value)}
+      />
+
+      <Button
+        type="button"
+        variant={dirty ? "primary" : undefined}
+        className="h-8 text-xs"
+        disabled={pending || !dirty || label.trim().length === 0}
+        onClick={save}
+      >
+        {pending ? "Saving…" : dirty ? "Save" : "Saved"}
+      </Button>
+    </li>
+  );
+}

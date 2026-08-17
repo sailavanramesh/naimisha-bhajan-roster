@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import Link from "next/link";
+import { KeepScroll } from "@/components/KeepScroll";
 import { Button } from "@/components/ui";
 import { DeitySymbols } from "@/components/DeitySymbol";
 import { prisma } from "@/lib/db";
@@ -73,6 +75,11 @@ export default async function BhajansPage({
 
   return (
     <div className="grid gap-4">
+      {/* Come back to a bhajan list 3,600 rows deep and land where you left it.
+          Suspense because it reads the query string. */}
+      <Suspense fallback={null}>
+        <KeepScroll prefix="bhajans" />
+      </Suspense>
       <Card>
         <CardHeader>
           <div className="mb-2 flex justify-end">

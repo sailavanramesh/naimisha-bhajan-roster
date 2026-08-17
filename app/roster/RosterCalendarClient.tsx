@@ -23,6 +23,8 @@ type DaySession = {
   categoryName: string | null;
   entries: number;
   rows?: { singer: string; bhajan: string | null; pitch: string | null }[];
+  /** See Session.format. Absent from an older response is read as bhajans. */
+  format?: "bhajans" | "program";
 };
 
 /**
@@ -184,6 +186,24 @@ export default function RosterCalendarClient(props: {
     });
   }
 
+  /**
+   * A music program on the selected day.
+   *
+   * Always a new one, and it can sit alongside the bhajan session that day —
+   * which is the ordinary case, not the exception: the offering happens on the
+   * evening the group is already meeting.
+   */
+  function addProgramOnSelectedDay() {
+    if (!canEdit) {
+      setDenied("Only an editor can start a music program.");
+      return;
+    }
+    startTransition(async () => {
+      const created = await createSessionForDate(selected, { format: "program" });
+      router.push(`/program/${created.id}`);
+    });
+  }
+
   function navMonth(delta: number) {
     const next = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + delta, 1));
     setCurrentMonth(monthKey(next));
@@ -207,7 +227,18 @@ export default function RosterCalendarClient(props: {
   }
 
   const selectedInfo = dayInfo[selected];
-  const selectedLabel = fromISODate(selected).toLocaleDateString(undefined, {
+  /*
+   * "en-AU", not the runtime default.
+   *
+   * `undefined` asks whichever engine is formatting for ITS locale, and the two
+   * engines here do not agree: Node rendered "Sunday, 16 August 2026" and the
+   * browser "Sunday 16 August 2026", one comma apart, which is enough for React
+   * to fail hydration and throw away this whole tree on every visit to /roster.
+   * The group is in Melbourne and every other date in the app is already
+   * formatted en-AU, so saying so fixes the mismatch and changes nothing a
+   * reader sees.
+   */
+  const selectedLabel = fromISODate(selected).toLocaleDateString("en-AU", {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -221,7 +252,7 @@ export default function RosterCalendarClient(props: {
     <div className="grid gap-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm font-semibold">
-          {monthDate.toLocaleDateString(undefined, { month: "long", year: "numeric" })}
+          {monthDate.toLocaleDateString("en-AU", { month: "long", year: "numeric" })}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" onClick={() => navMonth(-1)} disabled={isPending}>Prev</Button>
@@ -325,7 +356,7 @@ export default function RosterCalendarClient(props: {
                       m.src ? (
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img
-                          key={m.id}
+                          key={m.id ?? "none"}
                           src={m.src}
                           alt=""
                           title={m.count > 1 ? `${m.name} ×${m.count}` : m.name}
@@ -334,7 +365,7 @@ export default function RosterCalendarClient(props: {
                         />
                       ) : (
                         <span
-                          key={m.id}
+                          key={m.id ?? "none"}
                           title={m.count > 1 ? `${m.name} ×${m.count}` : m.name}
                           className="grid h-4 w-4 place-items-center rounded-full border border-rule bg-brass/15 text-[7px] font-semibold text-on-surface-muted sm:h-5 sm:w-5 sm:text-[8px]"
                         >
@@ -397,47 +428,82 @@ export default function RosterCalendarClient(props: {
                   </div>
                 ) : null}
 
-                <SessionRows
-                  rows={ds.rows ?? []}
-                  total={ds.entries}
-                  emptyLabel="Session created, nothing rostered on it yet."
-                />
+                {ds.format === "program" ? (
+                  // A program has items, not rostered rows, so there is
+                  // nothing for SessionRows to show — and inventing a row per
+                  // item here would mean two places to keep in step.
+                  <p className="text-[12px] text-on-surface-muted">
+                    Music program · {ds.entries} item{ds.entries === 1 ? "" : "s"}
+                  </p>
+                ) : (
+                  <SessionRows
+                    rows={ds.rows ?? []}
+                    total={ds.entries}
+                    emptyLabel="Session created, nothing rostered on it yet."
+                  />
+                )}
 
                 <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[12px]">
                   <Link
-                    href={`/roster/${ds.id}`}
+                    href={ds.format === "program" ? `/program/${ds.id}` : `/roster/${ds.id}`}
                     className="text-brass-ink underline underline-offset-2"
                   >
-                    Open this session →
+                    {ds.format === "program" ? "Open this program →" : "Open this session →"}
                   </Link>
-                  <Link
-                    href={`/roster/${ds.id}/live`}
-                    className="text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
-                  >
-                    ▶ Live view
-                  </Link>
+                  {ds.format === "program" ? null : (
+                    <Link
+                      href={`/roster/${ds.id}/live`}
+                      className="text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+                    >
+                      ▶ Live view
+                    </Link>
+                  )}
                 </div>
               </div>
             ))}
 
             {canEdit ? (
-              // Quiet, because a second session on a day is the exception.
-              <button
-                type="button"
-                onClick={() => addSessionOnSelectedDay()}
-                disabled={isPending}
-                className="justify-self-start text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
-              >
-                Add another session on this day
-              </button>
+              // Quiet, because a second session on a day is the exception —
+              // and so is a program, which is why both sit down here rather
+              // than competing with the sessions above them.
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => addSessionOnSelectedDay()}
+                  disabled={isPending}
+                  className="text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+                >
+                  Add another session on this day
+                </button>
+                <button
+                  type="button"
+                  onClick={() => addProgramOnSelectedDay()}
+                  disabled={isPending}
+                  className="text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+                >
+                  Start a music program
+                </button>
+              </div>
             ) : null}
           </div>
         ) : (
-          <p className="text-on-surface-muted">
-            {canEdit
-              ? "Nothing on this day. Tap it to start a session."
-              : "Nothing on this day."}
-          </p>
+          <div className="grid justify-items-start gap-2">
+            <p className="text-on-surface-muted">
+              {canEdit
+                ? "Nothing on this day. Tap it to start a session."
+                : "Nothing on this day."}
+            </p>
+            {canEdit ? (
+              <button
+                type="button"
+                onClick={() => addProgramOnSelectedDay()}
+                disabled={isPending}
+                className="text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+              >
+                Start a music program
+              </button>
+            ) : null}
+          </div>
         )}
       </div>
 

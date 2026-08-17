@@ -39,6 +39,10 @@ export default async function LiveSessionPage({
       slots: {
         include: {
           singer: true,
+          chorus: {
+            include: { singer: { select: { name: true } } },
+            orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+          },
           bhajan: { include: { deities: { include: { deity: true } } } },
         },
         orderBy: [{ position: "asc" }, { createdAt: "asc" }],
@@ -66,6 +70,14 @@ export default async function LiveSessionPage({
     position: s.position,
     singerId: s.singerId,
     singerName: s.singer?.name ?? "Unassigned",
+    // The chorus mics: who is on them for THIS bhajan, and the colour of each
+    // one's cushion. They belong to the bhajan — see SessionSlotChorus.
+    chorus: s.chorus.map((c) => ({
+      singerId: c.singerId,
+      name: c.singer.name,
+      cushion: c.cushion,
+      position: c.position,
+    })),
     bhajanTitle:
       s.bhajan?.title ?? s.bhajanTitle ?? s.festivalBhajanTitle ?? s.inputOnlyCustomBhajan ?? "—",
     bhajanId: s.bhajanId,

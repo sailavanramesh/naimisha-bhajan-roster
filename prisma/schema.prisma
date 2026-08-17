@@ -37,6 +37,58 @@ enum SessionType {
   Festival
 }
 
+/// What a session IS — a set of bhajans, or a music program.
+///
+/// Separate from SessionType, which says which kind of occasion it is. A
+/// program is a Session so the calendar, the several-a-day handling, the
+/// category mark and the meta fields all work unchanged; its CONTENT lives in
+/// the Program* tables, which is also why nothing that reads SessionSlot can
+/// see one. Fairness, pitch history and repertoire are all computed from slots,
+/// and a program has none.
+enum SessionFormat {
+  bhajans
+  program
+}
+
+/// Which kind of session a category describes. The centre owns both
+/// vocabularies and they are not the same vocabulary — "Routine Thursday" is
+/// not a music program, and "Musical offering" is not a bhajan session.
+enum CategoryScope {
+  bhajans
+  program
+}
+
+/// A sung item, or a passage read between songs.
+///
+/// Narrations are ITEMS rather than a field on the song that follows: they sit
+/// in the running order, they need a person and a mic like anything else, and a
+/// program may open or close with one.
+enum ProgramItemKind {
+  song
+  narration
+}
+
+/// Which roster offers an instrument. `both` is for the ones that genuinely
+/// serve each — a tabla is a tabla.
+enum InstrumentScope {
+  bhajans
+  program
+  both
+}
+
+/// Who is doing a JOB at a session, as opposed to singing or playing at it.
+///
+/// An enum rather than a managed list, unlike Instrument: every job here maps
+/// to a VIEW, and adding one means writing the screen that goes with it. A job
+/// the app has no view for would be a label that does nothing.
+///
+/// Applies to bhajan sessions as much as to programs — the person on the desk
+/// on a Thursday is doing the same job with fewer channels.
+enum SessionJob {
+  soundEngineer
+  micCoordinator
+}
+
 enum SessionStatus {
   Draft
   Published
@@ -153,15 +205,44 @@ model Singer {
   /// than in a cookie so it follows them from phone to laptop — everybody
   /// signs in, so there is somebody to store it against.
   defaultRosterView RosterView?
-  createdAt         DateTime    @default(now())
-  updatedAt         DateTime    @updatedAt
 
-  slots             SessionSlot[]
-  repertoire        SingerRepertoire[]
-  availability      SingerAvailability[]
-  micCushions       MicCushion[]
-  pushSubscriptions PushSubscription[]
-  notices           SessionNotice[]
+  /// May edit song lyrics and meanings, without any other editor power.
+  ///
+  /// The role matrix in lib/capabilities.ts is otherwise a pure function of the
+  /// role. This is the one per-person grant, and it exists because Sailavan
+  /// wanted named people keeping the words up to date without handing them the
+  /// roster. See canWithGrants().
+  canEditWords Boolean  @default(false)
+  /// The second per-person grant: this person runs the sound.
+  ///
+  /// Sailavan wanted the sound engineer and the mic coordinator to keep the
+  /// desk and its cushion allocation right without becoming editors — the same
+  /// shape of problem as canEditWords, and the same answer. Granted in /admin.
+  ///
+  /// Deliberately NOT read from SessionCrew, which records who is on the job
+  /// for one programme. The cushion allocation is a standing fact about a desk
+  /// ("channel 1 is the blue cushion"), so the permission to change it is a
+  /// standing fact about a person.
+  canRunSound  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  slots              SessionSlot[]
+  chorusMics         SessionSlotChorus[]     @relation("ChorusSinger")
+  repertoire         SingerRepertoire[]
+  availability       SingerAvailability[]
+  micCushions        MicCushion[]
+  pushSubscriptions  PushSubscription[]
+  notices            SessionNotice[]
+  programParts       ProgramPerformer[]
+  programInstruments ProgramItemInstrument[]
+  crew               SessionCrew[]
+  deskChannels       SessionChannel[]
+  /// Mics this person shares with somebody else. See SessionChannel.withSingerId.
+  sharedChannels     SessionChannel[]        @relation("SessionChannelShare")
+  sharedItemChannels ProgramItemChannel[]    @relation("ItemChannelShare")
+  /// Items where this person is on a strip that is not usually theirs.
+  itemChannels       ProgramItemChannel[]
 }
 
 model Bhajan {
@@ -217,6 +298,8 @@ model Bhajan {
   repertoire SingerRepertoire[]
   deities    BhajanDeity[]
   tags       BhajanTag[]
+  /// The program song that IS this bhajan, when there is one. See Song.
+  song       Song?
 
   @@index([searchVector], type: Gin)
   @@index([raga])
@@ -229,6 +312,7 @@ model Deity {
   name String @unique
 
   bhajans BhajanDeity[]
+  songs   SongDeity[]
 }
 
 model BhajanDeity {
@@ -247,6 +331,7 @@ model Tag {
   name String @unique
 
   bhajans BhajanTag[]
+  songs   SongTag[]
 }
 
 model BhajanTag {
@@ -296,15 +381,32 @@ model Session {
   /// reset by somebody filling in a pitch an hour later: the people are
   /// decided, which is what the quiet "the roster is up" announces. Slot
   /// updatedAt cannot answer it, because every pitch edit bumps that too.
-  rosterChangedAt DateTime?
-  type            SessionType   @default(Weekday)
-  status          SessionStatus @default(Published)
+  rosterChangedAt     DateTime?
+  /// Which desk this programme is mixed on. Null until one is picked.
+  deskId              String?
+  /// Which item in the running order the programme is ON right now.
+  ///
+  /// A POSITION, not an item id, so it survives an item being deleted mid-
+  /// programme — the desk lands on whatever now holds that place rather than on
+  /// nothing at all. Read through `currentItemOf`, which clamps it to the items
+  /// that actually exist.
+  ///
+  /// Shared deliberately: the point of the desk view is that the desk, the
+  /// stage and anybody watching are on the same item, so this is one fact about
+  /// the programme rather than one per device. Null until somebody starts, which
+  /// reads as "we have not begun".
+  currentItemPosition Int?
+  type                SessionType   @default(Weekday)
+  /// See SessionFormat. Defaults to `bhajans` so every existing row is
+  /// unaffected by this column arriving.
+  format              SessionFormat @default(bhajans)
+  status              SessionStatus @default(Published)
   /// Seed for the generator, so a generated set is reproducible and shareable.
-  seed            String?
-  templateId      String?
-  notes           String?       @db.Text
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  seed                String?
+  templateId          String?
+  notes               String?       @db.Text
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
   template          SessionTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
   slots             SessionSlot[]
@@ -312,8 +414,16 @@ model Session {
   micCushions       MicCushion[]
   notices           SessionNotice[]
   notificationRules NotificationRule[]
+  programItems      ProgramItem[]
+  crew              SessionCrew[]
+  channels          SessionChannel[]
+  desk              Desk?               @relation(fields: [deskId], references: [id], onDelete: SetNull)
 
   category SessionCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  /// At most one — it is keyed by session. A list because Prisma cannot express
+  /// "one optional row on the other side of a one-to-one whose id IS the key".
+  harmoniumNotice HarmoniumNotice[]
 
   @@index([templateId])
   @@index([date])
@@ -324,10 +434,14 @@ model Session {
 /// Renamed from v1's `SessionSinger`; `slot Int?` became `position Int`.
 /// The kinds of session the centre runs. Owned by the group, not by the code.
 model SessionCategory {
-  id    String @id @default(cuid())
-  name  String @unique
+  id    String        @id @default(cuid())
+  /// Unique across BOTH scopes, deliberately. Two kinds with the same name and
+  /// different scopes would be indistinguishable everywhere they are shown.
+  name  String        @unique
+  /// Which vocabulary this belongs to. Existing rows are all bhajan kinds.
+  scope CategoryScope @default(bhajans)
   /// Sort order in the picker. Lower first.
-  order Int    @default(0)
+  order Int           @default(0)
 
   /// A small square image for this kind of session, as a data URL.
   ///
@@ -418,10 +532,57 @@ model SessionSlot {
   singer  Singer? @relation(fields: [singerId], references: [id], onDelete: SetNull)
   bhajan  Bhajan? @relation(fields: [bhajanId], references: [id], onDelete: SetNull)
 
+  /// Who is on a chorus mic for this bhajan. See SessionSlotChorus.
+  chorus SessionSlotChorus[]
+
   @@unique([sessionId, position])
   @@index([sessionId])
   @@index([singerId])
   @@index([bhajanId])
+}
+
+/// One person on one chorus mic, for one bhajan.
+///
+/// This began as two columns on SessionSlot — `chorusSingerId` and
+/// `chorusCushion` — which said one person choruses a bhajan. In real use more
+/// than one does, each on their own mic with its own cushion, so the pair
+/// became a table (2026-08-17). The four dev rows that existed were carried
+/// across as first entries.
+///
+/// The cushion stays HERE rather than on the singer, which is the same reason
+/// the columns were on the row before. MicCushion is keyed (session, singer)
+/// because a lead singer has one mic for the whole evening; a chorus mic is a
+/// different mic, and the same person may lead bhajan 1 on blue and chorus
+/// bhajan 3 on green. Keyed by person, those two facts cannot both be true.
+///
+/// Cascade on both sides, unlike SessionSlot.singerId, and it is safe here for
+/// a reason that does not apply there: this row holds no history. It records
+/// who is on a mic tonight, so removing the bhajan or the singer should take it
+/// with them — whereas a SessionSlot holds `confirmedPitch`, which must survive
+/// a singer being removed.
+model SessionSlotChorus {
+  id       String @id @default(cuid())
+  slotId   String
+  singerId String
+
+  /// The colour of THIS mic's cushion. Null is "no cushion", which is a state
+  /// somebody can deliberately choose, exactly as with the lead mics.
+  cushion MicColour?
+
+  /// Ordered from 1, so the live board reads the mics in the same order on
+  /// every device rather than in whatever order the rows come back.
+  position Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  slot   SessionSlot @relation(fields: [slotId], references: [id], onDelete: Cascade)
+  singer Singer      @relation("ChorusSinger", fields: [singerId], references: [id], onDelete: Cascade)
+
+  /// One person cannot be on two chorus mics for the same bhajan.
+  @@unique([slotId, singerId])
+  @@index([slotId])
+  @@index([singerId])
 }
 
 model SessionInstrument {
@@ -436,6 +597,485 @@ model SessionInstrument {
   session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   @@index([sessionId])
+}
+
+/// One entry in a music program's running order.
+///
+/// A program is a Session with `format = program`; this is its content. The
+/// bhajan roster's SessionSlot could not carry it: a slot is one singer at one
+/// shruti, and a program item is a rehearsed piece with several singers, its own
+/// instruments, and a pitch written as a bare note.
+model ProgramItem {
+  id        String @id @default(cuid())
+  sessionId String
+
+  /// Ordered from 1. Narrations take positions too, so the running order is one
+  /// list. The number the group SAYS out loud counts only the songs — see
+  /// lib/program.ts `songNumbers`, which derives it.
+  position Int
+  kind     ProgramItemKind @default(song)
+
+  /// The passage, for kind = narration. The reader is a ProgramPerformer with
+  /// part = "reader", so a guest reader needs nothing new.
+  narration String? @db.Text
+
+  songId String?
+  /// The title as written, for an item whose song is not catalogued yet, or a
+  /// heading for a narration.
+  title  String?
+
+  /// A BARE NOTE, e.g. "A#". Programs record pitch as the note alone — no
+  /// `2 Pancham / D` appears in any of the four source documents. See
+  /// lib/pitch.ts `saOfNote`, which reads this; `saOf` needs the slash.
+  pitchNote  String?
+  /// The full shruti label when one is known, so nothing is lost if it is.
+  pitchLabel String?
+
+  bpm          Int?
+  /// The scene to recall on a desk that has scenes. Nothing reads it yet; it
+  /// is printed on the sheet so the operator can programme them once.
+  sceneNumber  Int?
+  /// The recording being learnt from.
+  referenceUrl String?
+  /// Choral cues, swara interludes, repeat marks — the working notes that sit
+  /// beside a piece and are not its lyrics.
+  arrangement  String? @db.Text
+  notes        String? @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session     Session                 @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  // SetNull, never Cascade: removing a song from the catalogue must not delete
+  // the record of a program that sang it. The item keeps its own title.
+  song        Song?                   @relation(fields: [songId], references: [id], onDelete: SetNull)
+  performers  ProgramPerformer[]
+  instruments ProgramItemInstrument[]
+  channels    ProgramItemChannel[]
+
+  @@unique([sessionId, position])
+  @@index([sessionId])
+  @@index([songId])
+}
+
+/// Who sings, or reads, one program item.
+///
+/// `singerId` OR `name`, never neither. Half of the performers in the source
+/// documents are not roster singers — `Psais`, `All girls`, `Radhika aunty` —
+/// and forcing them into the Singer table would put guests and groups into the
+/// fairness rotation, the availability calendar and the notification lists.
+model ProgramPerformer {
+  id       String  @id @default(cuid())
+  itemId   String
+  singerId String?
+  /// A guest or a group, when there is no Singer row.
+  name     String?
+  /// "lead", "chorus", "tenor", "base", "Boys", "reader".
+  part     String?
+  order    Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  item   ProgramItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  singer Singer?     @relation(fields: [singerId], references: [id], onDelete: SetNull)
+
+  @@index([itemId])
+  @@index([singerId])
+}
+
+/// The instruments the centre plays. Managed in /admin — not free text.
+///
+/// `InstrumentPerson` keys eligibility by instrument NAME, and
+/// lib/instrumentScoring.ts scores off those names, so a rename here has to
+/// carry those rows with it and a retirement is a flag rather than a delete —
+/// otherwise a past program would lose what was played on it.
+model Instrument {
+  id     String          @id @default(cuid())
+  name   String          @unique
+  order  Int             @default(0)
+  scope  InstrumentScope @default(program)
+  active Boolean         @default(true)
+
+  /// How many desk channels this instrument needs.
+  ///
+  /// One for nearly everything, and not for everything: a two-headed drum — a
+  /// dholak, a mridangam, a khol — is miked on each head and takes two strips,
+  /// and a stereo keyboard takes two. Building the channel list from a
+  /// programme's players used to give each instrument one strip and leave
+  /// somebody to notice, on the night, that the mridangam had half a mic.
+  ///
+  /// Read by lib/deskChannels.ts `proposeChannels`, which numbers the extra
+  /// strips and labels them "Mridangam 1", "Mridangam 2".
+  channels Int @default(1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  programItems    ProgramItemInstrument[]
+  sessionChannels SessionChannel[]
+  /// Items where this instrument takes over a strip that is not usually its —
+  /// a singer's mic on the mridangam for one song.
+  itemChannels    ProgramItemChannel[]
+}
+
+/// One instrument on one program item, and who is playing it.
+model ProgramItemInstrument {
+  id           String  @id @default(cuid())
+  itemId       String
+  instrumentId String
+  singerId     String?
+  /// The player when they are not a Singer row — the documents name several.
+  person       String?
+  order        Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  item       ProgramItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  instrument Instrument  @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+  singer     Singer?     @relation(fields: [singerId], references: [id], onDelete: SetNull)
+
+  @@unique([itemId, instrumentId])
+  @@index([itemId])
+  @@index([instrumentId])
+}
+
+/// A song sung at a music program.
+///
+/// Its own catalogue, not part of the 3,613-row bhajan masterlist. The
+/// masterlist is a copy of somebody else's spreadsheet of Sai bhajans; these
+/// are Meera bhajans, Carnatic kritis, Odia and Marathi abhangs and the
+/// occasional English piece, which the centre owns and edits itself.
+///
+/// `bhajanId` is a SOFT LINK for the overlap — "Om Sai Om Sai Om" and "Madhura
+/// Mohana" are both program songs and masterlist bhajans. A pointer, so the
+/// details page can offer the bhajan's own record; never a merge, or the two
+/// catalogues would have to agree about everything forever.
+model Song {
+  id        String  @id @default(cuid())
+  title     String  @unique
+  language  String?
+  /// "Meera bhajan", "Carnatic kriti", "Odia bhajan" — how the group would
+  /// describe where it comes from.
+  tradition String?
+  composer  String?
+
+  /// The recording the group learns it from.
+  referenceUrl String?
+  audio        String?
+  bpm          Int?
+  notes        String? @db.Text
+
+  bhajanId String? @unique
+
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  bhajan  Bhajan?       @relation(fields: [bhajanId], references: [id], onDelete: SetNull)
+  verses  SongVerse[]
+  deities SongDeity[]
+  tags    SongTag[]
+  items   ProgramItem[]
+
+  @@index([tradition])
+}
+
+/// One section of a song — a Pallavi, a Charanam, a Chorus — in up to three
+/// layers.
+///
+/// Three columns rather than one, because the group's documents keep all three
+/// and each is read by different people: the script by whoever reads that
+/// script, the transliteration by everybody singing, the meaning by anybody
+/// wanting to know what they are singing.
+///
+/// Whether the layers are shown line by line or as blocks is NOT stored: it is
+/// derived from whether they have the same number of lines. See
+/// lib/songVerses.ts — the two source documents write these two different ways
+/// and both have to render honestly.
+model SongVerse {
+  id     String @id @default(cuid())
+  songId String
+  order  Int
+
+  /// "Pallavi", "Charanam 2", "Chorus". Free text with suggestions rather
+  /// than an enum: the group writes its own — "Swaras", "Interlude" — and a
+  /// label the app does not recognise is still a perfectly good label.
+  label String?
+
+  /// The words as written — Tamil, Devanagari, Telugu, Marathi.
+  script  String? @db.Text
+  /// The same words in Latin script, which is what most people sing from.
+  roman   String? @db.Text
+  /// What it means, in English.
+  meaning String? @db.Text
+
+  updatedBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  song Song @relation(fields: [songId], references: [id], onDelete: Cascade)
+
+  @@unique([songId, order])
+  @@index([songId])
+}
+
+/// Songs join the EXISTING Deity and Tag tables rather than growing their own.
+/// The catalogues are separate; the vocabularies are the centre's and are not.
+model SongDeity {
+  songId  String
+  deityId String
+
+  song  Song  @relation(fields: [songId], references: [id], onDelete: Cascade)
+  deity Deity @relation(fields: [deityId], references: [id], onDelete: Cascade)
+
+  @@id([songId, deityId])
+  @@index([deityId])
+}
+
+model SongTag {
+  songId String
+  tagId  String
+
+  song Song @relation(fields: [songId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([songId, tagId])
+  @@index([tagId])
+}
+
+/// What a channel carries. Decides how it is grouped and read on the sheet.
+enum ChannelKind {
+  vocal
+  instrument
+  /// A backing track played through the system — the birthday programme's
+  /// English song was sung to one.
+  track
+  spare
+}
+
+enum DeskKind {
+  analog
+  digital
+}
+
+/// A mixing desk the centre uses, and the strips printed on it.
+///
+/// A TEMPLATE, not a programme's actual channel list. Picking a desk for a
+/// programme copies these strips into SessionChannel rows, which is what gets
+/// edited from then on — so correcting a label here next year cannot rewrite
+/// what a programme two years ago says was on channel 6.
+///
+/// `protocol`, `host` and `port` are null for an analog desk and mean nothing
+/// to the app today. They exist because the centre is considering an Allen &
+/// Heath SQ5, which speaks MIDI over TCP; a bridge on a laptop in the hall
+/// would read them. Nothing in the browser can reach a desk on the hall LAN.
+model Desk {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  kind      DeskKind @default(analog)
+  protocol  String?
+  host      String?
+  port      Int?
+  isDefault Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  /// How many inputs are mono before the rest pair up.
+  ///
+  /// Twelve on the centre's MG20XU — Yamaha's "Mono[MIC/LINE]: 12;
+  /// Mono/Stereo[MIC/LINE]: 4" — so 13/14, 15/16, 17/18 and 19/20 are the only
+  /// strips that can be a pair. Sailavan, 2026-08-17: "from 13 onwards they are
+  /// all capable of being stereo, not before there."
+  ///
+  /// A property of the DESK because it is a fact about the hardware, and the
+  /// next desk will have a different one.
+  monoInputs Int @default(12)
+
+  channels DeskChannel[]
+  sessions Session[]
+}
+
+/// One strip on a desk, as it is numbered on the metal.
+model DeskChannel {
+  id     String @id @default(cuid())
+  deskId String
+
+  /// The channel strip, as printed on the desk.
+  number Int
+  /// The physical input socket when it differs from the strip. It always can
+  /// on a digital desk and never does on the Yamaha.
+  socket Int?
+  label  String
+  kind   ChannelKind @default(vocal)
+  /// A MONO/STEREO strip, whose number is the first of its pair.
+  ///
+  /// The centre's MG20XU has sixteen strips: twelve mono (1-12) and four
+  /// mono/stereo (13/14, 15/16, 17/18, 19/20) — Yamaha's own words, and the
+  /// reason this is a property of the DESK. Whether such a strip is being used
+  /// as a stereo pair or as one mono channel is a decision per programme, not
+  /// per desk, so that lives on SessionChannel.
+  stereo Boolean     @default(false)
+  /// For a vocal strip whose mic wears a coloured cushion.
+  ///
+  /// The cushions are FIXED to channels and do not move: channel 1 is the blue
+  /// cushion every week. That is why this lives on the desk rather than on a
+  /// programme — it describes the hardware, and a programme copies it.
+  colour MicColour?
+  /// Which mic is actually on the strip — "Wired", "Pegasus", "WL1", "Rode".
+  ///
+  /// Free text on purpose. This is the sound person's own shorthand for their
+  /// own gear, it changes when a mic is replaced, and a managed list of mic
+  /// models would be a table to maintain for something nothing computes on.
+  mic    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  desk Desk @relation(fields: [deskId], references: [id], onDelete: Cascade)
+
+  @@unique([deskId, number])
+  @@index([deskId])
+}
+
+/// One channel as it stands FOR ONE PROGRAMME: the strip, and who is on it.
+///
+/// Snapshotted from the desk when one is picked, then edited freely. That copy
+/// is the point: a programme is a record of an evening, and the desk template
+/// changes between evenings.
+model SessionChannel {
+  id        String @id @default(cuid())
+  sessionId String
+
+  number String
+  label  String
+  kind   ChannelKind @default(vocal)
+
+  /// Whether THIS programme is using the strip as a stereo pair.
+  ///
+  /// Only meaningful on a strip the desk says is mono/stereo. Sailavan: if it
+  /// is going to be a mono channel then 13/14 is one channel — and that is a
+  /// decision taken per programme, because it depends on what is plugged into
+  /// it that night, not on the desk. Copied from the desk as the starting
+  /// point and corrected here.
+  stereo Boolean @default(false)
+
+  colour MicColour?
+
+  /// Who or what is on it. A roster singer, a name typed in, or an instrument
+  /// from the managed list — the same three answers as everywhere else in a
+  /// programme, for the same reason.
+  singerId     String?
+  person       String?
+  instrumentId String?
+  note         String?
+  /// Which mic is on the strip, copied from the desk and correctable here.
+  mic          String?
+
+  /// A SECOND person sharing this mic.
+  ///
+  /// Two singers on one channel is a real thing — a duet taken on one mic, or a
+  /// pair leaning in for a chorus — and the desk has to know both names or it
+  /// will bring the wrong one up. Two, not a list: "split a mic between 2
+  /// people" is what was asked for, and a list would need a table and a UI for a
+  /// case nobody has yet.
+  ///
+  /// Same three answers as the first, minus the instrument: a mic shared between
+  /// a person and a drum is two channels, not one.
+  withSingerId String?
+  withPerson   String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session    Session              @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  singer     Singer?              @relation(fields: [singerId], references: [id], onDelete: SetNull)
+  withSinger Singer?              @relation("SessionChannelShare", fields: [withSingerId], references: [id], onDelete: SetNull)
+  instrument Instrument?          @relation(fields: [instrumentId], references: [id], onDelete: SetNull)
+  items      ProgramItemChannel[]
+
+  @@unique([sessionId, number])
+  @@index([sessionId])
+}
+
+/// Which channels are open for one item. The artefact a document cannot hold.
+///
+/// Doubles as the scene plan for a desk that has scenes: one scene per item,
+/// and this is the mute map it would be programmed from.
+model ProgramItemChannel {
+  itemId    String
+  channelId String
+  open      Boolean @default(false)
+  note      String?
+
+  /// WHO OR WHAT IS ON THIS STRIP FOR THIS ITEM, when it is not the usual
+  /// occupant.
+  ///
+  /// A mic does not belong to one person all evening. Sailavan: a mic used for
+  /// a singer will, on another song, be used for an instrument — or for one
+  /// side of a two-headed drum, where a dholak or a mridangam is miked twice
+  /// and each head is its own strip. Without this the desk view would name the
+  /// singer on channel 3 for a song where channel 3 is the mridangam, which is
+  /// worse than saying nothing.
+  ///
+  /// All three are overrides and all three are null in the ordinary case,
+  /// where the channel's own occupant stands. Same three answers as
+  /// SessionChannel — a roster singer, a name typed in, or a managed
+  /// instrument — because it is the same question asked per item.
+  singerId     String?
+  person       String?
+  instrumentId String?
+
+  /// A SECOND person sharing this mic.
+  ///
+  /// Two singers on one channel is a real thing — a duet taken on one mic, or a
+  /// pair leaning in for a chorus — and the desk has to know both names or it
+  /// will bring the wrong one up. Two, not a list: "split a mic between 2
+  /// people" is what was asked for, and a list would need a table and a UI for a
+  /// case nobody has yet.
+  ///
+  /// Same three answers as the first, minus the instrument: a mic shared between
+  /// a person and a drum is two channels, not one.
+  withSingerId String?
+  withPerson   String?
+
+  updatedAt DateTime @updatedAt
+
+  item       ProgramItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  channel    SessionChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  singer     Singer?        @relation(fields: [singerId], references: [id], onDelete: SetNull)
+  withSinger Singer?        @relation("ItemChannelShare", fields: [withSingerId], references: [id], onDelete: SetNull)
+  instrument Instrument?    @relation(fields: [instrumentId], references: [id], onDelete: SetNull)
+
+  @@id([itemId, channelId])
+  @@index([channelId])
+  @@index([singerId])
+  @@index([instrumentId])
+}
+
+/// Somebody doing a job at a session rather than singing at it.
+///
+/// The point is the VIEW: a person crewed on a session lands on the screen for
+/// their job when they open it, instead of hunting for it. See
+/// lib/sessionView.ts, where that decision is a pure function.
+model SessionCrew {
+  id        String     @id @default(cuid())
+  sessionId String
+  singerId  String
+  job       SessionJob
+  notes     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  singer  Singer  @relation(fields: [singerId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, singerId, job])
+  @@index([sessionId])
+  @@index([singerId])
 }
 
 /// What a singer knows or has curated for a festival. Replaces v1's
@@ -562,11 +1202,16 @@ model InstrumentPerson {
 }
 
 /// Mic cushion colours, as the physical cushions on the sound desk.
+///
+/// `green` arrived with the chorus mic (2026-08-14). Added at the END: these
+/// are stored values, and Postgres orders an enum by declaration, so inserting
+/// it among the others would reorder every existing sort.
 enum MicColour {
   blue
   grey
   orange
   pink
+  green
 }
 
 /// Which colour mic cushion a singer is on for a session, for the sound desk.
@@ -703,6 +1348,29 @@ enum NoticeKind {
 /// produce four notifications. Recording what has been sent means a later
 /// addition notifies only the person newly added, and the quiet
 /// "roster is up" goes out once.
+/// What the harmonium players were last told about a session.
+///
+/// A ledger AND a snapshot, and it has to be both. The ledger half stops the
+/// summary going out twice; the snapshot half is what lets a later edit be
+/// described as "Sai Ram #2 is now at 3 Pancham / G" rather than "something
+/// changed", which is the difference between a useful notice and noise.
+///
+/// Not SessionNotice, which is unique on (session, singer, kind) and therefore
+/// records a thing happening ONCE. Changes happen repeatedly and are about the
+/// session rather than about each recipient, so they need their own row.
+model HarmoniumNotice {
+  sessionId String @id
+
+  /// The bhajans and shrutis exactly as last sent, as HarmoniumLine[].
+  /// Compared against the session on every later save.
+  lines Json
+
+  sentAt    DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
 model SessionNotice {
   id String @id @default(cuid())
 

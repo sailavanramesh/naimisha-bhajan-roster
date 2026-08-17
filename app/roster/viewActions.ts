@@ -63,9 +63,11 @@ export async function startSessionOnDate(formData: FormData): Promise<void> {
   }
   const day = new Date(`${parsed.data.date}T00:00:00.000Z`);
 
+  // `format` is selected so defaultSessionOf can step around music programs —
+  // without it every program looks like an ordinary session to that filter.
   const onThatDay = await prisma.session.findMany({
     where: { date: day },
-    select: { id: true, startsAt: true },
+    select: { id: true, startsAt: true, format: true },
   });
   const session =
     defaultSessionOf(onThatDay) ??

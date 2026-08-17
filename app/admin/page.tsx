@@ -13,6 +13,7 @@ import {
 } from "./actions";
 import { googleSignInConfigured } from "@/lib/authConfig";
 import { SessionCategories } from "./SessionCategories";
+import { Instruments } from "./Instruments";
 import { AddRepertoireForm } from "./AddRepertoireForm";
 
 import { getRole, can } from "@/lib/auth";
@@ -51,12 +52,58 @@ export default async function AdminPage({
   // rather than re-deriving permission from the legacy cookie.
   const canEdit = can(role, "manageAllocations");
 
-  const sessionCategories = (
+  const allCategories = (
     await prisma.sessionCategory.findMany({
       orderBy: [{ order: "asc" }, { name: "asc" }],
-      select: { id: true, name: true, image: true, _count: { select: { sessions: true } } },
+      select: {
+        id: true,
+        name: true,
+        image: true,
+        scope: true,
+        _count: { select: { sessions: true } },
+      },
     })
-  ).map((c) => ({ id: c.id, name: c.name, image: c.image, sessions: c._count.sessions }));
+  ).map((c) => ({
+    id: c.id,
+    name: c.name,
+    image: c.image,
+    scope: c.scope,
+    sessions: c._count.sessions,
+  }));
+  const sessionCategories = allCategories.filter((c) => c.scope === "bhajans");
+  const programCategories = allCategories.filter((c) => c.scope === "program");
+
+  /*
+   * Instruments, with the two counts that decide whether retiring one is safe:
+   * how many program items name it, and how many people are listed as eligible.
+   * Eligibility is keyed by NAME in InstrumentPerson, which is why it is
+   * counted here by name rather than through a relation.
+   */
+  const [instrumentRows, eligibilityCounts] = await Promise.all([
+    prisma.instrument.findMany({
+      orderBy: [{ order: "asc" }, { name: "asc" }],
+      select: {
+        id: true,
+        name: true,
+        scope: true,
+        active: true,
+        channels: true,
+        _count: { select: { programItems: true } },
+      },
+    }),
+    prisma.instrumentPerson.groupBy({ by: ["instrument"], _count: { _all: true } }),
+  ]);
+  const eligibleByName = new Map(eligibilityCounts.map((e) => [e.instrument, e._count._all]));
+
+  const instruments = instrumentRows.map((i) => ({
+    id: i.id,
+    name: i.name,
+    scope: i.scope,
+    active: i.active,
+    channels: i.channels,
+    used: i._count.programItems,
+    eligible: eligibleByName.get(i.name) ?? 0,
+  }));
 
   const [singers, eligibility, instrumentPeople] = await Promise.all([
     prisma.singer.findMany({ orderBy: { name: "asc" } }),
@@ -199,6 +246,46 @@ export default async function AdminPage({
                     people. Listed last because it is the rarest. */}
                 <option value="owner">Owner</option>
               </select>
+              {/*
+                The one thing a person can be given without a role change.
+                Sailavan wanted named people keeping the lyrics and meanings up
+                to date; making them an editor to do it would hand them the
+                whole roster.
+              */}
+              <label
+                className="flex items-center gap-1.5 text-[11px] text-on-surface-muted"
+                title="May edit song lyrics and meanings, and nothing else"
+              >
+                <input
+                  key={`words-${s.canEditWords}`}
+                  type="checkbox"
+                  name="canEditWords"
+                  defaultChecked={s.canEditWords}
+                  disabled={!canEdit}
+                  className="h-4 w-4"
+                />
+                edits words
+              </label>
+              {/*
+                The second grant, and the same argument. The sound engineer and
+                the mic coordinator have to keep the desk and its cushion
+                allocation right; making them an editor to do it would hand them
+                the whole roster.
+              */}
+              <label
+                className="flex items-center gap-1.5 text-[11px] text-on-surface-muted"
+                title="May edit the desks, their strips and which cushion is on which channel"
+              >
+                <input
+                  key={`sound-${s.canRunSound}`}
+                  type="checkbox"
+                  name="canRunSound"
+                  defaultChecked={s.canRunSound}
+                  disabled={!canEdit}
+                  className="h-4 w-4"
+                />
+                runs sound
+              </label>
               <div className="flex items-center gap-2">
                 {canEdit ? (
                   <Button type="submit" className="h-10 w-[4.5rem] shrink-0 text-xs">Save</Button>
@@ -292,6 +379,60 @@ export default async function AdminPage({
         </CardContent>
 
 
+      </Card>
+
+
+      {/* ---- Program kinds ---- */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Music program kinds</CardTitle>
+          <p className="mt-1 text-sm text-on-surface-muted">
+            The same idea for music programs, kept as its own list — a musical offering is not
+            a kind of bhajan session, and mixing the two would put both in every picker.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <SessionCategories
+            categories={programCategories}
+            canEdit={canEdit}
+            scope="program"
+            placeholder="New program kind, e.g. Musical offering"
+          />
+        </CardContent>
+      </Card>
+
+
+      {/* ---- Instruments ---- */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Instruments</CardTitle>
+          <p className="mt-1 text-sm text-on-surface-muted">
+            What can be played, and where it is offered. Retiring one takes it out of the
+            pickers and leaves every past program still saying what was played on it.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <Instruments instruments={instruments} canEdit={canEdit} />
+        </CardContent>
+      </Card>
+
+
+      {/* ---- Sound desks ---- */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Sound desks</CardTitle>
+          <p className="mt-1 text-sm text-on-surface-muted">
+            The desks, their strips, and which cushion is on which channel. On a page of their
+            own because the people who keep them right are the sound engineer and the mic
+            coordinator, and they are not editors — tick &ldquo;runs sound&rdquo; against
+            somebody above to let them in.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <Link href="/admin/desks" className="text-sm underline underline-offset-2">
+            Sound desks →
+          </Link>
+        </CardContent>
       </Card>
 
 
