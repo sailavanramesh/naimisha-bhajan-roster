@@ -368,9 +368,53 @@ export async function setChannelOpen(input: {
 
   const item = await prisma.programItem.findUnique({
     where: { id: parsed.data.itemId },
-    select: { sessionId: true },
+    select: {
+      sessionId: true,
+      position: true,
+      channels: {
+        where: { channelId: parsed.data.channelId },
+        select: { singerId: true, person: true, instrumentId: true },
+      },
+    },
   });
   if (!item) return { ok: false, error: "That item is gone." };
+
+  /*
+   * OPENING A FADER CARRIES THE LAST ANSWER WITH IT.
+   *
+   * Sailavan: "if the same channel is allocated for the next song can copy down
+   * the singer from the previous song, we can always override it." Most of a
+   * running order is the same people on the same mics — the set changes, the
+   * patch mostly does not — so opening channel 1 on the second song and being
+   * asked again who is on it is asking for something the row above already said.
+   *
+   * At the moment of OPENING, because that is when the question arises, and it
+   * is what somebody clicking the strip is expecting. There is a bulk button for
+   * a whole item as well, but nobody should have to find it to get the ordinary
+   * case right.
+   *
+   * Only into an empty answer, and never over one somebody has given here.
+   */
+  const mine = item.channels[0];
+  const unanswered = !mine?.singerId && !mine?.person && !mine?.instrumentId;
+
+  let inherited: { singerId: string | null; person: string | null; instrumentId: string | null } | null =
+    null;
+
+  if (parsed.data.open && unanswered) {
+    const previous = await prisma.programItem.findFirst({
+      where: { sessionId: item.sessionId, position: { lt: item.position } },
+      orderBy: { position: "desc" },
+      select: {
+        channels: {
+          where: { channelId: parsed.data.channelId },
+          select: { singerId: true, person: true, instrumentId: true },
+        },
+      },
+    });
+    const was = previous?.channels[0];
+    if (was && (was.singerId || was.person || was.instrumentId)) inherited = was;
+  }
 
   await prisma.programItemChannel.upsert({
     where: {
@@ -380,8 +424,9 @@ export async function setChannelOpen(input: {
       itemId: parsed.data.itemId,
       channelId: parsed.data.channelId,
       open: parsed.data.open,
+      ...(inherited ?? {}),
     },
-    update: { open: parsed.data.open },
+    update: { open: parsed.data.open, ...(inherited ?? {}) },
   });
 
   await refresh(item.sessionId);
