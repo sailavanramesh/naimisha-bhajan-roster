@@ -31,18 +31,30 @@ const Input = z.object({
  * kept somewhere else, and it should cost nothing to everybody who never opens
  * it.
  */
-export async function updateSessionMeta(input: {
-  sessionId: string;
-  categoryId: string;
-  topic: string;
-  location: string;
-  startsAt: string;
-}): Promise<{ ok: true } | { ok: false; error: string }> {
+/*
+ * The declared input is DERIVED from the schema rather than written out beside
+ * it. Written out, the two drifted the moment `date` was added: the schema
+ * required it, the type did not mention it, so the compiler was happy while
+ * every save failed validation on a field the caller had no reason to send.
+ */
+export async function updateSessionMeta(
+  input: z.infer<typeof Input>,
+): Promise<{ ok: true } | { ok: false; error: string }> {
   await requireCapability("editSessionNotes");
 
   const parsed = Input.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Could not save." };
+    /*
+     * Name the field. A bare "Required" is what this said when the date became
+     * editable and the form was not yet sending it — an error that pointed at
+     * nothing on screen, under a form where every visible box was filled in.
+     */
+    const issue = parsed.error.issues[0];
+    const field = issue?.path.join(".");
+    return {
+      ok: false,
+      error: field ? `${field}: ${issue.message}` : (issue?.message ?? "Could not save."),
+    };
   }
   const { sessionId, categoryId, topic, location, startsAt, date } = parsed.data;
 

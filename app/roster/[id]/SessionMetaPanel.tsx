@@ -55,6 +55,10 @@ export function SessionMetaPanel({
         topic: value.topic ?? "",
         location: value.location ?? "",
         startsAt: value.startsAt ?? "",
+        // Was missed when the date became editable, and the whole form stopped
+        // saving: the action requires it, so every submit failed validation with
+        // a bare "Required" that named no field and pointed at nothing on screen.
+        date: value.date,
       });
       if (res.ok) setSaved(value);
       else setError(res.error);
