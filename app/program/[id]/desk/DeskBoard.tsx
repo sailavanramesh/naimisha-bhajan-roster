@@ -7,6 +7,7 @@ import { currentItemOf, occupantFor, stepItem, stripNumber } from "@/lib/deskCha
 import { hasMoreBelow } from "@/lib/liveBoard";
 import { type MicColourValue } from "@/lib/micCushion";
 import { DeskStrips } from "../DeskStrips";
+import { Verses, type VerseView } from "@/app/songs/[id]/Verses";
 import { setCurrentItem } from "../deskActions";
 
 export type DeskChannel = {
@@ -34,6 +35,11 @@ export type DeskItem = {
   pitch: string | null;
   who: string;
   played: string;
+  bpm: number | null;
+  arrangement: string | null;
+  notes: string | null;
+  /** The song's words, for the words pane. Empty when it is not catalogued. */
+  verses: VerseView[];
   openChannelIds: string[];
   /** Strips carrying somebody other than their usual occupant, for this item. */
   swaps: { channelId: string; who: string }[];
@@ -78,6 +84,12 @@ export function DeskBoard({
   useSessionVersion(sessionId);
 
   const [pending, startTransition] = useTransition();
+  /*
+   * Which pane this DEVICE is looking at. Not shared, unlike the item: the
+   * person on the desk wants faders at the moment the singer beside them wants
+   * the words, and making them agree would make the shared item useless.
+   */
+  const [pane, setPane] = useState<"desk" | "words">("desk");
 
   /*
    * Where WE think we are, so a press moves the screen at once.
@@ -237,8 +249,50 @@ export function DeskBoard({
               </p>
             </header>
 
+            {/*
+              DESK, OR WORDS.
+
+              Sailavan: "there should be a desk view and a song view for each
+              song... toggle to desk view to know what to change on the mic."
+              Both are about the SAME item — the one the room is on — so this is
+              two ways of looking at one thing rather than two screens, and Next
+              moves both at once for everybody.
+
+              The choice is per DEVICE and deliberately not shared: the person on
+              the desk wants faders while the singer beside them wants the words,
+              and forcing them to agree would make the shared item useless.
+            */}
+            <div className="flex shrink-0 gap-1 border-b border-rule px-4 pb-2">
+              {(
+                [
+                  { key: "desk", label: "Desk" },
+                  { key: "words", label: "Words" },
+                ] as const
+              ).map((t) => (
+                <button
+                  key={t.key}
+                  type="button"
+                  aria-pressed={pane === t.key}
+                  onClick={() => setPane(t.key)}
+                  className={[
+                    "rounded-key border px-3 py-1 text-sm font-semibold",
+                    pane === t.key
+                      ? "border-brass-ink/70 bg-brass-ink text-ivory"
+                      : "border-rule text-on-ground-muted",
+                  ].join(" ")}
+                >
+                  {t.label}
+                </button>
+              ))}
+              {item.verses.length === 0 && pane === "words" ? (
+                <span className="self-center ps-2 text-xs text-on-ground-muted">
+                  no words recorded for this item
+                </span>
+              ) : null}
+            </div>
+
             {/* ---- the faders ---- */}
-            <div className="relative min-h-0 flex-1">
+            <div className={`relative min-h-0 flex-1 ${pane === "desk" ? "" : "hidden"}`}>
               <div ref={scroller} className="h-full overflow-y-auto px-4 py-3">
                 <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-on-ground-muted">
                   {channels.length === 0
@@ -297,6 +351,54 @@ export function DeskBoard({
                 </span>
               ) : null}
             </div>
+
+            {/* ---- the words ---- */}
+            {pane === "words" ? (
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+                {/*
+                  The same Verses component the song page and the programme use,
+                  so the line-by-line alignment — and the toggles for showing
+                  script, transliteration and meaning separately — are one
+                  implementation. Sailavan asked for "the nice option to toggle
+                  each one on or off"; it is already that component's own.
+                */}
+                <Verses verses={item.verses} />
+
+                {/*
+                  The working notes, under the words, because they are read in
+                  the same breath: what shruti, how fast, and whatever was
+                  agreed about the arrangement.
+                */}
+                {item.pitch || item.bpm || item.arrangement || item.notes ? (
+                  <dl className="mt-4 grid gap-1 border-t border-rule pt-3 text-sm">
+                    {item.pitch ? (
+                      <div className="flex gap-2">
+                        <dt className="w-24 shrink-0 text-on-ground-muted">Shruti</dt>
+                        <dd className="font-semibold">{item.pitch}</dd>
+                      </div>
+                    ) : null}
+                    {item.bpm ? (
+                      <div className="flex gap-2">
+                        <dt className="w-24 shrink-0 text-on-ground-muted">Tempo</dt>
+                        <dd>{item.bpm} bpm</dd>
+                      </div>
+                    ) : null}
+                    {item.arrangement ? (
+                      <div className="flex gap-2">
+                        <dt className="w-24 shrink-0 text-on-ground-muted">Arrangement</dt>
+                        <dd className="whitespace-pre-wrap">{item.arrangement}</dd>
+                      </div>
+                    ) : null}
+                    {item.notes ? (
+                      <div className="flex gap-2">
+                        <dt className="w-24 shrink-0 text-on-ground-muted">Notes</dt>
+                        <dd className="whitespace-pre-wrap">{item.notes}</dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                ) : null}
+              </div>
+            ) : null}
 
             {/* ---- moving on ---- */}
             <footer className="flex shrink-0 items-center gap-2 border-t border-rule px-4 py-3">

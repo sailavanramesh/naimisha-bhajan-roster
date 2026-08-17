@@ -53,7 +53,16 @@ export default async function ProgramDeskPage({
       programItems: {
         orderBy: { position: "asc" },
         include: {
-          song: { select: { title: true } },
+          song: {
+            select: {
+              title: true,
+              // The words, so the live view can show them without a second trip.
+              verses: {
+                orderBy: { order: "asc" },
+                select: { id: true, label: true, script: true, roman: true, meaning: true },
+              },
+            },
+          },
           channels: {
             select: {
               channelId: true,
@@ -116,6 +125,10 @@ export default async function ProgramDeskPage({
       (item.kind === "narration" ? "Reading" : "Not chosen yet"),
     sceneNumber: item.sceneNumber,
     pitch: item.pitchLabel?.trim() || item.pitchNote?.trim() || null,
+    bpm: item.bpm,
+    arrangement: item.arrangement?.trim() || null,
+    notes: item.notes?.trim() || null,
+    verses: item.song?.verses ?? [],
     who: performersLabel(
       item.performers.map((p) => ({
         singerName: p.singer?.name ?? null,
