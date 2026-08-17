@@ -1,4 +1,6 @@
+import { Suspense } from "react";
 import Link from "next/link";
+import { KeepScroll } from "@/components/KeepScroll";
 import { prisma } from "@/lib/db";
 import { SessionType } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle, Button } from "@/components/ui";
@@ -220,6 +222,11 @@ export default async function BuildPage({
 
   return (
     <div className="grid gap-4">
+      {/* Open a bhajan from here and come back to the same place, not the top.
+          See components/KeepScroll.tsx. */}
+      <Suspense fallback={null}>
+        <KeepScroll prefix="build" />
+      </Suspense>
       <Card>
         <CardHeader>
           <CardTitle>Build a session</CardTitle>

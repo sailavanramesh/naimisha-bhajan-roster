@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { BackLink } from "@/components/BackLink";
 import { prisma } from "@/lib/db";
 import { Gender } from "@prisma/client";
-import { Card, CardContent, CardHeader, CardTitle, Button } from "@/components/ui";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { ShrutiLadder } from "@/components/ShrutiLadder";
 import { DeitySymbols } from "@/components/DeitySymbol";
 import { getPitchLabels, getAllProfiles, getSungRowsForBhajan } from "@/lib/pitchQueries";
@@ -101,9 +102,7 @@ export default async function BhajanPage({
             <div className="text-sm text-on-surface-muted mb-3">
               This bhajan may have been deleted or the link is incorrect.
             </div>
-            <Link href="/bhajans">
-              <Button>Back to Bhajans</Button>
-            </Link>
+            <BackLink fallback="/bhajans" label="Back to Bhajans" />
           </CardContent>
         </Card>
       </div>
@@ -209,9 +208,10 @@ export default async function BhajanPage({
             </div>
 
             <div className="flex shrink-0 flex-col items-end gap-2">
-              <Link href="/bhajans">
-                <Button>Back</Button>
-              </Link>
+              {/* Back to wherever you came from — the list with its filters
+                  still on, the half-built session, the singer's page. See
+                  components/BackLink.tsx. */}
+              <BackLink fallback="/bhajans" />
               {/* Reaching a bhajan from the roster or a search is at least as
                   common as browsing Explore, and wanting to learn it is the
                   same impulse in both places. */}
