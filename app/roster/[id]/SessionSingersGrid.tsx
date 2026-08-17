@@ -864,7 +864,32 @@ export function SessionSingersGrid(props: {
   }
 
   async function onPickBhajan(localId: string, bhajanId: string) {
-    const b = await fetchBhajan(bhajanId);
+    const row = rows.find((r) => r._localId === localId);
+
+    /*
+     * A SHRUTI THE SINGER SAVED ON THEIR OWN LIST COMES IN WITH THE BHAJAN.
+     *
+     * Sailavan: "if someone populates the 'shruti you want', it should come in as
+     * the pre-selected pitch for the song when adding to the roster."
+     *
+     * This does not break the rule that a guess is never written into
+     * `confirmedPitch`, because a saved shruti is not a guess — it is the singer
+     * saying what they sing this at, which is the same standing they have when
+     * they say it out loud on the night. The assign panel has always carried it
+     * across for the same reason; the grid was the inconsistent one.
+     *
+     * Three limits keep it honest:
+     *   - Only the SAVED value. The prediction beside it stays a chip to tap.
+     *   - Only into an EMPTY pitch. Nothing already recorded is touched.
+     *   - Only when a bhajan is PICKED, never on load, so opening a session does
+     *     not quietly fill in ten pitches and leave the page dirty.
+     * And it lands as an unsaved change like any other, visible in the save
+     * summary before it becomes history.
+     */
+    const [b, saved] = await Promise.all([
+      fetchBhajan(bhajanId),
+      row?.singerId && !row.confirmedPitch ? savedListPitch(row.singerId, bhajanId) : null,
+    ]);
 
     setRows((prev) =>
       prev.map((r) => {
@@ -879,11 +904,39 @@ export function SessionSingersGrid(props: {
           festivalBhajanTitle: null,
           _bhajanQuery: b?.title ?? "",
           recommendedPitch: pickRecommendedPitch(r.singerGender ?? null, b) || null,
+          ...(saved && !r.confirmedPitch
+            ? {
+                confirmedPitch: saved,
+                alternativeTablaPitch: props.suggestions.pitchToTabla[saved] ?? null,
+              }
+            : {}),
         };
       })
     );
 
+    if (saved) setPitchUI((prev) => ({ ...prev, [localId]: { q: saved, open: false } }));
     setBhPortal((p) => ({ ...p, open: false }));
+  }
+
+  /**
+   * The shruti this singer has SAVED for this bhajan on their own list, or null.
+   *
+   * Only `onList.preferredPitch` — not the suggestion, which folds in history and
+   * a prediction. Those two are offered as a chip to tap and must stay that way;
+   * this one is a decision already made.
+   */
+  async function savedListPitch(singerId: string, bhajanId: string): Promise<string | null> {
+    try {
+      const res = await fetch(
+        `/api/pitch/suggest?singerId=${encodeURIComponent(singerId)}&bhajanId=${encodeURIComponent(bhajanId)}`,
+      );
+      if (!res.ok) return null;
+      const data = await res.json();
+      const pitch: unknown = data?.onList?.preferredPitch;
+      return typeof pitch === "string" && pitch.trim().length > 0 ? pitch : null;
+    } catch {
+      return null;
+    }
   }
 
   function onConfirmedPitchChange(localId: string, confirmed: string) {
