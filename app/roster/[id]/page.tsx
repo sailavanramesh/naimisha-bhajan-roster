@@ -16,9 +16,10 @@ import { DeleteSessionButton } from "./DeleteSessionButton";
 import { NotifyPanel } from "./NotifyPanel";
 import { melbourneTodayISO } from "@/lib/dates";
 import { sortByStart, sessionLabel, hasSeveral } from "@/lib/sessionsOfDay";
-import { resolveSessionView, jobBanner } from "@/lib/sessionView";
+import { resolveSessionView, jobBanner, jobsOf } from "@/lib/sessionView";
 import { missingParts } from "@/lib/notify";
 import type { NotifyPerson } from "./NotifyPanel";
+import { NOT_ARCHIVED } from "@/lib/archive";
 
 export const dynamic = "force-dynamic";
 /** One look for every action in the session header. */
@@ -129,6 +130,33 @@ export default async function RosterSessionPage({
    */
   if (session.format === "program") redirect(`/program/${session.id}`);
 
+  /*
+   * Removed, and therefore not here — including for whoever still has the link
+   * open in a tab. Nothing else leads here any more; this is the one door left,
+   * and it says where the session went rather than showing it as if nothing had
+   * happened.
+   */
+  if (session.archivedAt) {
+    return (
+      <div className="rounded-[14px] border border-card-edge bg-surface p-6">
+        <h1 className="font-display text-2xl font-semibold">This session was removed</h1>
+        <p className="mt-2 max-w-prose text-sm text-on-surface-muted">
+          It is in the archive rather than gone — nothing on it has been touched, and putting
+          it back restores it exactly as it was.
+        </p>
+        <p className="mt-2 text-sm text-on-surface-muted">
+          {can(role, "manageArchive") ? (
+            <Link href="/admin/archive" className="underline underline-offset-2">
+              Review the archive →
+            </Link>
+          ) : (
+            "Ask the coordinator if it should come back."
+          )}
+        </p>
+      </div>
+    );
+  }
+
   const sid = session.id;
 
   /*
@@ -166,7 +194,10 @@ export default async function RosterSessionPage({
   });
 
   /*
-   * The jobs this person holds tonight, if any.
+   * The jobs this person holds, if any — sound engineer, mic coordinator, both.
+   *
+   * Read off their singer row rather than out of a per-session crew table: both
+   * are roles at the centre now, set in /admin. See lib/sessionView.ts.
    *
    * Shown as an offer rather than acted on as a redirect. Sending somebody
    * straight to the live board would make the session page unreachable for the
@@ -174,21 +205,14 @@ export default async function RosterSessionPage({
    * here, and it would bounce them out again. One prominent line does the
    * useful part of the job, which is not having to hunt for the right screen.
    */
-  const myJobs = me
-    ? (
-        await prisma.sessionCrew.findMany({
-          where: { sessionId, singerId: me.id },
-          select: { job: true },
-        })
-      ).map((c) => c.job)
-    : [];
+  const myJobs = jobsOf(me);
   const myView = resolveSessionView({ sessionId, format: "bhajans", jobs: myJobs });
 
   // Venues already used, so the field suggests rather than asks people to
   // retype "Naimisha Sai Centre" every week.
   const sessionPlaces = (
     await prisma.session.findMany({
-      where: { location: { not: null } },
+      where: { ...NOT_ARCHIVED, location: { not: null } },
       distinct: ["location"],
       select: { location: true },
       orderBy: { location: "asc" },
@@ -209,7 +233,7 @@ export default async function RosterSessionPage({
    */
   const sameDay = sortByStart(
     await prisma.session.findMany({
-      where: { date: session.date },
+      where: { ...NOT_ARCHIVED, date: session.date },
       select: {
         id: true,
         startsAt: true,
@@ -259,12 +283,12 @@ export default async function RosterSessionPage({
 
   const [previousSession, nextSession] = await Promise.all([
     prisma.session.findFirst({
-      where: { date: { lt: session.date }, slots: HAS_A_BHAJAN },
+      where: { ...NOT_ARCHIVED, date: { lt: session.date }, slots: HAS_A_BHAJAN },
       orderBy: { date: "desc" },
       select: { id: true, date: true },
     }),
     prisma.session.findFirst({
-      where: { date: { gt: session.date }, slots: HAS_A_BHAJAN },
+      where: { ...NOT_ARCHIVED, date: { gt: session.date }, slots: HAS_A_BHAJAN },
       orderBy: { date: "asc" },
       select: { id: true, date: true },
     }),
@@ -664,6 +688,7 @@ export default async function RosterSessionPage({
               sessionId={sessionId}
               dateLabel={dateLabel}
               rows={session.slots.length}
+              pitches={session.slots.filter((s) => s.confirmedPitch).length}
             />
           ) : null}
         </CardContent>

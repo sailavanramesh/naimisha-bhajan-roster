@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { NOT_ARCHIVED } from "@/lib/archive";
 
 function parseISODateOnly(s: string) {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
@@ -20,7 +21,7 @@ export async function GET(req: Request) {
   if (!range) return NextResponse.json({ sessionId: null }, { status: 400 });
 
   const s = await prisma.session.findFirst({
-    where: { date: { gte: range.start, lt: range.end } },
+    where: { ...NOT_ARCHIVED, date: { gte: range.start, lt: range.end } },
     select: { id: true },
     orderBy: { date: "asc" },
   });

@@ -13,23 +13,34 @@
  * hold both facts at once.
  */
 
-/** The four lead cushions on the desk. Unchanged — green is not one of them. */
+/**
+ * The lead cushions on the desk.
+ *
+ * Seven since black, yellow and maroon were added — the list is the cushions
+ * the centre physically owns, which is why it grows by being told rather than
+ * by anybody deciding a fifth colour would be tidy. Order is the order they are
+ * offered in; the four originals stay first so nothing about the existing
+ * cushions moves under somebody's thumb.
+ */
 export const MIC_COLOURS = [
   { value: "blue", label: "Blue", dot: "#3B7DD8" },
   { value: "grey", label: "Grey", dot: "#8B9099" },
   { value: "orange", label: "Orange", dot: "#E08A2E" },
   { value: "pink", label: "Pink", dot: "#DC6FA4" },
+  { value: "black", label: "Black", dot: "#2F3033" },
+  { value: "yellow", label: "Yellow", dot: "#D9A81F" },
+  { value: "maroon", label: "Maroon", dot: "#8C3242" },
 ] as const;
 
-/** The chorus cushion, which is the fifth colour and only offered there. */
+/** The chorus cushion, which is offered only there. */
 export const CHORUS_ONLY_COLOUR = { value: "green", label: "Green", dot: "#4E9A57" } as const;
 
 /**
- * What the chorus column offers: the same four, plus green.
+ * What the chorus column offers: every lead cushion, plus green.
  *
- * Sailavan's words, and the reason this is a second list rather than a longer
- * first one — the lead mics are four physical cushions, and adding a fifth to
- * that cycle would offer the desk a cushion it does not have.
+ * A second list rather than a longer first one, because green is a cushion the
+ * lead mics do not have — offering it there would put a cushion on the desk
+ * that is not on the desk.
  */
 export const CHORUS_COLOURS = [...MIC_COLOURS, CHORUS_ONLY_COLOUR] as const;
 

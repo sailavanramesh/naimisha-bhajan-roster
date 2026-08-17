@@ -3,17 +3,14 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { Button, Card, CardContent, Input } from "@/components/ui";
-import { CHORUS_COLOURS, micColourDot, type MicColourValue } from "@/lib/micCushion";
+import { micColourDot, type MicColourValue } from "@/lib/micCushion";
 import { occupantFor, shortName, stripNumber } from "@/lib/deskChannels";
 import { DeskStrips, stripName } from "./DeskStrips";
 import { songNumbers } from "@/lib/program";
 import {
-  addChannel,
-  removeChannel,
   setChannelOpen,
   setSceneNumber,
   suggestChannels,
-  updateChannel,
   applyDesk,
   setItemChannelWho,
   refreshFromDesk,
@@ -112,9 +109,6 @@ export function ChannelGrid({
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [pickedDesk, setPickedDesk] = useState(desks[0]?.id ?? "");
-  const [editing, setEditing] = useState<string | null>(null);
-  /** The channel list below the grid, opened when a heading is tapped. */
-  const [channelsOpen, setChannelsOpen] = useState(false);
   /*
    * Which item the drawn desk is showing, and which strip on it is selected.
    *
@@ -126,7 +120,6 @@ export function ChannelGrid({
   const [deskItemId, setDeskItemId] = useState<string | null>(null);
   const [deskStripId, setDeskStripId] = useState<string | null>(null);
   const stripEditor = useRef<HTMLDivElement | null>(null);
-  const [newNumber, setNewNumber] = useState("");
 
   /*
    * Bring the strip's editor into view when a strip is tapped.
@@ -258,14 +251,12 @@ export function ChannelGrid({
     <Card>
       <CardContent className="grid gap-3 py-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <div>
-            <h2 className="font-display text-xl font-semibold">Mics and channels</h2>
-            <p className="mt-0.5 text-sm text-on-surface-muted">
-              {deskName ? `${deskName} · ` : ""}
-              {channels.length} channel{channels.length === 1 ? "" : "s"}. A tick is a channel that
-              should be open.
-            </p>
-          </div>
+          {/*
+            No help text. Sailavan: "don't need any help text here" — by the
+            time somebody is on this screen they know what a tick means, and the
+            desk name is already on the picker to the right.
+          */}
+          <h2 className="font-display text-xl font-semibold">Mics and channels</h2>
           <div className="flex flex-wrap items-center gap-3">
             {/*
               The desk view first: it is what somebody opens ON THE NIGHT,
@@ -284,6 +275,29 @@ export function ChannelGrid({
             >
               Printable sheet ↗
             </Link>
+            {/*
+              WHERE A CHANNEL IS ACTUALLY NAMED, now that this page no longer
+              names one.
+
+              The per-programme channel list used to live below the grid, and it
+              was a second place to say what channel 6 carries — Sailavan:
+              "remove this section as it is not needed because the sound desk
+              does the same function". So there is one place, /admin/desks, and
+              this is the way to it from here; "Update from the desk" beside it
+              brings the change back onto this programme.
+
+              Shown to whoever may set the desk up — editors, and whoever is
+              down as sound engineer or mic coordinator. The desks page enforces
+              its own `manageDesks` rule; somebody without the grant reads it.
+            */}
+            {canSetUpDesk ? (
+              <Link
+                href="/admin/desks"
+                className="text-sm text-on-ground-muted underline underline-offset-2 hover:text-on-ground"
+              >
+                Set up the desk →
+              </Link>
+            ) : null}
             {/*
               A programme's strips are a SNAPSHOT, which is what lets an old
               programme still say what was on channel 6 after the desk has been
@@ -377,27 +391,11 @@ export function ChannelGrid({
                     title={`${stripNumber(c.number, c.stereo)} · ${c.label}${c.who ? ` (${c.who})` : ""}`}
                   >
                     {/*
-                      The heading is the way in to naming a strip.
-
-                      Sailavan: "I'm still not able to allocate names to
-                      channels — it's just a tick box." He was right, and it was
-                      a discoverability problem as much as a missing control:
-                      the only editor lived behind a collapsed <details> below
-                      the grid, so the column you were looking at was not the
-                      thing you could act on. Tapping the heading now opens that
-                      channel's editor, where you are already pointing.
+                      A LABEL, not a way in. The heading used to open a
+                      per-programme editor for the strip; naming a strip now
+                      happens once, on the desk itself — see "Set up the desk"
+                      above.
                     */}
-                    <button
-                      type="button"
-                      disabled={!canEdit}
-                      aria-label={`Edit channel ${stripNumber(c.number, c.stereo)}`}
-                      className={canEdit ? "w-full cursor-pointer" : "w-full cursor-default"}
-                      onClick={() => {
-                        if (!canEdit) return;
-                        setEditing(c.id);
-                        setChannelsOpen(true);
-                      }}
-                    >
                     <span className="flex flex-col items-center gap-0.5">
                       {c.colour ? (
                         <span
@@ -413,7 +411,6 @@ export function ChannelGrid({
                         {shortName(stripName(c.who, c.label) ?? "")}
                       </span>
                     </span>
-                    </button>
                   </th>
                 ))}
               </tr>
@@ -737,131 +734,12 @@ export function ChannelGrid({
               </span>
 
               <p className="text-[11px] text-on-surface-muted">
-                Leave &ldquo;who&rdquo; alone and the channel&rsquo;s own name stands. Set it in
-                the channel list below to change that for the whole programme.
+                Leave &ldquo;who&rdquo; alone and the channel&rsquo;s own name stands. Change that
+                name on the desk itself.
               </p>
             </div>
           ) : null}
         </div>
-
-        {/*
-          The channel list itself, below the grid where it is edited rarely, and
-          only for whoever sets the desk up. Everybody else on this page reads the
-          strips and looks for their own name; the patch is not theirs to change,
-          and offering it only invites the accidental edit.
-        */}
-        {canSetUpDesk ? (
-        <details
-          open={channelsOpen}
-          onToggle={(e) => setChannelsOpen((e.currentTarget as HTMLDetailsElement).open)}
-          className="rounded-[10px] border border-rule-surface p-2"
-        >
-          <summary className="cursor-pointer text-sm font-medium">
-            The channels ({channels.length})
-          </summary>
-          <ul className="mt-2 grid gap-1">
-            {channels.map((c) => (
-              <li key={c.id} className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="w-11 shrink-0 text-right font-mono text-xs text-on-surface-muted">
-                  {stripNumber(c.number, c.stereo)}
-                </span>
-                {editing === c.id && canEdit ? (
-                  <ChannelEditor
-                    channel={c}
-                    singers={singers}
-                    instruments={instruments}
-                    guests={guests}
-                    onDone={() => setEditing(null)}
-                    onMessage={setMessage}
-                  />
-                ) : (
-                  <>
-                    <span className="min-w-0 flex-1 truncate">
-                      {c.label}
-                      {c.who && c.who !== c.label ? (
-                        <span className="ml-1 text-xs text-on-surface-muted">({c.who})</span>
-                      ) : null}
-                      <span className="ml-2 text-[11px] uppercase tracking-wide text-on-surface-muted">
-                        {c.kind}
-                      </span>
-                    </span>
-                    {canEdit ? (
-                      <>
-                        <button
-                          type="button"
-                          className="text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
-                          onClick={() => setEditing(c.id)}
-                        >
-                          edit
-                        </button>
-                        <button
-                          type="button"
-                          disabled={pending}
-                          className="text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-warn"
-                          onClick={() =>
-                            startTransition(async () => {
-                              const res = await removeChannel({ id: c.id });
-                              if (!res.ok) say(res, "");
-                            })
-                          }
-                        >
-                          remove
-                        </button>
-                      </>
-                    ) : null}
-                  </>
-                )}
-              </li>
-            ))}
-          </ul>
-
-          {canEdit ? (
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <Input
-                value={newNumber}
-                onChange={(e) => setNewNumber(e.target.value)}
-                placeholder="number"
-                aria-label="New channel number"
-                className="h-8 w-20"
-              />
-              <Button
-                type="button"
-                className="h-8 text-xs"
-                disabled={pending || newNumber.trim().length === 0}
-                onClick={() =>
-                  startTransition(async () => {
-                    const res = await addChannel({ sessionId, number: newNumber, label: "" });
-                    say(res, `Added channel ${newNumber.trim()}.`);
-                    if (res.ok) setNewNumber("");
-                  })
-                }
-              >
-                Add a channel
-              </Button>
-              <Button
-                type="button"
-                className="h-8 text-xs"
-                disabled={pending}
-                onClick={() =>
-                  startTransition(async () => {
-                    const res = await suggestChannels({ sessionId });
-                    say(
-                      res,
-                      res.ok
-                        ? res.added === 0
-                          ? "Everybody in the programme already has a channel."
-                          : `Added ${res.added} channel${res.added === 1 ? "" : "s"}.`
-                        : "",
-                    );
-                  })
-                }
-              >
-                Add anyone missing
-              </Button>
-            </div>
-          ) : null}
-        </details>
-        ) : null}
 
         {message ? (
           <p role="status" className={message.ok ? "text-xs text-brass-ink" : "text-xs text-warn"}>
@@ -870,171 +748,6 @@ export function ChannelGrid({
         ) : null}
       </CardContent>
     </Card>
-  );
-}
-
-function ChannelEditor({
-  channel,
-  singers,
-  instruments,
-  guests,
-  onDone,
-  onMessage,
-}: {
-  channel: ChannelRow;
-  singers: { id: string; name: string }[];
-  instruments: { id: string; name: string }[];
-  guests: string[];
-  onDone: () => void;
-  onMessage: (m: { ok: boolean; text: string } | null) => void;
-}) {
-  const [label, setLabel] = useState(channel.label);
-  const [kind, setKind] = useState(channel.kind);
-  const [who, setWho] = useState<ChannelWho>(
-    channel.singerId
-      ? { kind: "singer", id: channel.singerId }
-      : channel.instrumentId
-        ? { kind: "instrument", id: channel.instrumentId }
-        : channel.person
-          ? { kind: "person", name: channel.person }
-          : { kind: "none" },
-  );
-  const [person, setPerson] = useState(channel.person ?? "");
-  const [colour, setColour] = useState<MicColourValue | null>(channel.colour);
-  const [stereo, setStereo] = useState(channel.stereo);
-  const [share, setShare] = useState<ChannelWho>(
-    channel.withSingerId
-      ? { kind: "singer", id: channel.withSingerId }
-      : channel.withPerson
-        ? { kind: "person", name: channel.withPerson }
-        : { kind: "none" },
-  );
-  const [pending, startTransition] = useTransition();
-
-  return (
-    <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-      <Input
-        value={label}
-        aria-label="Channel label"
-        className="h-8 w-36"
-        onChange={(e) => setLabel(e.target.value)}
-      />
-      <select
-        value={kind}
-        aria-label="What it carries"
-        className="h-8 rounded-key border border-rule-surface bg-field px-1 text-xs"
-        onChange={(e) => setKind(e.target.value as ChannelRow["kind"])}
-      >
-        <option value="vocal">vocal</option>
-        <option value="instrument">instrument</option>
-        <option value="track">track</option>
-        <option value="spare">spare</option>
-      </select>
-      {/*
-        Stereo is decided HERE, on the programme, not on the desk.
-
-        The desk says which strips CAN be a pair — the MG20XU's last four. What
-        is plugged into one on a given night is what decides whether it is being
-        used as a pair or as a single mono channel, and that changes programme to
-        programme. Sailavan: if it is going to be a mono channel then 13/14 is
-        one channel.
-      */}
-      <label className="flex items-center gap-1 text-[11px] text-on-surface-muted">
-        <input
-          type="checkbox"
-          checked={stereo}
-          aria-label="Used as a stereo pair"
-          className="h-3.5 w-3.5"
-          onChange={(e) => setStereo(e.target.checked)}
-        />
-        stereo
-      </label>
-      <WhoSelect
-        value={who}
-        singers={singers}
-        instruments={instruments}
-        guests={guests}
-        label="Who or what is on it"
-        onPick={(picked) => {
-          setWho(picked);
-          // One occupant. Picking from the list clears a typed name, so the two
-          // can never both be set and then disagree.
-          if (picked.kind !== "none") setPerson("");
-        }}
-      />
-      {/*
-        A second seat on the same mic. Two singers on one channel is a real
-        thing — a duet taken on one mic — and the desk needs both names or it
-        brings the wrong one up.
-      */}
-      <WhoSelect
-        value={share}
-        singers={singers}
-        instruments={[]}
-        guests={guests}
-        emptyLabel="+ shared with"
-        label="Who shares this mic"
-        onPick={setShare}
-      />
-      <Input
-        value={person}
-        aria-label="Or a name"
-        placeholder="or a name"
-        className="h-8 w-28"
-        onChange={(e) => {
-          setPerson(e.target.value);
-          if (e.target.value) setWho({ kind: "none" });
-        }}
-      />
-      <span className="flex items-center gap-1">
-        {CHORUS_COLOURS.map((c) => (
-          <button
-            key={c.value}
-            type="button"
-            aria-label={`${c.label} cushion`}
-            aria-pressed={colour === c.value}
-            className={`h-4 w-4 rounded-full border ${
-              colour === c.value ? "scale-110 border-on-surface" : "border-rule-surface opacity-70"
-            }`}
-            style={{ background: c.dot }}
-            onClick={() => setColour(colour === c.value ? null : (c.value as MicColourValue))}
-          />
-        ))}
-      </span>
-      <Button
-        type="button"
-        variant="primary"
-        className="h-8 text-xs"
-        disabled={pending || label.trim().length === 0}
-        onClick={() =>
-          startTransition(async () => {
-            const res = await updateChannel({
-              id: channel.id,
-              label,
-              kind,
-              singerId: who.kind === "singer" ? who.id : "",
-              instrumentId: who.kind === "instrument" ? who.id : "",
-              person: who.kind === "person" ? who.name : person,
-              withSingerId: share.kind === "singer" ? share.id : "",
-              withPerson: share.kind === "person" ? share.name : "",
-              colour,
-              stereo,
-            });
-            if (res.ok) onDone();
-            else onMessage({ ok: false, text: res.error });
-          })
-        }
-      >
-        Save
-      </Button>
-      <button
-        type="button"
-        className="text-[11px] text-on-surface-muted underline underline-offset-2"
-        onClick={onDone}
-      >
-        cancel
-      </button>
-    </span>
   );
 }
 

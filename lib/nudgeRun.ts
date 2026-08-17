@@ -8,6 +8,7 @@ import {
   type ScopedRule,
 } from "@/lib/nudgeRules";
 import { melbourneTodayISO, melbourneHour } from "@/lib/dates";
+import { NOT_ARCHIVED } from "./archive";
 
 /**
  * lib/nudgeRun.ts — the day-of chase.
@@ -61,7 +62,7 @@ export async function runNudges(now: Date = new Date()): Promise<NudgeRun> {
     // and a day holding nothing but a program would report a run that looked
     // at a session and found nothing to say instead of the true "nothing on
     // today". Nobody is chasing a program for a bhajan and a pitch.
-    where: { date: new Date(`${date}T00:00:00.000Z`), format: "bhajans" },
+    where: { ...NOT_ARCHIVED, date: new Date(`${date}T00:00:00.000Z`), format: "bhajans" },
     select: {
       id: true,
       slots: {

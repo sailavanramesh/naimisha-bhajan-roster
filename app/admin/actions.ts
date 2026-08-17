@@ -6,6 +6,7 @@ import { requireCapability, normaliseEmail } from "@/lib/auth";
 import { RepertoireKind } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { LIVE_SESSION } from "@/lib/archive";
 
 /**
  * Admin edits to allocation data.
@@ -154,9 +155,10 @@ const SingerAccess = z.object({
     .transform((v) => v.toLowerCase())
     .refine((v) => v === "" || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), "That is not an email address"),
   role: z.enum(["owner", "coordinator", "singer"]),
-  /// The two per-person grants. See lib/capabilities.ts canWithGrants.
+  /// The per-person grants and the two sound jobs. See lib/capabilities.ts.
   canEditWords: z.boolean(),
-  canRunSound: z.boolean(),
+  soundEngineer: z.boolean(),
+  micCoordinator: z.boolean(),
 });
 
 /**
@@ -175,10 +177,11 @@ export async function setSingerAccess(formData: FormData): Promise<void> {
     role: String(formData.get("role") ?? "singer"),
     // An unchecked box submits nothing at all, so absent means false.
     canEditWords: formData.get("canEditWords") === "on",
-    canRunSound: formData.get("canRunSound") === "on",
+    soundEngineer: formData.get("soundEngineer") === "on",
+    micCoordinator: formData.get("micCoordinator") === "on",
   });
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Could not save access.");
-  const { singerId, role, canEditWords, canRunSound } = parsed.data;
+  const { singerId, role, canEditWords, soundEngineer, micCoordinator } = parsed.data;
   const email = normaliseEmail(parsed.data.email);
 
   if (email) {
@@ -193,7 +196,13 @@ export async function setSingerAccess(formData: FormData): Promise<void> {
 
   await prisma.singer.update({
     where: { id: singerId },
-    data: { email, role: role as "coordinator" | "singer", canEditWords, canRunSound },
+    data: {
+      email,
+      role: role as "coordinator" | "singer",
+      canEditWords,
+      soundEngineer,
+      micCoordinator,
+    },
   });
 
   revalidatePath("/admin");
@@ -306,7 +315,7 @@ export async function removeSinger(singerId: string): Promise<RemoveSingerState>
   if (!singer) return { error: "That person is no longer on the list." };
 
   const [slots, repertoire] = await Promise.all([
-    prisma.sessionSlot.count({ where: { singerId } }),
+    prisma.sessionSlot.count({ where: { singerId, session: LIVE_SESSION } }),
     prisma.singerRepertoire.count({ where: { singerId } }),
   ]);
 

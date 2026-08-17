@@ -14,6 +14,7 @@ import {
 } from "@/lib/fairnessFilters";
 import { FairnessRange } from "./FairnessRange";
 import { NoAccess } from "@/components/RequireRole";
+import { LIVE_SESSION } from "@/lib/archive";
 
 export const dynamic = "force-dynamic";
 
@@ -44,6 +45,7 @@ export default async function FairnessPage({
    * kind-of-session and part-of-day filters, not just a window length.
    */
   const sessionWhere = {
+    ...LIVE_SESSION,
     date: {
       gte: new Date(`${filters.fromISO}T00:00:00.000Z`),
       lte: new Date(`${filters.toISO}T00:00:00.000Z`),
@@ -74,7 +76,7 @@ export default async function FairnessPage({
       },
     }),
     prisma.sessionSlot.findMany({
-      where: { bhajanId: { not: null } },
+      where: { bhajanId: { not: null }, session: LIVE_SESSION },
       select: { bhajanId: true, bhajan: { select: { title: true } }, session: { select: { date: true } } },
     }),
     prisma.sessionCategory.findMany({

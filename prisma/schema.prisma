@@ -76,19 +76,6 @@ enum InstrumentScope {
   both
 }
 
-/// Who is doing a JOB at a session, as opposed to singing or playing at it.
-///
-/// An enum rather than a managed list, unlike Instrument: every job here maps
-/// to a VIEW, and adding one means writing the screen that goes with it. A job
-/// the app has no view for would be a label that does nothing.
-///
-/// Applies to bhajan sessions as much as to programs — the person on the desk
-/// on a Thursday is doing the same job with fewer channels.
-enum SessionJob {
-  soundEngineer
-  micCoordinator
-}
-
 enum SessionStatus {
   Draft
   Published
@@ -212,20 +199,27 @@ model Singer {
   /// role. This is the one per-person grant, and it exists because Sailavan
   /// wanted named people keeping the words up to date without handing them the
   /// roster. See canWithGrants().
-  canEditWords Boolean  @default(false)
-  /// The second per-person grant: this person runs the sound.
+  canEditWords Boolean @default(false)
+
+  /// THE TWO SOUND JOBS, held by a person rather than by a night.
   ///
-  /// Sailavan wanted the sound engineer and the mic coordinator to keep the
-  /// desk and its cushion allocation right without becoming editors — the same
-  /// shape of problem as canEditWords, and the same answer. Granted in /admin.
+  /// They were `SessionCrew` — a row per person per session, allocated under
+  /// "Who is running it" on each programme — plus a vaguer standing grant
+  /// called `canRunSound`. Sailavan, 2026-08-18: "if we add the roles of mic
+  /// coordinator and sound engineer at the admin level we can remove who is
+  /// running it from all views". He is right, and the old shape had the tell:
+  /// the same three people did the job every week and were re-entered every
+  /// week, while the thing the job actually unlocks — the desk, its strips and
+  /// its cushion allocation — is standing centre equipment that does not change
+  /// session to session.
   ///
-  /// Deliberately NOT read from SessionCrew, which records who is on the job
-  /// for one programme. The cushion allocation is a standing fact about a desk
-  /// ("channel 1 is the blue cushion"), so the permission to change it is a
-  /// standing fact about a person.
-  canRunSound  Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  /// Both grant `manageDesks` (lib/capabilities.ts), and both are ticked in
+  /// /admin beside the person's role. Somebody can hold both.
+  soundEngineer  Boolean @default(false)
+  micCoordinator Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   slots              SessionSlot[]
   chorusMics         SessionSlotChorus[]     @relation("ChorusSinger")
@@ -236,7 +230,6 @@ model Singer {
   notices            SessionNotice[]
   programParts       ProgramPerformer[]
   programInstruments ProgramItemInstrument[]
-  crew               SessionCrew[]
   deskChannels       SessionChannel[]
   /// Mics this person shares with somebody else. See SessionChannel.withSingerId.
   sharedChannels     SessionChannel[]        @relation("SessionChannelShare")
@@ -381,8 +374,24 @@ model Session {
   /// reset by somebody filling in a pitch an hour later: the people are
   /// decided, which is what the quiet "the roster is up" announces. Slot
   /// updatedAt cannot answer it, because every pitch edit bumps that too.
-  rosterChangedAt     DateTime?
+  rosterChangedAt DateTime?
   /// Which desk this programme is mixed on. Null until one is picked.
+  /// ARCHIVED, not deleted.
+  ///
+  /// Sailavan, 2026-08-18: a deleted session "should be removed from all views
+  /// but kept as an archived session or program that the Owner can review and
+  /// either restore or permanently delete, to have as a fallback in case some
+  /// accidental mistakes have been made."
+  ///
+  /// So the delete button archives, and only an owner can finish the job from
+  /// /admin/archive. Everything that lists or counts sessions filters on this —
+  /// see lib/archive.ts, which is where the filter is named once.
+  ///
+  /// Null is the ordinary state. A timestamp means it is out of sight.
+  archivedAt      DateTime?
+  /// Who archived it — a name, for the archive screen. Never for authorisation.
+  archivedBy      String?
+
   deskId              String?
   /// Which item in the running order the programme is ON right now.
   ///
@@ -415,7 +424,6 @@ model Session {
   notices           SessionNotice[]
   notificationRules NotificationRule[]
   programItems      ProgramItem[]
-  crew              SessionCrew[]
   channels          SessionChannel[]
   desk              Desk?               @relation(fields: [deskId], references: [id], onDelete: SetNull)
 
@@ -428,6 +436,8 @@ model Session {
   @@index([templateId])
   @@index([date])
   @@index([categoryId])
+  /// Every list of sessions filters on this, so it is the one every page pays.
+  @@index([archivedAt])
 }
 
 /// One ordered slot in a session: a singer, a bhajan, and the pitch they sang.
@@ -1055,29 +1065,6 @@ model ProgramItemChannel {
   @@index([instrumentId])
 }
 
-/// Somebody doing a job at a session rather than singing at it.
-///
-/// The point is the VIEW: a person crewed on a session lands on the screen for
-/// their job when they open it, instead of hunting for it. See
-/// lib/sessionView.ts, where that decision is a pure function.
-model SessionCrew {
-  id        String     @id @default(cuid())
-  sessionId String
-  singerId  String
-  job       SessionJob
-  notes     String?
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  singer  Singer  @relation(fields: [singerId], references: [id], onDelete: Cascade)
-
-  @@unique([sessionId, singerId, job])
-  @@index([sessionId])
-  @@index([singerId])
-}
-
 /// What a singer knows or has curated for a festival. Replaces v1's
 /// `FestivalBhajan` and the two wide sheets it came from.
 model SingerRepertoire {
@@ -1212,6 +1199,9 @@ enum MicColour {
   orange
   pink
   green
+  black
+  yellow
+  maroon
 }
 
 /// Which colour mic cushion a singer is on for a session, for the sound desk.
@@ -1385,4 +1375,44 @@ model SessionNotice {
 
   @@unique([sessionId, singerId, kind])
   @@index([sessionId])
+}
+
+/// A card on /guide — "How to use this app".
+///
+/// The guide used to be 300 lines of JSX, which meant every wording change was
+/// a deploy and went through Claude Code. Sailavan asked to be able to make
+/// "manual changes … and updated for everyone without it having to go via
+/// Claude Code and this process", so the page is now rows and the code is only
+/// the shell that renders them.
+///
+/// `lib/defaultGuide.ts` holds the written-in-code text this was seeded from.
+/// It stays the fallback when the table is empty and the "restore" text for one
+/// card, so an edit can always be undone without a database restore.
+model GuideSection {
+  id String @id @default(cuid())
+
+  /// Stable across edits, so re-seeding updates a card rather than duplicating
+  /// it. Cards added in the app get a generated key and no default text.
+  key      String @unique
+  position Int
+
+  title String
+  /// The screen this card describes, linked from its heading. Null for a card
+  /// that is not about one page — "Start here", "If something looks wrong".
+  href  String?
+  blurb String?
+  /// A small markup: blank-line paragraphs, `- ` bullets, `> ` for a muted
+  /// aside, **bold**, and [text](/link). Parsed by lib/guideText.ts — never
+  /// rendered as HTML.
+  body  String
+
+  /// Shown only to editors and owners, with the "coordinator" badge.
+  coordinatorOnly Boolean @default(false)
+  /// Taken off the page without losing the text.
+  hidden          Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([position])
 }

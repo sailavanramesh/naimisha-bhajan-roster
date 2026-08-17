@@ -149,7 +149,7 @@ export function useMicCushions(sessionId: string): CushionController {
 }
 
 /**
- * The four cushion dots.
+ * The cushion dots — one per cushion the centre owns.
  *
  * Colour alone would be an unusable control for a colour-blind user, and the
  * thing being identified IS a colour — so every dot carries its name as an

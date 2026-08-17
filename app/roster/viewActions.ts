@@ -7,6 +7,7 @@ import { RosterView } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getSignedInSinger, requireCapability } from "@/lib/auth";
 import { defaultSessionOf, USUAL_START } from "@/lib/sessionsOfDay";
+import { NOT_ARCHIVED } from "@/lib/archive";
 
 /**
  * Remember whether this person prefers the calendar or the list.
@@ -66,7 +67,7 @@ export async function startSessionOnDate(formData: FormData): Promise<void> {
   // `format` is selected so defaultSessionOf can step around music programs —
   // without it every program looks like an ordinary session to that filter.
   const onThatDay = await prisma.session.findMany({
-    where: { date: day },
+    where: { ...NOT_ARCHIVED, date: day },
     select: { id: true, startsAt: true, format: true },
   });
   const session =

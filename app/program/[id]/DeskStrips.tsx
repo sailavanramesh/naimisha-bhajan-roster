@@ -58,14 +58,20 @@ export function DeskStrips({
   strips,
   /** Open channels, when the strips are showing one moment of a programme. */
   openIds,
-  /** Marked as changed for this item — a mic that has swapped hands. */
+  /**
+   * Strips to ring. A mic that has swapped hands on a programme item; a
+   * cushion two people are on, on the bhajan live desk. Two callers, two
+   * meanings, so `flagLabel` says which one the tooltip should read.
+   */
   swappedIds,
+  flagLabel = "for this item only",
   onPick,
   dense = false,
 }: {
   strips: Strip[];
   openIds?: ReadonlySet<string>;
   swappedIds?: ReadonlySet<string>;
+  flagLabel?: string;
   onPick?: (id: string) => void;
   dense?: boolean;
 }) {
@@ -92,7 +98,7 @@ export function DeskStrips({
           s.who,
           s.kind === "vocal" && s.colour ? `${micColourLabel(s.colour)} cushion` : null,
           s.mic,
-          swapped ? "for this item only" : null,
+          swapped ? flagLabel : null,
           live ? (open ? "open" : "closed") : null,
         ]
           .filter(Boolean)

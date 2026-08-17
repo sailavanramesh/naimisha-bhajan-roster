@@ -9,6 +9,7 @@ import { buildSuggestions } from "./suggestions";
 import { getRole, can } from "@/lib/auth";
 import { sortByStart, sessionLabel, hasSeveral } from "@/lib/sessionsOfDay";
 import { NoAccess } from "@/components/RequireRole";
+import { NOT_ARCHIVED } from "@/lib/archive";
 
 export const dynamic = "force-dynamic";
 
@@ -174,7 +175,7 @@ export default async function AssignPage({
   const sameDay = session
     ? sortByStart(
         await prisma.session.findMany({
-          where: { date: session.date },
+          where: { ...NOT_ARCHIVED, date: session.date },
           select: {
             id: true,
             startsAt: true,

@@ -10,6 +10,8 @@
  * without somebody pressing something.
  */
 
+import type { MicColourValue } from "./micCushion";
+
 export type ChannelKind = "vocal" | "instrument" | "track" | "spare";
 
 export type ProposedChannel = {
@@ -286,7 +288,14 @@ export function blankStrips(count: number): ProposedChannel[] {
   }));
 }
 
-export type CushionColour = "blue" | "grey" | "green" | "orange" | "pink";
+/**
+ * A cushion colour, as the desk's fixed allocation names one.
+ *
+ * Aliased to lib/micCushion's list rather than spelled out again — it was a
+ * second hand-written union of the same five colours, which quietly went stale
+ * the moment black, yellow and maroon were added.
+ */
+export type CushionColour = MicColourValue;
 
 /**
  * The centre's own allocation: which cushion is on which channel.

@@ -7,6 +7,7 @@ import { isChorusColour } from "@/lib/micCushion";
 import { melbourneTodayISO } from "@/lib/dates";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { NOT_ARCHIVED } from "@/lib/archive";
 
 /**
  * The desks the centre mixes on, and the strips printed on them.
@@ -110,6 +111,7 @@ async function pushDeskToFutureProgrammes(deskId: string): Promise<void> {
     }),
     prisma.session.findMany({
       where: {
+        ...NOT_ARCHIVED,
         deskId,
         format: "program",
         date: { gte: new Date(`${todayISO}T00:00:00.000Z`) },
@@ -380,7 +382,7 @@ export async function removeDesk(input: {
   const parsed = z.object({ id: z.string().min(1) }).safeParse(input);
   if (!parsed.success) return { ok: false, error: "Could not remove that." };
 
-  const usedBy = await prisma.session.count({ where: { deskId: parsed.data.id } });
+  const usedBy = await prisma.session.count({ where: { ...NOT_ARCHIVED, deskId: parsed.data.id } });
   await prisma.desk.delete({ where: { id: parsed.data.id } });
 
   revalidatePath("/admin/desks");

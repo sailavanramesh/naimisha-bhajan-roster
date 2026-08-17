@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   layerLines,
+  openingLine,
   layersAlign,
   nextSectionLabel,
   sectionFamily,
@@ -247,5 +248,46 @@ describe("splitPastedVerses", () => {
   it("gives nothing back for nothing", () => {
     expect(splitPastedVerses("")).toEqual([]);
     expect(splitPastedVerses("\n\n  \n")).toEqual([]);
+  });
+});
+
+describe("openingLine", () => {
+  it("takes the first line of the transliteration", () => {
+    expect(openingLine({ roman: "Ahe nila saila\nsuniala banaa", script: null })).toBe(
+      "Ahe nila saila",
+    );
+  });
+
+  it("falls back to the script when there is no transliteration", () => {
+    expect(openingLine({ roman: "", script: "ஆஹே நீல" })).toBe("ஆஹே நீல");
+  });
+
+  it("skips leading blank lines", () => {
+    expect(openingLine({ roman: "\n\n  Baaro Krishnayya", script: null })).toBe(
+      "Baaro Krishnayya",
+    );
+  });
+
+  it("has nothing to say for a song with no words", () => {
+    expect(openingLine(null)).toBe(null);
+    expect(openingLine(undefined)).toBe(null);
+    expect(openingLine({ roman: "   ", script: "" })).toBe(null);
+  });
+
+  /*
+   * Cut on a word boundary. A line chopped mid-word reads as a bug rather than
+   * as a line that carries on, which is the whole point of the ellipsis.
+   */
+  it("cuts a long line at a word, not mid-word", () => {
+    const line = "Gokulaththai kandadhillai kannan aadum kolam kandadhillai endrum";
+    const cut = openingLine({ roman: line, script: null }, { max: 30 });
+    expect(cut).toBe("Gokulaththai kandadhillai…");
+    expect(cut!.length).toBeLessThanOrEqual(31);
+  });
+
+  it("leaves a line that fits exactly alone", () => {
+    expect(openingLine({ roman: "Baaro Krishnayya", script: null }, { max: 16 })).toBe(
+      "Baaro Krishnayya",
+    );
   });
 });

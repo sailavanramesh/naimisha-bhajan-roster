@@ -5,14 +5,21 @@
  *
  * Two different things decide this and they are easy to confuse:
  *
- *   - `Singer.defaultRosterView` is a STANDING PREFERENCE — calendar or list,
- *     how somebody likes to see the roster, set once and true everywhere.
- *   - `SessionCrew` is a JOB ON ONE NIGHT — "you are on the desk for this
- *     session", true for that session and nothing else.
+ *   - `Singer.defaultRosterView` is a PREFERENCE — calendar or list, how
+ *     somebody likes to see the roster.
+ *   - `Singer.soundEngineer` / `Singer.micCoordinator` are JOBS — "you run the
+ *     desk", which says what somebody came to a session to DO.
  *
- * The job wins on the session it applies to, because somebody who came to run
- * the sound desk did not come to read the roster grid. It wins for that session
- * only; the preference is untouched and still decides everywhere else.
+ * The job wins, because somebody who came to run the sound desk did not come to
+ * read the roster grid. The preference is untouched and still decides on every
+ * screen that is not a session.
+ *
+ * BOTH ARE NOW FACTS ABOUT THE PERSON. The jobs used to be SessionCrew, a row
+ * per person per session, allocated on each programme under "Who is running
+ * it" — Sailavan, 2026-08-18: "if we add the roles of mic coordinator and sound
+ * engineer at the admin level we can remove who is running it from all views".
+ * The same three people did it every week and were re-entered every week, so
+ * the per-night precision bought nothing and cost a card on every screen.
  *
  * A pure function so the rule can be read in one place and tested without a
  * database, rather than being spread across three route handlers as redirects.
@@ -24,9 +31,26 @@ export type SessionFormat = "bhajans" | "program";
 export type SessionViewContext = {
   sessionId: string;
   format: SessionFormat;
-  /** The jobs this person holds on THIS session. Usually none. */
+  /** The jobs this person holds at the centre. Usually none. */
   jobs: readonly SessionJob[];
 };
+
+/**
+ * The jobs a person holds, from the two columns on their singer row.
+ *
+ * One place that turns the booleans into the list everything else reads, so the
+ * order — sound engineer first, which decides who wins in `resolveSessionView`
+ * — is stated once rather than at each call site.
+ */
+export function jobsOf(
+  singer: { soundEngineer?: boolean | null; micCoordinator?: boolean | null } | null | undefined,
+): SessionJob[] {
+  if (!singer) return [];
+  const jobs: SessionJob[] = [];
+  if (singer.soundEngineer) jobs.push("soundEngineer");
+  if (singer.micCoordinator) jobs.push("micCoordinator");
+  return jobs;
+}
 
 export type SessionView = {
   /** Where to send them. */
@@ -84,18 +108,15 @@ export function resolveSessionView(context: SessionViewContext): SessionView {
 }
 
 /**
- * Is this person running the sound on this session?
+ * Is this person one of the two who run the sound?
  *
- * The gate on a programme's DESK SETUP — which desk it is on, taking the strips
- * again, and the channel list. Sailavan: those "shouldn't be available to anyone
- * but editors and people marked as sound engineers or mic coordinators".
+ * The gate on DESK SETUP — which desk a session is on, taking its strips again,
+ * and the channel list. Sailavan: those "shouldn't be available to anyone but
+ * editors and people marked as sound engineers or mic coordinators".
  *
- * Deliberately a JOB ON ONE NIGHT rather than the standing `canRunSound` grant,
- * and the two answer different questions. The grant says who may edit the DESK,
- * which is the centre's hardware and the same next week. This says who may set
- * up THIS PROGRAMME'S channels, which is a fact about one evening and about the
- * person who agreed to run it — allocated under "Who is running it", and true
- * for that programme only.
+ * One question now, where there used to be two that were easy to confuse: a
+ * per-night SessionCrew job and a standing `canRunSound` grant. They were the
+ * same three people, so they collapsed into the two roles on the singer.
  *
  * An editor may do it regardless, as with everything else on the page.
  */
@@ -113,7 +134,5 @@ export const JOB_LABELS: Record<SessionJob, string> = {
  * because the useful thing to know is why the screen is different.
  */
 export function jobBanner(job: SessionJob): string {
-  return job === "soundEngineer"
-    ? "You are on sound for this session."
-    : "You are on mics for this session.";
+  return job === "soundEngineer" ? "You are on sound." : "You are on mics.";
 }

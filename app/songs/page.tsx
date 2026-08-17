@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { getRole, can } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
+import { openingLine } from "@/lib/songVerses";
 import { Card, CardContent } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
@@ -47,6 +48,14 @@ export default async function SongsPage({
       title: true,
       language: true,
       tradition: true,
+      // Just the first verse, for the line the song is known by. `take: 1` on
+      // the ordered relation rather than pulling every verse of every song to
+      // read one line of one of them.
+      verses: {
+        orderBy: { order: "asc" },
+        take: 1,
+        select: { roman: true, script: true },
+      },
       _count: { select: { verses: true, items: true } },
     },
   });
@@ -86,27 +95,45 @@ export default async function SongsPage({
         </Card>
       ) : (
         <ul className="grid gap-2">
-          {songs.map((song) => (
-            <li key={song.id}>
-              <Link
-                href={`/songs/${song.id}`}
-                className="flex items-center gap-3 rounded-[14px] border border-card-edge bg-surface p-3 hover:border-brass/50"
-              >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-display text-lg font-semibold">
-                    {song.title}
+          {songs.map((song) => {
+            /*
+             * WHAT THE SECOND LINE IS FOR: recognising the song.
+             *
+             * It was "tradition · language", which almost no song has, so every
+             * row showed an em dash — a line of the layout spent saying nothing.
+             * The opening line is the thing a singer knows a song by. Where
+             * there are no words yet, tradition and language are still better
+             * than a dash, and where there is neither the line simply goes.
+             */
+            const opening = openingLine(song.verses[0]);
+            const secondary =
+              opening ?? [song.tradition, song.language].filter(Boolean).join(" · ");
+            const verses = song._count.verses;
+
+            return (
+              <li key={song.id}>
+                <Link
+                  href={`/songs/${song.id}`}
+                  className="flex items-center gap-3 rounded-[14px] border border-card-edge bg-surface p-3 hover:border-brass/50"
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-display text-lg font-semibold">
+                      {song.title}
+                    </span>
+                    {secondary ? (
+                      <span className="block truncate text-sm text-on-surface-muted">
+                        {secondary}
+                      </span>
+                    ) : null}
                   </span>
-                  <span className="block truncate text-sm text-on-surface-muted">
-                    {[song.tradition, song.language].filter(Boolean).join(" · ") || "—"}
+                  <span className="shrink-0 whitespace-nowrap text-xs text-on-surface-muted">
+                    {verses > 0 ? `${verses} verse${verses === 1 ? "" : "s"}` : "no words yet"}
+                    {song._count.items > 0 ? ` · sung ${song._count.items}×` : ""}
                   </span>
-                </span>
-                <span className="shrink-0 whitespace-nowrap text-xs text-on-surface-muted">
-                  {song._count.verses > 0 ? `${song._count.verses} verses` : "no words yet"}
-                  {song._count.items > 0 ? ` · sung ${song._count.items}×` : ""}
-                </span>
-              </Link>
-            </li>
-          ))}
+                </Link>
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>

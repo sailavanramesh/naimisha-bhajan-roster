@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { draftSaveDecision } from "@/lib/draftGuard";
+import { NOT_ARCHIVED } from "@/lib/archive";
 
 /**
  * Slots arrive as one JSON field rather than parallel comma-joined lists:
@@ -67,7 +68,7 @@ export async function saveDraftSession(formData: FormData): Promise<void> {
   const sessionDate = new Date(`${date}T00:00:00.000Z`);
 
   const existing = await prisma.session.findFirst({
-    where: { date: sessionDate },
+    where: { ...NOT_ARCHIVED, date: sessionDate },
     orderBy: [{ startsAt: "asc" }, { createdAt: "asc" }],
     include: { slots: { select: { id: true, confirmedPitch: true, singerId: true } } },
   });

@@ -5,6 +5,7 @@ import { getRole, can } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
 import { BulkMetaPanel, type BulkSession } from "./BulkMetaPanel";
 import { DateField } from "@/components/DateField";
+import { NOT_ARCHIVED } from "@/lib/archive";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +51,7 @@ export default async function SessionDetailsPage({
   const [rows, categories, placeRows] = await Promise.all([
     prisma.session.findMany({
       where: {
+        ...NOT_ARCHIVED,
         ...(from || to
           ? {
               date: {
@@ -89,7 +91,7 @@ export default async function SessionDetailsPage({
       select: { id: true, name: true },
     }),
     prisma.session.findMany({
-      where: { location: { not: null } },
+      where: { ...NOT_ARCHIVED, location: { not: null } },
       distinct: ["location"],
       select: { location: true },
       orderBy: { location: "asc" },

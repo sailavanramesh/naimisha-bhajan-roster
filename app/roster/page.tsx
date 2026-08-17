@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle, Input, Button } from "@/compo
 import RosterCalendarClient from "./RosterCalendarClient";
 import { nextThursday, melbourneTodayISO } from "@/lib/dates";
 import { resolveRosterView } from "@/lib/rosterView";
+import { NOT_ARCHIVED } from "@/lib/archive";
 
 export const dynamic = "force-dynamic";
 
@@ -144,7 +145,7 @@ export default async function RosterPage({
   }));
 
   const monthSessions = await prisma.session.findMany({
-    where: { date: { gte: monthStart, lt: monthEndExclusive } },
+    where: { ...NOT_ARCHIVED, date: { gte: monthStart, lt: monthEndExclusive } },
     select: {
       id: true,
       date: true,
@@ -231,6 +232,7 @@ export default async function RosterPage({
 
     listSessions = await prisma.session.findMany({
       where: {
+        ...NOT_ARCHIVED,
         /*
          * Same rule as the calendar: a session record can outlive its
          * contents, and one with nothing on it is not a session. The calendar

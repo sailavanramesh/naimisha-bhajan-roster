@@ -1,7 +1,9 @@
 import { prisma } from "@/lib/db";
-import { getRole, can } from "@/lib/auth";
+import { getRole, can, getSignedInSinger } from "@/lib/auth";
+import { jobsOf, runsSound } from "@/lib/sessionView";
 import { LiveBoard, type LiveSlot } from "./LiveBoard";
 import { planTablas } from "@/lib/tablaPlan";
+import type { LiveStrip } from "@/lib/liveDesk";
 
 export const dynamic = "force-dynamic";
 
@@ -91,6 +93,78 @@ export default async function LiveSessionPage({
     tablaWhy: tablaByPosition.get(s.position)?.choice.why ?? null,
   }));
 
+  // Removed sessions do not have a live view either — see /roster/[id].
+  if (session.archivedAt) {
+    return (
+      <div className="rounded-[14px] border border-card-edge bg-surface p-6">
+        <h1 className="font-display text-2xl font-semibold">This session was removed</h1>
+        <p className="mt-2 text-sm text-on-surface-muted">
+          It is in the archive. Ask the coordinator if it should come back.
+        </p>
+      </div>
+    );
+  }
+
+  /*
+   * THE DESK THIS SESSION IS MIXED ON.
+   *
+   * The one it has been put on, else whichever is ticked as the default —
+   * Sailavan wanted an ordinary Thursday to just work, and the festival patch
+   * to be a deliberate choice on the night it is used. Read live rather than
+   * snapshotted: a bhajan session has no historical channel record to protect,
+   * so tidying a desk fixes every session at once. See live/deskActions.ts.
+   */
+  const desk =
+    (session.deskId
+      ? await prisma.desk.findUnique({
+          where: { id: session.deskId },
+          include: { channels: { orderBy: { number: "asc" } } },
+        })
+      : null) ??
+    (await prisma.desk.findFirst({
+      where: { isDefault: true },
+      include: { channels: { orderBy: { number: "asc" } } },
+    })) ??
+    (await prisma.desk.findFirst({
+      orderBy: { name: "asc" },
+      include: { channels: { orderBy: { number: "asc" } } },
+    }));
+
+  /*
+   * Who may change which desk this session is on.
+   *
+   * Sailavan: "the sound desk configuration option for the live view in bhajans
+   * should only be visible to editors and people designated as mic coordinators
+   * or sound engineer." The two jobs are roles on the person now; the action
+   * re-checks the same rule, because hiding a control is not a permission.
+   */
+  const me = await getSignedInSinger();
+  const canSetUpDesk = can(role, "editPrograms") || runsSound(jobsOf(me));
+
+  const deskChoices = desk
+    ? await prisma.desk.findMany({
+        orderBy: [{ isDefault: "desc" }, { name: "asc" }],
+        select: { id: true, name: true },
+      })
+    : [];
+
+  /*
+   * A DESK's channel number is an Int; a PROGRAMME's snapshot of one is a
+   * string, because a snapshot can say "13/14". Already ordered by the query,
+   * so nothing needs re-sorting here.
+   */
+  const strips: LiveStrip[] = desk
+    ? desk.channels.map((c) => ({
+        id: c.id,
+        number: String(c.number),
+        label: c.label,
+        kind: c.kind as string,
+        colour: c.colour,
+        mic: c.mic,
+        stereo: c.stereo,
+      }))
+    : [];
+
   const heading = new Intl.DateTimeFormat("en-AU", {
     weekday: "long",
     day: "numeric",
@@ -115,6 +189,20 @@ export default async function LiveSessionPage({
       categoryName={session.category?.name ?? null}
       categoryImage={session.category?.image ?? null}
       slots={slots}
+      desk={
+        desk
+          ? {
+              // Null when the session is riding the default rather than a desk
+              // somebody chose — the picker shows "The default desk" for it, so
+              // a later change of default follows this session too.
+              id: session.deskId,
+              name: desk.name,
+              strips,
+              choices: deskChoices,
+              canSetUp: canSetUpDesk,
+            }
+          : null
+      }
     />
   );
 }

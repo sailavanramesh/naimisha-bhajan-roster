@@ -7,6 +7,7 @@ import { predictForSinger } from "@/lib/singerProfile";
 import { getPitchLabels, getSingerProfile } from "@/lib/pitchQueries";
 import { historyCutoff } from "@/lib/dates";
 import { hasBeenSung, melbourneNowLocal } from "@/lib/sungCutoff";
+import { LIVE_SESSION } from "@/lib/archive";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,7 +58,7 @@ export async function GET(req: Request) {
     // date filter is coarse and still admits tonight, so the two-hour rule
     // below does the rest (lib/sungCutoff.ts).
     prisma.sessionSlot.findMany({
-      where: { singerId, bhajanId, session: { date: { lte: historyCutoff() } } },
+      where: { singerId, bhajanId, session: { ...LIVE_SESSION, date: { lte: historyCutoff() } } },
       orderBy: { session: { date: "desc" } },
       select: { confirmedPitch: true, session: { select: { date: true, startsAt: true } } },
     }),

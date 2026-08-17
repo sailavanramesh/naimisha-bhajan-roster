@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { melbourneTodayISO } from "@/lib/dates";
 import { defaultSessionOf } from "@/lib/sessionsOfDay";
+import { NOT_ARCHIVED } from "@/lib/archive";
 
 /**
  * The front door opens on the session people are about to sing.
@@ -30,6 +31,7 @@ export default async function Home() {
 
   const candidates = await prisma.session.findMany({
     where: {
+      ...NOT_ARCHIVED,
       date: { gte: today },
       slots: {
         some: {

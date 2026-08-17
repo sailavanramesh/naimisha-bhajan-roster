@@ -13,6 +13,7 @@ import {
   type ScopedRule,
 } from "@/lib/nudgeRules";
 import { RuleRow, type RuleRowValue } from "./RuleRow";
+import { NOT_ARCHIVED } from "@/lib/archive";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +42,7 @@ export default async function NotificationRulesPage() {
   const [rows, sessions] = await Promise.all([
     prisma.notificationRule.findMany(),
     prisma.session.findMany({
-      where: { date: { gte: new Date(`${today}T00:00:00.000Z`) } },
+      where: { ...NOT_ARCHIVED, date: { gte: new Date(`${today}T00:00:00.000Z`) } },
       orderBy: { date: "asc" },
       take: 8,
       select: { id: true, date: true, _count: { select: { slots: true } } },

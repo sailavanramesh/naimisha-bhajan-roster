@@ -8,6 +8,7 @@ import { SungBhajanSearch, type SungBhajan } from "./SungBhajanSearch";
 import { getPitchLabels, getSingerProfile } from "@/lib/pitchQueries";
 import { referenceFor, offsetFor, MIN_RAGA_SAMPLES } from "@/lib/singerProfile";
 import { isConfident, MIN_CONFIDENT_SAMPLES } from "@/lib/pitch";
+import { LIVE_SESSION } from "@/lib/archive";
 
 export const dynamic = "force-dynamic";
 
@@ -42,7 +43,7 @@ export default async function SingerPage({
   ]);
 
   const history = await prisma.sessionSlot.findMany({
-    where: { singerId: singer.id },
+    where: { singerId: singer.id, session: LIVE_SESSION },
     orderBy: { session: { date: "desc" } },
     include: { session: true, bhajan: { select: { id: true, title: true } } },
   });
