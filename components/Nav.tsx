@@ -72,9 +72,19 @@ export function Nav({ role = "viewer", isDev = false }: { role?: string; isDev?:
     return parent?.href ?? "/";
   }, [pathname]);
 
-  // Members and viewers see only the reading surface. The list is filtered on
-  // the server, so a hidden page is not merely un-clicked — the page itself
-  // also checks.
+  /*
+   * Members and viewers see only the reading surface. The list is filtered on
+   * the server, so a hidden page is not merely un-clicked — the page itself
+   * also checks.
+   *
+   * PROGRAMS AND SONGS ARE PART OF THAT SURFACE. Sailavan, 2026-08-17: members
+   * "should see the programs and songs fields as well". Both pages have always
+   * admitted a member — only the nav was hiding them — and they are exactly what
+   * a member wants on the night: the running order, who is singing what, and the
+   * words with their meaning. The controls that are not theirs are gated where
+   * they live: the desk picker and Update from the desk on `canSetUpDesk`, and
+   * the running order's own editing on `editPrograms`.
+   */
   const visible =
     role === "editor" || role === "owner"
       ? ITEMS
@@ -82,7 +92,17 @@ export function Nav({ role = "viewer", isDev = false }: { role?: string; isDev?:
         // counts, fairness loads, what needs building — and none of it is a
         // member's to act on. They start at the roster.
         ITEMS.filter((i) =>
-          ["/roster", "/bhajans", "/singers", "/explore", "/my-list", "/notifications", "/guide"].includes(
+          [
+            "/roster",
+            "/program",
+            "/songs",
+            "/bhajans",
+            "/singers",
+            "/explore",
+            "/my-list",
+            "/notifications",
+            "/guide",
+          ].includes(
             i.href,
           ),
         );
