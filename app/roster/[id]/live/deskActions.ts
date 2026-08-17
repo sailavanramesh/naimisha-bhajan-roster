@@ -1,7 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { can, getRole, getSignedInSinger } from "@/lib/auth";
+import { can, getRole, getSignedInSinger, requireCapability } from "@/lib/auth";
 import { jobsOf, runsSound } from "@/lib/sessionView";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -41,6 +41,61 @@ async function requireDeskSetup(): Promise<void> {
     "Only an editor, or somebody down as sound engineer or mic coordinator, " +
       "can change which desk this session is on.",
   );
+}
+
+/**
+ * Which bhajan the room is on.
+ *
+ * `Session.currentItemPosition`, the same column the programme desk uses — it
+ * lives on Session rather than on ProgramItem precisely so a bhajan night can
+ * share it. Shared, not per device: the point is that the desk, the stage and
+ * anybody watching are on the same bhajan.
+ *
+ * Gated on `setMicCushion`, which is every signed-in person, exactly as the
+ * programme desk is. Saying "we are on the second one now" is live operational
+ * state like a cushion colour, not an edit to the roster — and the person who
+ * notices the room has moved on is rarely the coordinator.
+ *
+ * Null is "we have not begun", which is how a session opens.
+ */
+export async function setCurrentBhajan(input: {
+  sessionId: string;
+  position: number | null;
+}): Promise<Result> {
+  try {
+    await requireCapability("setMicCushion");
+
+    const { sessionId, position } = z
+      .object({
+        sessionId: z.string().min(1),
+        // A bare int, not an index into anything: a slot's `position` is stable
+        // and 1-based, and clamping happens where it is read.
+        position: z.union([z.number().int().min(1).max(500), z.null()]),
+      })
+      .parse(input);
+
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { id: true, archivedAt: true },
+    });
+    if (!session) return { ok: false, error: "That session is gone." };
+    if (session.archivedAt) return { ok: false, error: "That session was removed." };
+
+    /*
+     * The session row's own updatedAt moves with this write, and that is what
+     * /api/sessions/version stamps — so tapping a bhajan here is what puts
+     * every other board on the same one, within a poll.
+     */
+    await prisma.session.update({
+      where: { id: sessionId },
+      data: { currentItemPosition: position },
+    });
+
+    revalidatePath(`/roster/${sessionId}/live`);
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "That did not save." };
+  }
 }
 
 export async function setSessionDesk(input: {

@@ -147,3 +147,62 @@ export function stripWho(assignment: StripAssignment): string | null {
   if (assignment.people.length === 0) return null;
   return assignment.people.map((p) => p.name).join(" + ");
 }
+
+/** One bhajan of the night, and who has a mic on it. */
+export type LiveSlotInput = {
+  position: number;
+  title: string;
+  /** Whoever is singing it, with the cushion they have for the night. */
+  lead: CushionPerson | null;
+  /** The chorus mics for THIS bhajan, each with its own cushion. */
+  chorus: readonly CushionPerson[];
+};
+
+export type LiveSlotPlan = {
+  position: number;
+  title: string;
+  plan: LiveDeskPlan;
+  /** Strips with somebody on them — the faders that are up for this bhajan. */
+  openIds: Set<string>;
+};
+
+/**
+ * The whole night, one desk per bhajan.
+ *
+ * Sailavan asked for all three bhajans in the one view, the way the programme
+ * desk shows every song at once. The reason it is worth doing per bhajan rather
+ * than once for the session is that the answer genuinely differs: the lead
+ * changes every bhajan, and the CHORUS cushions belong to the bhajan rather
+ * than to the night — the same singer may lead one on blue and chorus the next
+ * on green. A single session-wide desk could show neither honestly.
+ *
+ * A lead who is also down on the chorus of their own bhajan appears once, as
+ * the lead: they are one person holding one mic, and counting them twice would
+ * read as a clash with themselves.
+ */
+export function planLiveDeskForSlots({
+  strips,
+  slots,
+}: {
+  strips: readonly LiveStrip[];
+  slots: readonly LiveSlotInput[];
+}): LiveSlotPlan[] {
+  return slots.map((slot) => {
+    const people: CushionPerson[] = [];
+    const seen = new Set<string>();
+
+    for (const person of [slot.lead, ...slot.chorus]) {
+      if (!person || seen.has(person.singerId)) continue;
+      seen.add(person.singerId);
+      people.push(person);
+    }
+
+    const plan = planLiveDesk({ strips, people });
+    return {
+      position: slot.position,
+      title: slot.title,
+      plan,
+      openIds: new Set(plan.strips.filter((a) => a.people.length > 0).map((a) => a.strip.id)),
+    };
+  });
+}

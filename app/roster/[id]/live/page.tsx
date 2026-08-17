@@ -199,6 +199,7 @@ export default async function LiveSessionPage({
               name: desk.name,
               strips,
               choices: deskChoices,
+              currentPosition: session.currentItemPosition,
               canSetUp: canSetUpDesk,
             }
           : null

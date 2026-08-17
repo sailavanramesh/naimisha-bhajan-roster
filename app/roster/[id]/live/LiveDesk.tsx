@@ -2,23 +2,34 @@
 
 import { useState, useTransition } from "react";
 import { DeskStrips, stripName } from "@/app/program/[id]/DeskStrips";
-import { planLiveDesk, stripWho, type CushionPerson, type LiveStrip } from "@/lib/liveDesk";
-import { micColourDot, micColourLabel } from "@/lib/micCushion";
-import { setSessionDesk } from "./deskActions";
+import {
+  planLiveDeskForSlots,
+  stripWho,
+  type CushionPerson,
+  type LiveSlotInput,
+  type LiveStrip,
+} from "@/lib/liveDesk";
+import { micColourLabel } from "@/lib/micCushion";
+import { setCurrentBhajan, setSessionDesk } from "./deskActions";
 
 /**
- * The desk, on a bhajan night.
+ * The desk, on a bhajan night — every bhajan of it, at once.
  *
- * The same drawn mixer the programme side uses — one picture of the desk, not
- * two that drift — but with nothing to assign. On a Thursday a singer takes a
- * cushion for the night and the cushions are on fixed channels, so tapping a
- * coloured dot on the board has already said who is on channel 1. See
- * lib/liveDesk.ts, where the join is a pure function.
+ * The same drawn mixer the programme side uses, and now the same shape of
+ * screen: one desk per bhajan down the page, the way "All songs" reads on
+ * /program/[id]/desk. Sailavan asked for all three in the one view, and the
+ * reason it is worth doing per bhajan rather than once for the session is that
+ * the answer genuinely differs — the lead changes every bhajan, and the chorus
+ * cushions belong to the bhajan rather than to the night.
+ *
+ * NOTHING IS ASSIGNED HERE. On a Thursday a singer takes a cushion for the
+ * night, the cushions sit on fixed channels, and tapping a coloured dot on the
+ * board has already said who is on channel 1. See lib/liveDesk.ts, where the
+ * join is a pure function.
  *
  * UNDERSTATED ON PURPOSE. Sailavan: "viewable to all, but not as obvious as in
- * the programs, just a button to toggle to switch to that view and see the mic
- * view." Most people on this screen want the bhajan and the shruti; this is for
- * the one person at the back, and it costs them one press to reach.
+ * the programs, just a button to toggle". Most people on this screen want the
+ * bhajan and the shruti; this is for the one person at the back.
  */
 export function LiveDesk({
   sessionId,
@@ -26,8 +37,8 @@ export function LiveDesk({
   deskId,
   desks,
   strips,
-  people,
-  chorus,
+  slots,
+  currentPosition,
   canSetUpDesk,
 }: {
   sessionId: string;
@@ -36,16 +47,15 @@ export function LiveDesk({
   deskId: string | null;
   desks: { id: string; name: string }[];
   strips: LiveStrip[];
-  /** The night's lead singers, with whatever cushion each is on. */
-  people: CushionPerson[];
-  /** Chorus mics, which belong to a bhajan rather than to the night. */
-  chorus: { position: number; bhajanTitle: string; mics: CushionPerson[] }[];
+  slots: LiveSlotInput[];
+  /** Which bhajan the room is on. Null until somebody says. */
+  currentPosition: number | null;
   canSetUpDesk: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const plan = planLiveDesk({ strips, people });
+  const plans = planLiveDeskForSlots({ strips, slots });
 
   if (strips.length === 0) {
     return (
@@ -62,7 +72,7 @@ export function LiveDesk({
   }
 
   return (
-    <div className="grid gap-4 p-3 sm:p-4">
+    <div className="grid gap-3 p-3 sm:p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-on-ground-muted">
           {deskName ?? "No desk"} · who is on which channel, from the cushions.
@@ -103,99 +113,134 @@ export function LiveDesk({
         </p>
       ) : null}
 
-      <DeskStrips
-        strips={plan.strips.map((a) => ({
-          id: a.strip.id,
-          number: a.strip.number,
-          label: a.strip.label,
-          kind: a.strip.kind,
-          colour: a.strip.colour,
-          mic: a.strip.mic,
-          stereo: a.strip.stereo,
-          who: stripName(stripWho(a), a.strip.label),
-        }))}
-        /*
-         * Lit where somebody is on the mic. `openIds` means "this fader is up"
-         * on the programme side, and it means the same thing here: an empty
-         * strip is a channel nobody is singing on tonight.
-         */
-        openIds={new Set(plan.strips.filter((a) => a.people.length > 0).map((a) => a.strip.id))}
-        /*
-         * The ring means "look at this". On a programme it marks a mic that has
-         * changed hands for one item; here it marks a channel two people are on,
-         * which is the same instruction — read this strip before the session
-         * starts — so `flagLabel` renames it rather than a second mechanism.
-         */
-        swappedIds={new Set(plan.strips.filter((a) => a.clash).map((a) => a.strip.id))}
-        flagLabel="two people on this cushion"
-      />
-
-      {/*
-        THE TWO WAYS THE COLOURS DO NOT LINE UP, said plainly.
-
-        Both are setup problems somebody can fix in ten seconds if they are told
-        — and both would otherwise show as a strip that quietly says one name
-        when two people are holding that mic.
-      */}
-      {plan.hasProblem ? (
-        <div className="grid gap-1.5 rounded-[10px] border border-warn/40 bg-surface/60 p-2.5 text-xs">
-          {plan.strips
-            .filter((a) => a.clash)
-            .map((a) => (
-              <p key={a.strip.id} className="text-warn">
-                Channel {a.strip.number} has {a.people.map((p) => p.name).join(" and ")} on the
-                same cushion.
-              </p>
-            ))}
-          {plan.unplaced.length > 0 ? (
-            <p className="text-warn">
-              {plan.unplaced
-                .map((p) => `${p.name} (${micColourLabel(p.cushion).toLowerCase()})`)
-                .join(", ")}{" "}
-              {plan.unplaced.length === 1 ? "is on a cushion" : "are on cushions"} this desk has
-              no channel for.
-            </p>
-          ) : null}
-        </div>
+      {plans.length === 0 ? (
+        <p className="text-sm text-on-ground-muted">Nothing rostered on this session yet.</p>
       ) : null}
 
-      {plan.noCushion.length > 0 ? (
-        <p className="text-xs text-on-ground-muted">
-          No cushion yet: {plan.noCushion.map((p) => p.name).join(", ")}.
-        </p>
-      ) : null}
+      <ul className="grid gap-2">
+        {plans.map((s) => {
+          const here = s.position === currentPosition;
 
-      {/*
-        The chorus, listed rather than laid on the desk.
+          return (
+            <li
+              key={s.position}
+              /*
+                THE BHAJAN THE ROOM IS ON, ringed in brass.
 
-        A chorus cushion belongs to a BHAJAN, not to the night — the same singer
-        may lead one on blue and chorus another on green — so laying them over
-        the same strips would invent a clash on every session that has any.
-      */}
-      {chorus.length > 0 ? (
-        <div className="grid gap-1.5">
-          <p className="text-[11px] uppercase tracking-wide text-on-ground-muted">Chorus mics</p>
-          <ul className="grid gap-1 text-xs">
-            {chorus.map((c) => (
-              <li key={c.position} className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-on-ground-muted">{c.position}</span>
-                <span className="min-w-0 truncate text-on-ground-muted">{c.bhajanTitle}</span>
-                {c.mics.map((m) => (
-                  <span key={m.singerId} className="flex items-center gap-1">
-                    <span
-                      aria-hidden
-                      className="h-2 w-2 rounded-full border border-rule"
-                      style={{ background: micColourDot(m.cushion) ?? "transparent" }}
-                    />
-                    <span>{m.name}</span>
-                    <span className="sr-only">{micColourLabel(m.cushion)}</span>
-                  </span>
-                ))}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+                The same mark an open strip carries, for the same reason: on
+                this screen brass means "this one, now". Lifted from the
+                programme desk's all-songs view rather than invented, because
+                these two screens are read the same way — from across a hall,
+                looking for your place.
+              */
+              className={[
+                "grid gap-1.5 rounded-[12px] px-2 py-2",
+                here ? "bg-brass/[0.06] ring-2 ring-brass/70" : "",
+              ].join(" ")}
+            >
+              {/*
+                Tapping a bhajan moves THE ROOM to it, not just this screen —
+                Session.currentItemPosition is shared, so the desk, the stage
+                and anybody watching follow within a poll. Tapping the one
+                already current puts the session back to "not begun", which is
+                the only way to undo a mis-tap.
+              */}
+              <button
+                type="button"
+                disabled={pending}
+                aria-pressed={here}
+                onClick={() =>
+                  startTransition(async () => {
+                    setError(null);
+                    const res = await setCurrentBhajan({
+                      sessionId,
+                      position: here ? null : s.position,
+                    });
+                    if (!res.ok) setError(res.error);
+                  })
+                }
+                className="flex flex-wrap items-baseline gap-2 text-left"
+              >
+                <span
+                  className={[
+                    "rounded-key px-1.5 py-0.5 font-mono text-[11px] font-bold",
+                    here ? "bg-brass-ink text-ivory" : "text-on-ground-muted",
+                  ].join(" ")}
+                >
+                  {s.position}
+                </span>
+                <span className={here ? "font-semibold" : ""}>{s.title}</span>
+                <span className="text-xs text-on-ground-muted">
+                  {s.openIds.size} of {strips.length} open
+                  {here ? " · now" : ""}
+                </span>
+              </button>
+
+              <DeskStrips
+                dense
+                strips={s.plan.strips.map((a) => ({
+                  id: a.strip.id,
+                  number: a.strip.number,
+                  label: a.strip.label,
+                  kind: a.strip.kind,
+                  colour: a.strip.colour,
+                  mic: a.strip.mic,
+                  stereo: a.strip.stereo,
+                  who: stripName(stripWho(a), a.strip.label),
+                }))}
+                openIds={s.openIds}
+                /*
+                  The ring means "look at this". On a programme it marks a mic
+                  that has changed hands for one item; here it marks a channel
+                  two people are on, which is the same instruction — read this
+                  strip before the session starts.
+                */
+                swappedIds={new Set(s.plan.strips.filter((a) => a.clash).map((a) => a.strip.id))}
+                flagLabel="two people on this cushion"
+              />
+
+              {/*
+                THE TWO WAYS THE COLOURS DO NOT LINE UP, said plainly, under the
+                bhajan they apply to.
+
+                Both are setup problems somebody can fix in ten seconds if they
+                are told — and both would otherwise show as a strip that quietly
+                says one name when two people are holding that mic.
+              */}
+              {s.plan.hasProblem ? (
+                <div className="grid gap-1 rounded-[10px] border border-warn/40 bg-surface/60 px-2.5 py-2 text-xs">
+                  {s.plan.strips
+                    .filter((a) => a.clash)
+                    .map((a) => (
+                      <p key={a.strip.id} className="text-warn">
+                        Channel {a.strip.number} has {a.people.map((p) => p.name).join(" and ")} on
+                        the same cushion.
+                      </p>
+                    ))}
+                  {s.plan.unplaced.length > 0 ? (
+                    <p className="text-warn">
+                      {s.plan.unplaced.map(named).join(", ")}{" "}
+                      {s.plan.unplaced.length === 1 ? "is on a cushion" : "are on cushions"} this
+                      desk has no channel for.
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {s.plan.noCushion.length > 0 ? (
+                <p className="text-xs text-on-ground-muted">
+                  No cushion yet: {s.plan.noCushion.map((p) => p.name).join(", ")}.
+                </p>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
     </div>
   );
+}
+
+/** "Jothsna (maroon)" — the name is not enough when the colour is the problem. */
+function named(p: CushionPerson): string {
+  return `${p.name} (${micColourLabel(p.cushion).toLowerCase()})`;
 }

@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { planLiveDesk, stripWho, type CushionPerson, type LiveStrip } from "@/lib/liveDesk";
+import {
+  planLiveDesk,
+  planLiveDeskForSlots,
+  stripWho,
+  type CushionPerson,
+  type LiveStrip,
+} from "@/lib/liveDesk";
 
 const strip = (n: number, label: string, colour: LiveStrip["colour"], kind = "vocal"): LiveStrip => ({
   id: `c${n}`,
@@ -152,5 +158,77 @@ describe("planLiveDesk", () => {
 describe("stripWho", () => {
   it("says nothing for an empty strip", () => {
     expect(stripWho({ strip: DESK[0], people: [], clash: false })).toBe(null);
+  });
+});
+
+describe("planLiveDeskForSlots", () => {
+  const slot = (position: number, title: string, lead: CushionPerson | null, chorus: CushionPerson[] = []) => ({
+    position, title, lead, chorus,
+  });
+
+  it("gives each bhajan its own desk, with only its own mics up", () => {
+    const plans = planLiveDeskForSlots({
+      strips: DESK,
+      slots: [
+        slot(1, "Lambodara", person("s1", "Pavitra", "orange")),
+        slot(2, "Parthesa", person("s2", "Sailavan", "grey")),
+      ],
+    });
+
+    expect(plans.map((p) => p.title)).toEqual(["Lambodara", "Parthesa"]);
+    // Bhajan 1 lights channel 5 (orange) and nothing else.
+    expect([...plans[0].openIds]).toEqual(["c5"]);
+    expect([...plans[1].openIds]).toEqual(["c2"]);
+  });
+
+  /*
+   * The reason this is per bhajan at all. A chorus cushion belongs to the
+   * BHAJAN, so the same desk looks different from one to the next even when
+   * the lead has not changed.
+   */
+  it("adds each bhajan's own chorus mics", () => {
+    const plans = planLiveDeskForSlots({
+      strips: DESK,
+      slots: [
+        slot(1, "One", person("s1", "Pavitra", "orange"), [person("s3", "Anvita", "green")]),
+        slot(2, "Two", person("s1", "Pavitra", "orange")),
+      ],
+    });
+
+    expect([...plans[0].openIds].sort()).toEqual(["c3", "c5"]);
+    expect([...plans[1].openIds]).toEqual(["c5"]);
+  });
+
+  it("counts a lead who is also on their own chorus once", () => {
+    const plans = planLiveDeskForSlots({
+      strips: DESK,
+      slots: [slot(1, "One", person("s1", "Pavitra", "orange"), [person("s1", "Pavitra", "green")])],
+    });
+
+    const orange = plans[0].plan.strips.find((s) => s.strip.number === "5")!;
+    expect(orange.people.map((p) => p.name)).toEqual(["Pavitra"]);
+    expect(orange.clash).toBe(false);
+    // The chorus entry is dropped entirely, not moved to green.
+    expect([...plans[0].openIds]).toEqual(["c5"]);
+  });
+
+  it("still reports a clash, per bhajan", () => {
+    const plans = planLiveDeskForSlots({
+      strips: DESK,
+      slots: [
+        slot(1, "One", person("s1", "Pavitra", "orange"), [person("s2", "Sailavan", "orange")]),
+        slot(2, "Two", person("s1", "Pavitra", "orange")),
+      ],
+    });
+
+    expect(plans[0].plan.hasProblem).toBe(true);
+    expect(plans[1].plan.hasProblem).toBe(false);
+  });
+
+  it("draws a bhajan with nobody on it as an empty desk", () => {
+    const plans = planLiveDeskForSlots({ strips: DESK, slots: [slot(1, "Not chosen", null)] });
+    expect([...plans[0].openIds]).toEqual([]);
+    expect(plans[0].plan.hasProblem).toBe(false);
+    expect(plans[0].plan.strips).toHaveLength(DESK.length);
   });
 });

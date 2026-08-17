@@ -149,6 +149,8 @@ export function LiveBoard({
     name: string | null;
     strips: LiveStrip[];
     choices: { id: string; name: string }[];
+    /** Which bhajan the room is on. Shared across devices, so it polls in. */
+    currentPosition: number | null;
     canSetUp: boolean;
   } | null;
 }) {
@@ -584,30 +586,33 @@ export function LiveBoard({
             deskName={desk.name}
             desks={desk.choices}
             strips={desk.strips}
-            people={slots
-              .filter((s): s is LiveSlot & { singerId: string } => Boolean(s.singerId))
-              /*
-               * One entry per PERSON, not per slot. A singer who sings twice has
-               * one mic for the night — that is what MicCushion is keyed on —
-               * and listing them twice would read as a clash with themselves.
-               */
-              .filter((s, i, all) => all.findIndex((o) => o.singerId === s.singerId) === i)
-              .map((s) => ({
-                singerId: s.singerId,
-                name: s.singerName,
-                cushion: cushions.get(s.singerId)?.colour ?? null,
-              }))}
-            chorus={slots
-              .filter((s) => s.chorus.length > 0)
-              .map((s) => ({
-                position: s.position,
-                bhajanTitle: s.bhajanTitle,
-                mics: s.chorus.map((c) => ({
-                  singerId: c.singerId,
-                  name: c.name,
-                  cushion: c.cushion,
-                })),
-              }))}
+            currentPosition={desk.currentPosition}
+            /*
+             * One entry per BHAJAN, because that is the level at which the
+             * answer changes: the lead is per bhajan, and a chorus cushion
+             * belongs to the bhajan rather than to the night.
+             *
+             * The lead's cushion comes from the LIVE map, so a dot tapped on
+             * the board moves a name on the desk without a reload. The chorus
+             * cushions come with the slot — they are already per bhajan and do
+             * not poll.
+             */
+            slots={slots.map((s) => ({
+              position: s.position,
+              title: s.bhajanTitle,
+              lead: s.singerId
+                ? {
+                    singerId: s.singerId,
+                    name: s.singerName,
+                    cushion: cushions.get(s.singerId)?.colour ?? null,
+                  }
+                : null,
+              chorus: s.chorus.map((c) => ({
+                singerId: c.singerId,
+                name: c.name,
+                cushion: c.cushion,
+              })),
+            }))}
             canSetUpDesk={desk.canSetUp}
           />
         </div>
