@@ -184,3 +184,52 @@ export async function getSingerProfile(
 export async function getAllProfiles(): Promise<Map<string, SingerProfile>> {
   return buildAllProfiles(await getAllSungRows());
 }
+
+/** A bhajan that is on a roster ahead of us, not yet sung. */
+export type ScheduledRow = {
+  sessionId: string;
+  dateISO: string;
+  startsAt: string | null;
+  singerName: string | null;
+  confirmedPitch: string | null;
+};
+
+/**
+ * Where this bhajan is coming up.
+ *
+ * "Sung" is evidence and only counts once the session has actually happened —
+ * `hasBeenSung`, two hours past its start. That is right, and on its own it made
+ * a scheduled bhajan invisible: it was not in the history because it had not
+ * happened, and nowhere else said it was about to. Sailavan, 2026-08-17: a
+ * bhajan scheduled in the future "shouldn't be left out, but can't be in known
+ * or sung already — should have a 'scheduled to be sung' or something
+ * equivalent."
+ *
+ * So this is the other half of the same cutoff: everything on the far side of
+ * it. A session moved forward or back crosses between the two by itself, since
+ * both are computed from the date at read time rather than recorded anywhere.
+ */
+export async function getScheduledRowsForBhajan(bhajanId: string): Promise<ScheduledRow[]> {
+  const slots = await prisma.sessionSlot.findMany({
+    where: { bhajanId, session: { date: { gte: historyCutoff() }, format: 'bhajans' } },
+    select: {
+      confirmedPitch: true,
+      singer: { select: { name: true } },
+      session: { select: { id: true, date: true, startsAt: true } },
+    },
+    orderBy: { session: { date: 'asc' } },
+  });
+
+  const nowLocal = melbourneNowLocal();
+  return slots
+    .filter(
+      (s) => !hasBeenSung(s.session.date.toISOString().slice(0, 10), s.session.startsAt, nowLocal),
+    )
+    .map((s) => ({
+      sessionId: s.session.id,
+      dateISO: s.session.date.toISOString().slice(0, 10),
+      startsAt: s.session.startsAt,
+      singerName: s.singer?.name ?? null,
+      confirmedPitch: s.confirmedPitch,
+    }));
+}

@@ -5,7 +5,12 @@ import { Gender } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { ShrutiLadder } from "@/components/ShrutiLadder";
 import { DeitySymbols } from "@/components/DeitySymbol";
-import { getPitchLabels, getAllProfiles, getSungRowsForBhajan } from "@/lib/pitchQueries";
+import {
+  getPitchLabels,
+  getAllProfiles,
+  getScheduledRowsForBhajan,
+  getSungRowsForBhajan,
+} from "@/lib/pitchQueries";
 import { predictForSinger } from "@/lib/singerProfile";
 import { semitoneDelta } from "@/lib/pitch";
 import { AddToList } from "@/components/AddToList";
@@ -109,8 +114,9 @@ export default async function BhajanPage({
     );
   }
 
-  const [sungRows, profiles, rungs, singers, role, signedIn] = await Promise.all([
+  const [sungRows, scheduled, profiles, rungs, singers, role, signedIn] = await Promise.all([
     getSungRowsForBhajan(bhajan.id),
+    getScheduledRowsForBhajan(bhajan.id),
     getAllProfiles(),
     getPitchLabels(),
     prisma.singer.findMany({ orderBy: { name: "asc" } }),
@@ -300,6 +306,49 @@ export default async function BhajanPage({
                 ]),
               )}
             />
+          ) : null}
+
+          {/*
+            COMING UP — the other side of the sung cutoff.
+
+            "Sung" is evidence, and only counts two hours after a session has
+            started. That is right, and on its own it left a bhajan already on
+            next Thursday's roster looking like one nobody had ever touched:
+            absent from the history because it had not happened, and mentioned
+            nowhere else. Sailavan: it "shouldn't be left out, but can't be in
+            known or sung already".
+
+            So it is stated separately and in the future tense. Nothing here
+            counts towards anybody's history, their profile, or their known
+            list — it is a plan, and a plan that moves date moves between these
+            two sections on its own, because both are computed from the date
+            when the page is read.
+          */}
+          {scheduled.length > 0 ? (
+            <section className="grid gap-2">
+              <h2 className="text-sm font-semibold">Scheduled to be sung</h2>
+              <ul className="grid gap-1">
+                {scheduled.map((r) => (
+                  <li key={`${r.sessionId}-${r.singerName ?? ""}`} className="text-sm">
+                    <Link
+                      href={`/roster/${r.sessionId}`}
+                      className="underline-offset-2 hover:underline"
+                    >
+                      {new Intl.DateTimeFormat("en-AU", {
+                        weekday: "long",
+                        day: "numeric",
+                        month: "long",
+                        timeZone: "UTC",
+                      }).format(new Date(`${r.dateISO}T12:00:00.000Z`))}
+                    </Link>
+                    <span className="text-on-surface-muted">
+                      {r.singerName ? ` · ${r.singerName}` : " · nobody rostered yet"}
+                      {r.confirmedPitch ? ` · ${r.confirmedPitch}` : ""}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </section>
           ) : null}
 
           {/* Who has sung it */}
