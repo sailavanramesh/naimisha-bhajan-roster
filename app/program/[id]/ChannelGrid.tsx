@@ -27,6 +27,7 @@ export type ChannelRow = {
   /** Is this programme running the strip as a stereo pair? */
   stereo: boolean;
   singerId: string | null;
+  instrumentId: string | null;
   person: string | null;
   who: string | null;
 };
@@ -44,7 +45,13 @@ export type GridItem = {
    * A singer's mic on the mridangam for one song, or on one head of a
    * two-sided drum.
    */
-  swaps: { channelId: string; instrumentId: string | null; person: string | null; who: string }[];
+  swaps: {
+    channelId: string;
+    singerId: string | null;
+    instrumentId: string | null;
+    person: string | null;
+    who: string;
+  }[];
 };
 
 /**
@@ -83,6 +90,8 @@ export function ChannelGrid({
   const [editing, setEditing] = useState<string | null>(null);
   /** Which item has its mic-swap row open. One at a time; it is a wide row. */
   const [swapsFor, setSwapsFor] = useState<string | null>(null);
+  /** The channel list below the grid, opened when a heading is tapped. */
+  const [channelsOpen, setChannelsOpen] = useState(false);
   const [newNumber, setNewNumber] = useState("");
 
   const numbers = songNumbers(items);
@@ -240,6 +249,28 @@ export function ChannelGrid({
                     className="w-11 border-b border-rule-surface px-0.5 py-1.5 text-center align-bottom font-semibold"
                     title={`${stripNumber(c.number, c.stereo)} · ${c.label}${c.who ? ` (${c.who})` : ""}`}
                   >
+                    {/*
+                      The heading is the way in to naming a strip.
+
+                      Sailavan: "I'm still not able to allocate names to
+                      channels — it's just a tick box." He was right, and it was
+                      a discoverability problem as much as a missing control:
+                      the only editor lived behind a collapsed <details> below
+                      the grid, so the column you were looking at was not the
+                      thing you could act on. Tapping the heading now opens that
+                      channel's editor, where you are already pointing.
+                    */}
+                    <button
+                      type="button"
+                      disabled={!canEdit}
+                      aria-label={`Edit channel ${stripNumber(c.number, c.stereo)}`}
+                      className={canEdit ? "w-full cursor-pointer" : "w-full cursor-default"}
+                      onClick={() => {
+                        if (!canEdit) return;
+                        setEditing(c.id);
+                        setChannelsOpen(true);
+                      }}
+                    >
                     <span className="flex flex-col items-center gap-0.5">
                       {c.colour ? (
                         <span
@@ -253,6 +284,7 @@ export function ChannelGrid({
                         {shortName(c.who ?? c.label)}
                       </span>
                     </span>
+                    </button>
                   </th>
                 ))}
               </tr>
@@ -389,18 +421,35 @@ export function ChannelGrid({
                                 <span className="w-9 shrink-0 text-right font-mono text-[11px] text-on-surface-muted">
                                   {stripNumber(c.number, c.stereo)}
                                 </span>
-                                <select
-                                  defaultValue={swap?.instrumentId ?? ""}
+                                {/*
+                                  Singers AND instruments in one list — a mic
+                                  moves between a voice and a drum, so asking
+                                  which of the two it is before you can say
+                                  whose it is gets the order backwards.
+                                */}
+                                <WhoSelect
+                                  value={
+                                    swap?.singerId
+                                      ? { kind: "singer", id: swap.singerId }
+                                      : swap?.instrumentId
+                                        ? { kind: "instrument", id: swap.instrumentId }
+                                        : { kind: "none" }
+                                  }
+                                  singers={singers}
+                                  instruments={instruments}
                                   disabled={pending}
-                                  aria-label={`Instrument on channel ${stripNumber(c.number, c.stereo)} for this item`}
+                                  emptyLabel={c.who ?? "usual"}
                                   className="h-7 min-w-0 flex-1 rounded-key border border-rule-surface bg-field px-1 text-[11px]"
-                                  onChange={(e) =>
+                                  label={`Who is on channel ${stripNumber(c.number, c.stereo)} for this item`}
+                                  onPick={(picked) =>
                                     startTransition(async () => {
                                       const res = await setItemChannelWho({
                                         itemId: item.id,
                                         channelId: c.id,
-                                        instrumentId: e.target.value || null,
-                                        // Choosing an instrument clears a typed
+                                        singerId: picked.kind === "singer" ? picked.id : null,
+                                        instrumentId:
+                                          picked.kind === "instrument" ? picked.id : null,
+                                        // Picking from the list clears a typed
                                         // name: two answers to one question is
                                         // how a screen starts disagreeing with
                                         // itself.
@@ -409,14 +458,7 @@ export function ChannelGrid({
                                       say(res, "");
                                     })
                                   }
-                                >
-                                  <option value="">{c.who ?? "usual"}</option>
-                                  {instruments.map((i) => (
-                                    <option key={i.id} value={i.id}>
-                                      {i.name}
-                                    </option>
-                                  ))}
-                                </select>
+                                />
                                 <Input
                                   defaultValue={swap?.person ?? ""}
                                   disabled={pending}
@@ -448,7 +490,11 @@ export function ChannelGrid({
         </div>
 
         {/* The channel list itself, below the grid where it is edited rarely. */}
-        <details className="rounded-[10px] border border-rule-surface p-2">
+        <details
+          open={channelsOpen}
+          onToggle={(e) => setChannelsOpen((e.currentTarget as HTMLDetailsElement).open)}
+          className="rounded-[10px] border border-rule-surface p-2"
+        >
           <summary className="cursor-pointer text-sm font-medium">
             The channels ({channels.length})
           </summary>
@@ -462,6 +508,7 @@ export function ChannelGrid({
                   <ChannelEditor
                     channel={c}
                     singers={singers}
+                    instruments={instruments}
                     onDone={() => setEditing(null)}
                     onMessage={setMessage}
                   />
@@ -566,17 +613,25 @@ export function ChannelGrid({
 function ChannelEditor({
   channel,
   singers,
+  instruments,
   onDone,
   onMessage,
 }: {
   channel: ChannelRow;
   singers: { id: string; name: string }[];
+  instruments: { id: string; name: string }[];
   onDone: () => void;
   onMessage: (m: { ok: boolean; text: string } | null) => void;
 }) {
   const [label, setLabel] = useState(channel.label);
   const [kind, setKind] = useState(channel.kind);
-  const [singerId, setSingerId] = useState(channel.singerId ?? "");
+  const [who, setWho] = useState<ChannelWho>(
+    channel.singerId
+      ? { kind: "singer", id: channel.singerId }
+      : channel.instrumentId
+        ? { kind: "instrument", id: channel.instrumentId }
+        : { kind: "none" },
+  );
   const [person, setPerson] = useState(channel.person ?? "");
   const [colour, setColour] = useState<MicColourValue | null>(channel.colour);
   const [stereo, setStereo] = useState(channel.stereo);
@@ -620,22 +675,18 @@ function ChannelEditor({
         />
         stereo
       </label>
-      <select
-        value={singerId}
-        aria-label="Who is on it"
-        className="h-8 rounded-key border border-rule-surface bg-field px-1 text-xs"
-        onChange={(e) => {
-          setSingerId(e.target.value);
-          if (e.target.value) setPerson("");
+      <WhoSelect
+        value={who}
+        singers={singers}
+        instruments={instruments}
+        label="Who or what is on it"
+        onPick={(picked) => {
+          setWho(picked);
+          // One occupant. Picking from the list clears a typed name, so the two
+          // can never both be set and then disagree.
+          if (picked.kind !== "none") setPerson("");
         }}
-      >
-        <option value="">—</option>
-        {singers.map((s) => (
-          <option key={s.id} value={s.id}>
-            {s.name}
-          </option>
-        ))}
-      </select>
+      />
       <Input
         value={person}
         aria-label="Or a name"
@@ -643,7 +694,7 @@ function ChannelEditor({
         className="h-8 w-28"
         onChange={(e) => {
           setPerson(e.target.value);
-          if (e.target.value) setSingerId("");
+          if (e.target.value) setWho({ kind: "none" });
         }}
       />
       <span className="flex items-center gap-1">
@@ -672,7 +723,8 @@ function ChannelEditor({
               id: channel.id,
               label,
               kind,
-              singerId,
+              singerId: who.kind === "singer" ? who.id : "",
+              instrumentId: who.kind === "instrument" ? who.id : "",
               person,
               colour,
               stereo,
@@ -692,5 +744,88 @@ function ChannelEditor({
         cancel
       </button>
     </span>
+  );
+}
+
+/**
+ * Who or what is on a strip — singers and instruments in ONE list.
+ *
+ * Sailavan asked for a single dropdown with headers rather than two controls,
+ * and the reason is the thing that makes this hard to model any other way: a
+ * mic moves between a voice and an instrument. Channel 3 is Prasanna tonight
+ * and the mridangam on the next song, and asking "is this a vocal or an
+ * instrument?" before you can say whose it is gets the order backwards.
+ *
+ * `optgroup` is what browsers give for this, and it is the right thing here:
+ * one control, one answer, two labelled groups inside it. On a phone it opens
+ * as the native picker with the headings intact.
+ *
+ * The value carries its own type — "s:<id>" or "i:<id>" — so the caller never
+ * has to guess which table an id came from.
+ */
+export type ChannelWho =
+  | { kind: "none" }
+  | { kind: "singer"; id: string }
+  | { kind: "instrument"; id: string };
+
+export function whoValue(who: ChannelWho): string {
+  if (who.kind === "singer") return `s:${who.id}`;
+  if (who.kind === "instrument") return `i:${who.id}`;
+  return "";
+}
+
+export function parseWho(value: string): ChannelWho {
+  if (value.startsWith("s:")) return { kind: "singer", id: value.slice(2) };
+  if (value.startsWith("i:")) return { kind: "instrument", id: value.slice(2) };
+  return { kind: "none" };
+}
+
+function WhoSelect({
+  value,
+  singers,
+  instruments,
+  label,
+  disabled,
+  className,
+  emptyLabel = "—",
+  onPick,
+}: {
+  value: ChannelWho;
+  singers: { id: string; name: string }[];
+  instruments: { id: string; name: string }[];
+  label: string;
+  disabled?: boolean;
+  className?: string;
+  emptyLabel?: string;
+  onPick: (who: ChannelWho) => void;
+}) {
+  return (
+    <select
+      value={whoValue(value)}
+      aria-label={label}
+      disabled={disabled}
+      className={className ?? "h-8 min-w-0 rounded-key border border-rule-surface bg-field px-1 text-xs"}
+      onChange={(e) => onPick(parseWho(e.target.value))}
+    >
+      <option value="">{emptyLabel}</option>
+      {singers.length > 0 ? (
+        <optgroup label="Singers">
+          {singers.map((s) => (
+            <option key={s.id} value={`s:${s.id}`}>
+              {s.name}
+            </option>
+          ))}
+        </optgroup>
+      ) : null}
+      {instruments.length > 0 ? (
+        <optgroup label="Instruments">
+          {instruments.map((i) => (
+            <option key={i.id} value={`i:${i.id}`}>
+              {i.name}
+            </option>
+          ))}
+        </optgroup>
+      ) : null}
+    </select>
   );
 }

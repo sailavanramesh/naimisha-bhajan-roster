@@ -281,6 +281,7 @@ export async function updateChannel(input: {
   kind: "vocal" | "instrument" | "track" | "spare";
   singerId: string;
   person: string;
+  instrumentId?: string;
   colour: string | null;
   stereo?: boolean;
 }): Promise<Result> {
@@ -293,6 +294,10 @@ export async function updateChannel(input: {
       kind: z.enum(["vocal", "instrument", "track", "spare"]),
       singerId: Text(60),
       person: Text(80),
+      // A strip can carry an INSTRUMENT, which this could not say until now —
+      // so a tabla channel could be labelled but never actually pointed at the
+      // tabla, and nothing downstream knew what was on it.
+      instrumentId: Text(60).optional(),
       colour: z
         .union([z.string(), z.null()])
         .refine((v) => v === null || v === "" || isChorusColour(v), "not a cushion colour"),
@@ -313,9 +318,15 @@ export async function updateChannel(input: {
     data: {
       label: parsed.data.label,
       kind: parsed.data.kind,
+      /*
+       * One occupant, three ways of naming them, and only one may be set.
+       * Storing two lets them disagree, and then the desk view has to pick —
+       * which is a decision nobody made on purpose.
+       */
       singerId: parsed.data.singerId,
-      // A singer carries their own name; storing it twice lets the two disagree.
-      person: parsed.data.singerId ? null : parsed.data.person,
+      instrumentId: parsed.data.singerId ? null : (parsed.data.instrumentId ?? null),
+      person:
+        parsed.data.singerId || parsed.data.instrumentId ? null : parsed.data.person,
       colour: parsed.data.colour ? (parsed.data.colour as MicColourValue) : null,
       ...(parsed.data.stereo === undefined ? {} : { stereo: parsed.data.stereo }),
     },

@@ -62,6 +62,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
               channelId: true,
               open: true,
               // The per-item override: who is on this strip for THIS item.
+              singerId: true,
               instrumentId: true,
               person: true,
               singer: { select: { name: true } },
@@ -206,6 +207,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
           colour: c.colour,
           stereo: c.stereo,
           singerId: c.singerId,
+          instrumentId: c.instrumentId,
           person: c.person,
           // What to show in brackets: the person on it, or the instrument.
           who: c.singer?.name ?? c.person ?? c.instrument?.name ?? null,
@@ -220,6 +222,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
           swaps: item.channels
             .map((c) => ({
               channelId: c.channelId,
+              singerId: c.singerId,
               instrumentId: c.instrumentId,
               person: c.person,
               who: occupantFor(
@@ -232,7 +235,15 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
               ),
             }))
             .filter(
-              (s): s is { channelId: string; instrumentId: string | null; person: string | null; who: string } =>
+              (
+                s,
+              ): s is {
+                channelId: string;
+                singerId: string | null;
+                instrumentId: string | null;
+                person: string | null;
+                who: string;
+              } =>
                 s.who !== null,
             ),
         }))}
