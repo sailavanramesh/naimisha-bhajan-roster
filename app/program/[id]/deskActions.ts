@@ -636,7 +636,10 @@ export async function refreshFromDesk(input: {
    * this desk", so it is one action rather than two that would have to agree.
    */
   deskId?: string;
-}): Promise<{ ok: true; updated: number; added: number } | { ok: false; error: string }> {
+}): Promise<
+  | { ok: true; updated: number; added: number; removed: number; kept: number }
+  | { ok: false; error: string }
+> {
   await requireDeskSetup(input.sessionId);
 
   const parsed = z.object({ sessionId: Id, deskId: Id.optional() }).safeParse(input);
@@ -656,7 +659,31 @@ export async function refreshFromDesk(input: {
     select: {
       format: true,
       desk: { select: { channels: { orderBy: { number: "asc" } } } },
-      channels: { select: { id: true, number: true } },
+      channels: {
+        select: {
+          id: true,
+          number: true,
+          // Enough to tell a strip somebody has claimed from one that is still
+          // the desk's own scaffolding. See the removal below.
+          singerId: true,
+          person: true,
+          instrumentId: true,
+          withSingerId: true,
+          withPerson: true,
+          note: true,
+          items: {
+            select: {
+              open: true,
+              singerId: true,
+              person: true,
+              instrumentId: true,
+              withSingerId: true,
+              withPerson: true,
+              note: true,
+            },
+          },
+        },
+      },
     },
   });
   if (!session) return { ok: false, error: "That programme is gone." };
@@ -692,9 +719,55 @@ export async function refreshFromDesk(input: {
     }
   }
 
+  /*
+   * A STRIP THE DESK NO LONGER HAS.
+   *
+   * Adding and updating was only two thirds of "take the strips from this desk".
+   * Sailavan deleted channel 20 from the MG20XU, pressed Update from the desk,
+   * and the programme went on showing a channel 20 that exists nowhere — which
+   * is the same phantom the desk itself had, one table further along.
+   *
+   * Removed only when the programme has not CLAIMED it. A strip carrying a name,
+   * an instrument, a note, or open on any item is somebody's answer, and a
+   * programme is a record of an evening: deleting that because the desk was
+   * re-patched afterwards would throw away the one thing the copy exists to
+   * protect. Those are kept and counted, so the person is told rather than left
+   * to notice.
+   */
+  const onDesk = new Set(session.desk.channels.map((c) => String(c.number)));
+  const claimed = (c: (typeof session.channels)[number]) =>
+    Boolean(
+      c.singerId ||
+        c.person ||
+        c.instrumentId ||
+        c.withSingerId ||
+        c.withPerson ||
+        c.note ||
+        c.items.some(
+          (i) =>
+            i.open ||
+            i.singerId ||
+            i.person ||
+            i.instrumentId ||
+            i.withSingerId ||
+            i.withPerson ||
+            i.note,
+        ),
+    );
+
+  const gone = session.channels.filter((c) => !onDesk.has(c.number));
+  const removable = gone.filter((c) => !claimed(c));
+  const kept = gone.length - removable.length;
+
+  if (removable.length > 0) {
+    writes.push(
+      prisma.sessionChannel.deleteMany({ where: { id: { in: removable.map((c) => c.id) } } }),
+    );
+  }
+
   if (writes.length > 0) await prisma.$transaction(writes);
   await refresh(parsed.data.sessionId);
-  return { ok: true, updated, added };
+  return { ok: true, updated, added, removed: removable.length, kept };
 }
 
 /**

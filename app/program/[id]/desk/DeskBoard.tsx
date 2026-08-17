@@ -353,7 +353,19 @@ export function DeskBoard({
                         ref={(el) => {
                           songRows.current.set(it.position, el);
                         }}
-                        className="grid gap-1.5"
+                        /*
+                          THE SONG THE ROOM IS ON, ringed in brass.
+                          
+                          The same mark an open strip carries, for the same
+                          reason: on this screen brass means "this one, now".
+                          Sailavan asked for it here because the all-songs view
+                          is read from across a hall, where a bolder number and
+                          a heavier title are not enough to find your place.
+                        */
+                        className={[
+                          "grid gap-1.5 rounded-[12px] px-2 py-2",
+                          here ? "bg-brass/[0.06] ring-2 ring-brass/70" : "",
+                        ].join(" ")}
                       >
                         <button
                           type="button"
