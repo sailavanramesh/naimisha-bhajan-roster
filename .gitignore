@@ -34,3 +34,6 @@ pnpm-debug.log*
 
 # next standalone build output
 .next/standalone
+
+# one-off dev->prod data transfer scripts, never committed
+.transfer/

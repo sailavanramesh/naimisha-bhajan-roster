@@ -27,6 +27,9 @@ const ITEMS: NavItem[] = [
   { href: "/singers", label: "Singers", short: "S" },
   { href: "/fairness", label: "Fairness", short: "≡" },
   { href: "/admin", label: "Admin", short: "⚙" },
+  // Last, and visible to everybody: the page you send somebody who has just
+  // been given the link. See app/guide/page.tsx.
+  { href: "/guide", label: "Guide", short: "i" },
 ];
 
 function Hamburger({ open }: { open: boolean }) {
@@ -78,7 +81,11 @@ export function Nav({ role = "viewer", isDev = false }: { role?: string; isDev?:
       : // No Dashboard for a member: it is a coordinator's overview — session
         // counts, fairness loads, what needs building — and none of it is a
         // member's to act on. They start at the roster.
-        ITEMS.filter((i) => ["/roster", "/bhajans", "/singers", "/explore", "/my-list", "/notifications"].includes(i.href));
+        ITEMS.filter((i) =>
+          ["/roster", "/bhajans", "/singers", "/explore", "/my-list", "/notifications", "/guide"].includes(
+            i.href,
+          ),
+        );
 
   const NavLinks = ({ collapsed }: { collapsed: boolean }) => (
     <nav className="grid gap-1">

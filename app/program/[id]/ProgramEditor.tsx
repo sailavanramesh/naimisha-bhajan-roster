@@ -246,6 +246,23 @@ function ItemCard({
             </span>
           </button>
 
+          {/*
+            Straight to the words. Sailavan: "have a link next to each song to
+            the song's lyrics and meanings". The card opens to an editor, which
+            is not what somebody wanting to read the song is after — and it is
+            not offered to editors only, because reading is what most people
+            come to a running order for.
+          */}
+          {!isReading && item.songId ? (
+            <Link
+              href={`/songs/${item.songId}`}
+              title="Words and meaning"
+              className="shrink-0 rounded-key border border-rule-surface px-2 py-1 text-xs text-on-surface-muted hover:border-brass/50 hover:text-on-surface"
+            >
+              Words
+            </Link>
+          ) : null}
+
           {canEdit ? (
             <span className="flex shrink-0 items-center gap-1">
               <button

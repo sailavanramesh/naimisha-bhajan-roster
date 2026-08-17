@@ -308,7 +308,12 @@ export function ChannelGrid({
                   onChange={(e) =>
                     startTransition(async () => {
                       const res = await refreshFromDesk({ sessionId, deskId: e.target.value });
-                      say(res, res.ok ? `Now on ${desks.find((d) => d.id === e.target.value)?.name}.` : "");
+                      say(
+                        res,
+                        res.ok
+                          ? `Now on ${desks.find((d) => d.id === e.target.value)?.name}.${res.removed > 0 ? ` Dropped ${res.removed} strip${res.removed === 1 ? "" : "s"} it does not have.` : ""}`
+                          : "",
+                      );
                     })
                   }
                 >
@@ -328,7 +333,7 @@ export function ChannelGrid({
                       say(
                         res,
                         res.ok
-                          ? `Took ${res.updated} strip${res.updated === 1 ? "" : "s"} from ${deskName}${res.added > 0 ? `, and added ${res.added}` : ""}.`
+                          ? `Took ${res.updated} strip${res.updated === 1 ? "" : "s"} from ${deskName}${res.added > 0 ? `, added ${res.added}` : ""}${res.removed > 0 ? `, dropped ${res.removed}` : ""}${res.kept > 0 ? `. ${res.kept} the desk no longer has ${res.kept === 1 ? "is" : "are"} kept — somebody is on ${res.kept === 1 ? "it" : "them"}` : ""}.`
                           : "",
                       );
                     })
