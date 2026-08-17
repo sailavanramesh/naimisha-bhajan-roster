@@ -402,18 +402,34 @@ export async function setChannelOpen(input: {
     null;
 
   if (parsed.data.open && unanswered) {
-    const previous = await prisma.programItem.findFirst({
-      where: { sessionId: item.sessionId, position: { lt: item.position } },
-      orderBy: { position: "desc" },
-      select: {
-        channels: {
-          where: { channelId: parsed.data.channelId },
-          select: { singerId: true, person: true, instrumentId: true },
-        },
+    /*
+     * THE MOST RECENT ITEM THIS MIC WAS ALLOCATED ON, not the item immediately
+     * before.
+     *
+     * Sailavan: "it should actually look to the most recent item where that mic
+     * was allocated to someone." Channel 3 is Prasanna's for the evening; item 2
+     * is a reading that does not use it. Asking only the item before means the
+     * reading — which says nothing about channel 3 — erases her from item 3, and
+     * the answer given two items ago is thrown away by a row that never had an
+     * opinion.
+     *
+     * So it looks back until it finds an item that actually answered for this
+     * channel, and takes that.
+     */
+    const was = await prisma.programItemChannel.findFirst({
+      where: {
+        channelId: parsed.data.channelId,
+        item: { sessionId: item.sessionId, position: { lt: item.position } },
+        OR: [
+          { singerId: { not: null } },
+          { person: { not: null } },
+          { instrumentId: { not: null } },
+        ],
       },
+      orderBy: { item: { position: "desc" } },
+      select: { singerId: true, person: true, instrumentId: true },
     });
-    const was = previous?.channels[0];
-    if (was && (was.singerId || was.person || was.instrumentId)) inherited = was;
+    if (was) inherited = was;
   }
 
   await prisma.programItemChannel.upsert({
@@ -704,19 +720,32 @@ export async function carryOverMics(input: {
   });
   if (!item) return { ok: false, error: "That item is gone." };
 
-  const previous = await prisma.programItem.findFirst({
-    where: { sessionId: item.sessionId, position: { lt: item.position } },
-    orderBy: { position: "desc" },
-    select: {
-      channels: {
-        where: { open: true },
-        select: { channelId: true, singerId: true, person: true, instrumentId: true },
-      },
+  /*
+   * The most recent answer for each channel, wherever it was given — not
+   * whatever the item immediately before happened to say. A reading between two
+   * songs says nothing about channel 3, and must not erase what song one said
+   * about it.
+   *
+   * Ordered oldest first so that later answers overwrite earlier ones as the map
+   * is built, leaving the most recent for each channel.
+   */
+  const answers = await prisma.programItemChannel.findMany({
+    where: {
+      item: { sessionId: item.sessionId, position: { lt: item.position } },
+      OR: [
+        { singerId: { not: null } },
+        { person: { not: null } },
+        { instrumentId: { not: null } },
+      ],
     },
+    orderBy: { item: { position: "asc" } },
+    select: { channelId: true, singerId: true, person: true, instrumentId: true },
   });
-  if (!previous) return { ok: false, error: "There is nothing before this item." };
+  if (answers.length === 0) {
+    return { ok: false, error: "No mic has been allocated on an earlier item yet." };
+  }
 
-  const before = new Map(previous.channels.map((c) => [c.channelId, c]));
+  const before = new Map(answers.map((c) => [c.channelId, c]));
   const writes = [];
 
   for (const mine of item.channels) {
@@ -726,7 +755,6 @@ export async function carryOverMics(input: {
 
     const was = before.get(mine.channelId);
     if (!was) continue;
-    if (!was.singerId && !was.person && !was.instrumentId) continue;
 
     writes.push(
       prisma.programItemChannel.update({
