@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useSessionVersion } from "@/components/useSessionVersion";
-import { currentItemOf, occupantFor, stepItem, stripNumber } from "@/lib/deskChannels";
-import { hasMoreBelow } from "@/lib/liveBoard";
+import { currentItemOf, occupantFor, stepItem } from "@/lib/deskChannels";
 import { type MicColourValue } from "@/lib/micCushion";
 import { DeskStrips } from "../DeskStrips";
 import { Verses, type VerseView } from "@/app/songs/[id]/Verses";
@@ -89,7 +88,8 @@ export function DeskBoard({
    * person on the desk wants faders at the moment the singer beside them wants
    * the words, and making them agree would make the shared item useless.
    */
-  const [pane, setPane] = useState<"desk" | "all" | "words">("desk");
+  const [pane, setPane] = useState<"all" | "words">("all");
+
 
   /*
    * Where WE think we are, so a press moves the screen at once.
@@ -108,6 +108,28 @@ export function DeskBoard({
   }, [currentPosition]);
 
   const item = currentItemOf(items, position);
+  /*
+   * Bring the song the room is on back into view.
+   *
+   * "All songs" is a long page and reading ahead down it is the point — but
+   * having scrolled to song 9, pressing Next used to move the programme to song
+   * 4 and leave the screen looking at 9, so the one row that had just become
+   * true was the one you could not see. Sailavan asked for it to follow.
+   *
+   * `block: "nearest"` moves the least that puts it on screen, and nothing at
+   * all when it is already there — so browsing near the current song does not
+   * fight the finger.
+   */
+  const songRows = useRef(new Map<number, HTMLLIElement | null>());
+  useEffect(() => {
+    if (pane !== "all") return;
+    const row = songRows.current.get(position ?? -1) ?? null;
+    if (!row) return;
+
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    row.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+  }, [position, pane]);
+
   const back = stepItem(items, position, -1);
   const on = stepItem(items, position, 1);
 
@@ -134,47 +156,6 @@ export function DeskBoard({
     return () => window.removeEventListener("keydown", onKey);
   }, [go, on, back]);
 
-  /*
-   * The scroll arrow, on the same terms as the bhajan board: a desk with more
-   * channels than fit must say so, because a fader you did not know was on the
-   * list is the one that stays down.
-   */
-  const scroller = useRef<HTMLDivElement | null>(null);
-  const [more, setMore] = useState(false);
-  const measure = useCallback(() => {
-    const el = scroller.current;
-    if (!el) return;
-    setMore(
-      hasMoreBelow({
-        scrollHeight: el.scrollHeight,
-        scrollTop: el.scrollTop,
-        clientHeight: el.clientHeight,
-      }),
-    );
-  }, []);
-
-  useLayoutEffect(measure, [measure, item]);
-  useEffect(() => {
-    const el = scroller.current;
-    if (!el) return;
-    const ro = new ResizeObserver(measure);
-    ro.observe(el);
-    el.addEventListener("scroll", measure, { passive: true });
-    return () => {
-      el.removeEventListener("scroll", measure);
-      ro.disconnect();
-    };
-  }, [measure]);
-
-  const openIds = new Set(item?.openChannelIds ?? []);
-  const openCount = channels.filter((c) => openIds.has(c.id)).length;
-  /*
-   * Who is on a strip FOR THIS ITEM, where that is not its usual occupant — a
-   * singer's mic taken by the mridangam for one song, or by one head of a
-   * two-sided drum. Empty for almost every item, which is why it travels as the
-   * exceptions rather than as a name per channel.
-   */
-  const swaps = new Map((item?.swaps ?? []).map((s) => [s.channelId, s.who]));
 
   return (
     <div className="fixed inset-0 z-[100] flex h-[100dvh] overflow-hidden overscroll-none bg-ground text-on-ground">
@@ -308,10 +289,13 @@ export function DeskBoard({
             <div className="flex shrink-0 gap-1 border-b border-rule px-4 pb-2">
               {(
                 [
-                  { key: "desk", label: "Desk" },
-                  // The mic person's view: every song at once, so a mic changing
-                  // hands between two of them is a thing you can SEE rather than
-                  // hold in your head across two presses of Next.
+                  /*
+                    Two panes, not three. The single-item desk went: with the
+                    running order across the top marking where the room is, it
+                    said the same thing as one row of "All songs" and cost a tab
+                    to reach. Sailavan: "just all songs and words is enough with
+                    the songs individually listed out above them as they are now."
+                  */
                   { key: "all", label: "All songs" },
                   { key: "words", label: "Words" },
                 ] as const
@@ -334,67 +318,6 @@ export function DeskBoard({
               {item.verses.length === 0 && pane === "words" ? (
                 <span className="self-center ps-2 text-xs text-on-ground-muted">
                   no words recorded for this item
-                </span>
-              ) : null}
-            </div>
-
-            {/* ---- the faders ---- */}
-            <div className={`relative min-h-0 flex-1 ${pane === "desk" ? "" : "hidden"}`}>
-              <div ref={scroller} className="h-full overflow-y-auto px-4 py-3">
-                <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-on-ground-muted">
-                  {channels.length === 0
-                    ? "No channels on this programme"
-                    : `${openCount} of ${channels.length} open`}
-                </p>
-
-                {channels.length === 0 ? (
-                  <p className="text-sm text-on-ground-muted">
-                    Pick a desk on the programme page and the strips arrive here.
-                  </p>
-                ) : (
-                  <>
-                    {/*
-                      The same drawn desk the programme page assigns against —
-                      one picture of the mixer, editable there and read-only
-                      here. See DeskStrips.
-                    */}
-                    <DeskStrips
-                      dense
-                      strips={channels.map((c) => ({
-                        ...c,
-                        who: occupantFor(c, { person: swaps.get(c.id) ?? null }),
-                      }))}
-                      openIds={openIds}
-                      swappedIds={new Set(swaps.keys())}
-                    />
-
-                    {/*
-                      The tiles are three letters wide, which is enough to find
-                      a fader and not enough to be sure whose it is. This line
-                      spells the open ones out, so the channel number and the
-                      person can always be tied together on the same screen.
-                    */}
-                    {openCount > 0 ? (
-                      <p className="mt-3 text-xs leading-relaxed text-on-ground-muted">
-                        {channels
-                          .filter((c) => openIds.has(c.id))
-                          .map((c) => {
-                            const who = occupantFor(c, { person: swaps.get(c.id) ?? null });
-                            return `${stripNumber(c.number, c.stereo)} ${who ?? c.label}`;
-                          })
-                          .join("  ·  ")}
-                      </p>
-                    ) : null}
-                  </>
-                )}
-              </div>
-
-              {more ? (
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute bottom-2 right-3 rounded-full border border-rule bg-surface/90 px-2 py-0.5 text-sm text-on-surface-muted"
-                >
-                  ↓
                 </span>
               ) : null}
             </div>
@@ -425,7 +348,13 @@ export function DeskBoard({
                     const swapped = new Map(it.swaps.map((sw) => [sw.channelId, sw.who]));
 
                     return (
-                      <li key={it.position} className="grid gap-1.5">
+                      <li
+                        key={it.position}
+                        ref={(el) => {
+                          songRows.current.set(it.position, el);
+                        }}
+                        className="grid gap-1.5"
+                      >
                         <button
                           type="button"
                           disabled={pending}

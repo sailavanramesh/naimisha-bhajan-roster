@@ -13,7 +13,6 @@ import {
   setChannelOpen,
   setSceneNumber,
   suggestChannels,
-  suggestOpenChannels,
   updateChannel,
   applyDesk,
   setItemChannelWho,
@@ -34,6 +33,9 @@ export type ChannelRow = {
   singerId: string | null;
   instrumentId: string | null;
   person: string | null;
+  /** A second person sharing this mic. */
+  withSingerId: string | null;
+  withPerson: string | null;
   who: string | null;
 };
 
@@ -55,6 +57,8 @@ export type GridItem = {
     singerId: string | null;
     instrumentId: string | null;
     person: string | null;
+    withSingerId: string | null;
+    withPerson: string | null;
     who: string;
   }[];
 };
@@ -96,8 +100,6 @@ export function ChannelGrid({
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [pickedDesk, setPickedDesk] = useState(desks[0]?.id ?? "");
   const [editing, setEditing] = useState<string | null>(null);
-  /** Which item has its mic-swap row open. One at a time; it is a wide row. */
-  const [swapsFor, setSwapsFor] = useState<string | null>(null);
   /** The channel list below the grid, opened when a heading is tapped. */
   const [channelsOpen, setChannelsOpen] = useState(false);
   /*
@@ -420,47 +422,6 @@ export function ChannelGrid({
                         {item.title || (item.kind === "narration" ? "Reading" : "Not chosen yet")}
                       </span>
                     </div>
-                    {canEdit ? (
-                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px]">
-                        <button
-                          type="button"
-                          disabled={pending}
-                          className="text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
-                          onClick={() =>
-                            startTransition(async () => {
-                              const res = await suggestOpenChannels({ itemId: item.id });
-                              say(
-                                res,
-                                res.ok
-                                  ? `${res.open} channel${res.open === 1 ? "" : "s"} open.`
-                                  : "",
-                              );
-                            })
-                          }
-                        >
-                          fill from who is on it
-                        </button>
-                        {/*
-                          Mic swaps, behind a toggle and counted when there are
-                          any. Kept out of the grid itself: the grid answers "is
-                          this fader up", one tap per cell, and a mic changing
-                          hands is a rarer and wordier question that would have
-                          made every cell carry a control it almost never needs.
-                        */}
-                        {item.open.length > 0 ? (
-                          <button
-                            type="button"
-                            className="text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
-                            aria-expanded={swapsFor === item.id}
-                            onClick={() => setSwapsFor(swapsFor === item.id ? null : item.id)}
-                          >
-                            {item.swaps.length > 0
-                              ? `mic swaps (${item.swaps.length})`
-                              : "mic swaps"}
-                          </button>
-                        ) : null}
-                      </div>
-                    ) : null}
                   </td>
 
                   <td className="px-1 py-1 text-center">
@@ -513,88 +474,7 @@ export function ChannelGrid({
                     );
                   })}
                 </tr>,
-                swapsFor === item.id ? (
-                  <tr key={`${item.id}-swaps`} className="border-b bg-panel/60">
-                    <td colSpan={2 + channels.length} className="px-2 py-2">
-                      <p className="mb-1.5 text-[11px] text-on-surface-muted">
-                        Who is on each open mic for this item, where it is not the usual
-                        person. Leave both blank and the channel&rsquo;s own name stands.
-                      </p>
-                      <ul className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-                        {channels
-                          .filter((c) => item.open.includes(c.id))
-                          .map((c) => {
-                            const swap = item.swaps.find((s) => s.channelId === c.id);
-                            return (
-                              <li key={c.id} className="flex items-center gap-1.5">
-                                <span className="w-9 shrink-0 text-right font-mono text-[11px] text-on-surface-muted">
-                                  {stripNumber(c.number, c.stereo)}
-                                </span>
-                                {/*
-                                  Singers AND instruments in one list — a mic
-                                  moves between a voice and a drum, so asking
-                                  which of the two it is before you can say
-                                  whose it is gets the order backwards.
-                                */}
-                                <WhoSelect
-                                  value={
-                                    swap?.singerId
-                                      ? { kind: "singer", id: swap.singerId }
-                                      : swap?.instrumentId
-                                        ? { kind: "instrument", id: swap.instrumentId }
-                                        : { kind: "none" }
-                                  }
-                                  singers={singers}
-                                  instruments={instruments}
-                                  guests={guests}
-                                  disabled={pending}
-                                  emptyLabel={c.who ?? "usual"}
-                                  className="h-7 min-w-0 flex-1 rounded-key border border-rule-surface bg-field px-1 text-[11px]"
-                                  label={`Who is on channel ${stripNumber(c.number, c.stereo)} for this item`}
-                                  onPick={(picked) =>
-                                    startTransition(async () => {
-                                      const res = await setItemChannelWho({
-                                        itemId: item.id,
-                                        channelId: c.id,
-                                        singerId: picked.kind === "singer" ? picked.id : null,
-                                        instrumentId:
-                                          picked.kind === "instrument" ? picked.id : null,
-                                        // A guest is stored as the name, which
-                                        // is all the programme knows about them.
-                                        // Exactly one of the three is ever set:
-                                        // two answers to one question is how a
-                                        // screen starts disagreeing with itself.
-                                        person: picked.kind === "person" ? picked.name : null,
-                                      });
-                                      say(res, "");
-                                    })
-                                  }
-                                />
-                                <Input
-                                  defaultValue={swap?.person ?? ""}
-                                  disabled={pending}
-                                  aria-label={`Or a name on channel ${stripNumber(c.number, c.stereo)} for this item`}
-                                  placeholder="or a name"
-                                  className="h-7 w-24 shrink-0 text-[11px]"
-                                  onBlur={(e) =>
-                                    startTransition(async () => {
-                                      const res = await setItemChannelWho({
-                                        itemId: item.id,
-                                        channelId: c.id,
-                                        person: e.target.value || null,
-                                        instrumentId: null,
-                                      });
-                                      say(res, "");
-                                    })
-                                  }
-                                />
-                              </li>
-                            );
-                          })}
-                      </ul>
-                    </td>
-                  </tr>
-                ) : null,
+                null,
               ])}
             </tbody>
           </table>
@@ -803,6 +683,41 @@ export function ChannelGrid({
                 />
               </span>
 
+              {/*
+                A mic can be shared. Two singers on one channel is a real thing —
+                a duet taken on one mic — and the desk needs both names or it
+                brings the wrong one up.
+              */}
+              <span className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] text-on-surface-muted">shared with</span>
+                <WhoSelect
+                  value={
+                    deskSwapRow?.withSingerId
+                      ? { kind: "singer", id: deskSwapRow.withSingerId }
+                      : deskSwapRow?.withPerson
+                        ? { kind: "person", name: deskSwapRow.withPerson }
+                        : { kind: "none" }
+                  }
+                  singers={singers}
+                  instruments={[]}
+                  guests={guests}
+                  disabled={!canEdit || pending}
+                  emptyLabel="nobody"
+                  label={`Who shares channel ${stripNumber(deskStrip.number, deskStrip.stereo)} on this item`}
+                  onPick={(picked) =>
+                    startTransition(async () => {
+                      const res = await setItemChannelWho({
+                        itemId: deskItem.id,
+                        channelId: deskStrip.id,
+                        withSingerId: picked.kind === "singer" ? picked.id : null,
+                        withPerson: picked.kind === "person" ? picked.name : null,
+                      });
+                      say(res, "");
+                    })
+                  }
+                />
+              </span>
+
               <p className="text-[11px] text-on-surface-muted">
                 Leave &ldquo;who&rdquo; alone and the channel&rsquo;s own name stands. Set it in
                 the channel list below to change that for the whole programme.
@@ -962,6 +877,13 @@ function ChannelEditor({
   const [person, setPerson] = useState(channel.person ?? "");
   const [colour, setColour] = useState<MicColourValue | null>(channel.colour);
   const [stereo, setStereo] = useState(channel.stereo);
+  const [share, setShare] = useState<ChannelWho>(
+    channel.withSingerId
+      ? { kind: "singer", id: channel.withSingerId }
+      : channel.withPerson
+        ? { kind: "person", name: channel.withPerson }
+        : { kind: "none" },
+  );
   const [pending, startTransition] = useTransition();
 
   return (
@@ -1015,6 +937,20 @@ function ChannelEditor({
           if (picked.kind !== "none") setPerson("");
         }}
       />
+      {/*
+        A second seat on the same mic. Two singers on one channel is a real
+        thing — a duet taken on one mic — and the desk needs both names or it
+        brings the wrong one up.
+      */}
+      <WhoSelect
+        value={share}
+        singers={singers}
+        instruments={[]}
+        guests={guests}
+        emptyLabel="+ shared with"
+        label="Who shares this mic"
+        onPick={setShare}
+      />
       <Input
         value={person}
         aria-label="Or a name"
@@ -1054,6 +990,8 @@ function ChannelEditor({
               singerId: who.kind === "singer" ? who.id : "",
               instrumentId: who.kind === "instrument" ? who.id : "",
               person: who.kind === "person" ? who.name : person,
+              withSingerId: share.kind === "singer" ? share.id : "",
+              withPerson: share.kind === "person" ? share.name : "",
               colour,
               stereo,
             });

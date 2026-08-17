@@ -238,6 +238,9 @@ model Singer {
   programInstruments ProgramItemInstrument[]
   crew               SessionCrew[]
   deskChannels       SessionChannel[]
+  /// Mics this person shares with somebody else. See SessionChannel.withSingerId.
+  sharedChannels     SessionChannel[]        @relation("SessionChannelShare")
+  sharedItemChannels ProgramItemChannel[]    @relation("ItemChannelShare")
   /// Items where this person is on a strip that is not usually theirs.
   itemChannels       ProgramItemChannel[]
 }
@@ -971,11 +974,25 @@ model SessionChannel {
   /// Which mic is on the strip, copied from the desk and correctable here.
   mic          String?
 
+  /// A SECOND person sharing this mic.
+  ///
+  /// Two singers on one channel is a real thing — a duet taken on one mic, or a
+  /// pair leaning in for a chorus — and the desk has to know both names or it
+  /// will bring the wrong one up. Two, not a list: "split a mic between 2
+  /// people" is what was asked for, and a list would need a table and a UI for a
+  /// case nobody has yet.
+  ///
+  /// Same three answers as the first, minus the instrument: a mic shared between
+  /// a person and a drum is two channels, not one.
+  withSingerId String?
+  withPerson   String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   session    Session              @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   singer     Singer?              @relation(fields: [singerId], references: [id], onDelete: SetNull)
+  withSinger Singer?              @relation("SessionChannelShare", fields: [withSingerId], references: [id], onDelete: SetNull)
   instrument Instrument?          @relation(fields: [instrumentId], references: [id], onDelete: SetNull)
   items      ProgramItemChannel[]
 
@@ -1011,11 +1028,25 @@ model ProgramItemChannel {
   person       String?
   instrumentId String?
 
+  /// A SECOND person sharing this mic.
+  ///
+  /// Two singers on one channel is a real thing — a duet taken on one mic, or a
+  /// pair leaning in for a chorus — and the desk has to know both names or it
+  /// will bring the wrong one up. Two, not a list: "split a mic between 2
+  /// people" is what was asked for, and a list would need a table and a UI for a
+  /// case nobody has yet.
+  ///
+  /// Same three answers as the first, minus the instrument: a mic shared between
+  /// a person and a drum is two channels, not one.
+  withSingerId String?
+  withPerson   String?
+
   updatedAt DateTime @updatedAt
 
   item       ProgramItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
   channel    SessionChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
   singer     Singer?        @relation(fields: [singerId], references: [id], onDelete: SetNull)
+  withSinger Singer?        @relation("ItemChannelShare", fields: [withSingerId], references: [id], onDelete: SetNull)
   instrument Instrument?    @relation(fields: [instrumentId], references: [id], onDelete: SetNull)
 
   @@id([itemId, channelId])

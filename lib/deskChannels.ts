@@ -254,6 +254,23 @@ export function stepItem<T extends { position: number }>(
 }
 
 /**
+ * How a strip reads when two people are sharing the mic.
+ *
+ * "Ashwin + Sriraag". One name when only one is set, and nothing when neither
+ * is — so a shared mic is written the same way everywhere, and adding the second
+ * person nowhere changes what a single-occupant strip looks like.
+ */
+export function sharedName(
+  first: string | null | undefined,
+  second: string | null | undefined,
+): string | null {
+  const a = (first ?? "").trim();
+  const b = (second ?? "").trim();
+  if (a && b) return `${a} + ${b}`;
+  return a || b || null;
+}
+
+/**
  * A default strip list for a desk with no channels yet.
  *
  * Numbers only, unlabelled. The centre's Yamaha MG20XU has twenty inputs, but

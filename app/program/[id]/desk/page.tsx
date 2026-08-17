@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { getRole, can } from "@/lib/auth";
-import { occupantFor, sortChannels } from "@/lib/deskChannels";
+import { occupantFor, sharedName, sortChannels } from "@/lib/deskChannels";
 import { songNumbers, instrumentsLabel, performersLabel } from "@/lib/program";
 import { DeskBoard, type DeskChannel, type DeskItem } from "./DeskBoard";
 
@@ -48,6 +48,7 @@ export default async function ProgramDeskPage({
         include: {
           singer: { select: { name: true } },
           instrument: { select: { name: true } },
+          withSinger: { select: { name: true } },
         },
       },
       programItems: {
@@ -70,8 +71,10 @@ export default async function ProgramDeskPage({
               // The per-item override: a strip carrying somebody or something
               // other than its usual occupant for this one item.
               person: true,
+              withPerson: true,
               singer: { select: { name: true } },
               instrument: { select: { name: true } },
+              withSinger: { select: { name: true } },
             },
           },
           performers: {
@@ -155,13 +158,16 @@ export default async function ProgramDeskPage({
     swaps: item.channels
       .map((c) => ({
         channelId: c.channelId,
-        who: occupantFor(
-          { who: null },
-          {
-            instrumentName: c.instrument?.name,
-            singerName: c.singer?.name,
-            person: c.person,
-          },
+        who: sharedName(
+          occupantFor(
+            { who: null },
+            {
+              instrumentName: c.instrument?.name,
+              singerName: c.singer?.name,
+              person: c.person,
+            },
+          ),
+          c.withSinger?.name ?? c.withPerson,
         ),
       }))
       .filter((s): s is { channelId: string; who: string } => s.who !== null),
@@ -178,7 +184,10 @@ export default async function ProgramDeskPage({
     colour: c.colour,
     mic: c.mic,
     stereo: c.stereo,
-    who: c.singer?.name ?? (c.person?.trim() || c.instrument?.name || null),
+    who: sharedName(
+      c.singer?.name ?? (c.person?.trim() || c.instrument?.name || null),
+      c.withSinger?.name ?? c.withPerson,
+    ),
   }));
 
   const heading = new Intl.DateTimeFormat("en-AU", {

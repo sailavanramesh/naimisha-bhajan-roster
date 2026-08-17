@@ -10,7 +10,7 @@ import { timeLabel } from "@/lib/sessionsOfDay";
 import { ProgramEditor } from "./ProgramEditor";
 import { ProgramCrew } from "./ProgramCrew";
 import { ChannelGrid } from "./ChannelGrid";
-import { occupantFor, sortChannels } from "@/lib/deskChannels";
+import { occupantFor, sharedName, sortChannels } from "@/lib/deskChannels";
 
 export const dynamic = "force-dynamic";
 
@@ -41,6 +41,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
         include: {
           singer: { select: { name: true } },
           instrument: { select: { name: true } },
+          withSinger: { select: { name: true } },
         },
       },
       programItems: {
@@ -76,8 +77,11 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
               singerId: true,
               instrumentId: true,
               person: true,
+              withSingerId: true,
+              withPerson: true,
               singer: { select: { name: true } },
               instrument: { select: { name: true } },
+              withSinger: { select: { name: true } },
             },
           },
         },
@@ -248,9 +252,14 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
           stereo: c.stereo,
           singerId: c.singerId,
           instrumentId: c.instrumentId,
+          withSingerId: c.withSingerId,
+          withPerson: c.withPerson,
           person: c.person,
           // What to show in brackets: the person on it, or the instrument.
-          who: c.singer?.name ?? c.person ?? c.instrument?.name ?? null,
+          who: sharedName(
+            c.singer?.name ?? c.person ?? c.instrument?.name ?? null,
+            c.withSinger?.name ?? c.withPerson,
+          ),
         }))}
         items={session.programItems.map((item) => ({
           id: item.id,
@@ -265,13 +274,18 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
               singerId: c.singerId,
               instrumentId: c.instrumentId,
               person: c.person,
-              who: occupantFor(
-                { who: null },
-                {
-                  instrumentName: c.instrument?.name,
-                  singerName: c.singer?.name,
-                  person: c.person,
-                },
+              withSingerId: c.withSingerId,
+              withPerson: c.withPerson,
+              who: sharedName(
+                occupantFor(
+                  { who: null },
+                  {
+                    instrumentName: c.instrument?.name,
+                    singerName: c.singer?.name,
+                    person: c.person,
+                  },
+                ),
+                c.withSinger?.name ?? c.withPerson,
               ),
             }))
             .filter(
@@ -282,6 +296,8 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
                 singerId: string | null;
                 instrumentId: string | null;
                 person: string | null;
+                withSingerId: string | null;
+                withPerson: string | null;
                 who: string;
               } =>
                 s.who !== null,

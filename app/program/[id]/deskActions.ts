@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth";
 import { isChorusColour, type MicColourValue } from "@/lib/micCushion";
-import { proposeChannels, proposeOpenChannels } from "@/lib/deskChannels";
+import { proposeChannels } from "@/lib/deskChannels";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -282,6 +282,9 @@ export async function updateChannel(input: {
   singerId: string;
   person: string;
   instrumentId?: string;
+  /** A second person sharing the mic. See SessionChannel.withSingerId. */
+  withSingerId?: string;
+  withPerson?: string;
   colour: string | null;
   stereo?: boolean;
 }): Promise<Result> {
@@ -298,6 +301,8 @@ export async function updateChannel(input: {
       // so a tabla channel could be labelled but never actually pointed at the
       // tabla, and nothing downstream knew what was on it.
       instrumentId: Text(60).optional(),
+      withSingerId: Text(60).optional(),
+      withPerson: Text(80).optional(),
       colour: z
         .union([z.string(), z.null()])
         .refine((v) => v === null || v === "" || isChorusColour(v), "not a cushion colour"),
@@ -327,6 +332,10 @@ export async function updateChannel(input: {
       instrumentId: parsed.data.singerId ? null : (parsed.data.instrumentId ?? null),
       person:
         parsed.data.singerId || parsed.data.instrumentId ? null : parsed.data.person,
+      // The second seat on the mic. Same rule as the first: a singer carries
+      // their own name, so storing it twice lets the two disagree.
+      withSingerId: parsed.data.withSingerId ?? null,
+      withPerson: parsed.data.withSingerId ? null : (parsed.data.withPerson ?? null),
       colour: parsed.data.colour ? (parsed.data.colour as MicColourValue) : null,
       ...(parsed.data.stereo === undefined ? {} : { stereo: parsed.data.stereo }),
     },
@@ -468,6 +477,9 @@ export async function setItemChannelWho(input: {
   instrumentId?: string | null;
   singerId?: string | null;
   person?: string | null;
+  /** A second person sharing the mic on this item. */
+  withSingerId?: string | null;
+  withPerson?: string | null;
 }): Promise<Result> {
   await requireCapability("editPrograms");
 
@@ -478,6 +490,8 @@ export async function setItemChannelWho(input: {
       instrumentId: z.union([Id, z.null()]).optional(),
       singerId: z.union([Id, z.null()]).optional(),
       person: z.union([Text(60), z.null()]).optional(),
+      withSingerId: z.union([Id, z.null()]).optional(),
+      withPerson: z.union([Text(60), z.null()]).optional(),
     })
     .safeParse(input);
   if (!parsed.success) return { ok: false, error: "Could not change that." };
@@ -488,10 +502,25 @@ export async function setItemChannelWho(input: {
   });
   if (!item) return { ok: false, error: "That item is gone." };
 
+  /*
+   * EVERY FIELD IS ONLY MOVED WHEN THE CALLER MENTIONS IT.
+   *
+   * The three primary fields used to be written unconditionally, so the control
+   * that sets who SHARES a mic — which says nothing about the primary — cleared
+   * it. Setting Anvita as sharing channel 7 deleted Pavitra from it, and the
+   * strip went from naming one person to naming the wrong one.
+   *
+   * The callers that mean "clear the others" still say so explicitly, by passing
+   * null, so picking a singer still removes the instrument and the typed name.
+   * Undefined now means "leave it", which is what a control that did not ask the
+   * question should say.
+   */
   const who = {
-    instrumentId: parsed.data.instrumentId ?? null,
-    singerId: parsed.data.singerId ?? null,
-    person: parsed.data.person ?? null,
+    ...(parsed.data.instrumentId === undefined ? {} : { instrumentId: parsed.data.instrumentId }),
+    ...(parsed.data.singerId === undefined ? {} : { singerId: parsed.data.singerId }),
+    ...(parsed.data.person === undefined ? {} : { person: parsed.data.person }),
+    ...(parsed.data.withSingerId === undefined ? {} : { withSingerId: parsed.data.withSingerId }),
+    ...(parsed.data.withPerson === undefined ? {} : { withPerson: parsed.data.withPerson }),
   };
 
   /*
@@ -512,59 +541,6 @@ export async function setItemChannelWho(input: {
   return ok;
 }
 
-/**
- * Fill in an item's open channels from who is on it.
- *
- * Per item rather than for the whole programme, because it is a proposal and a
- * proposal you cannot see the extent of is one you cannot check. It sets both
- * ways — open where somebody is on the item, closed where they are not — so
- * running it after changing the singers actually corrects the row.
- */
-export async function suggestOpenChannels(input: {
-  itemId: string;
-}): Promise<{ ok: true; open: number } | { ok: false; error: string }> {
-  await requireCapability("editPrograms");
-
-  const parsed = z.object({ itemId: Id }).safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Could not do that." };
-
-  const item = await prisma.programItem.findUnique({
-    where: { id: parsed.data.itemId },
-    select: {
-      id: true,
-      sessionId: true,
-      performers: { select: { singerId: true, name: true } },
-      instruments: { select: { instrumentId: true, singerId: true, person: true } },
-    },
-  });
-  if (!item) return { ok: false, error: "That item is gone." };
-
-  const channels = await prisma.sessionChannel.findMany({
-    where: { sessionId: item.sessionId },
-    select: { id: true, singerId: true, person: true, instrumentId: true },
-  });
-  if (channels.length === 0) {
-    return { ok: false, error: "This programme has no channels yet." };
-  }
-
-  const open = proposeOpenChannels(
-    { itemId: item.id, performers: item.performers, instruments: item.instruments },
-    channels,
-  );
-
-  await prisma.$transaction(
-    channels.map((c) =>
-      prisma.programItemChannel.upsert({
-        where: { itemId_channelId: { itemId: item.id, channelId: c.id } },
-        create: { itemId: item.id, channelId: c.id, open: open.has(c.id) },
-        update: { open: open.has(c.id) },
-      }),
-    ),
-  );
-
-  await refresh(item.sessionId);
-  return { ok: true, open: open.size };
-}
 
 /** The scene to recall for an item, on a desk that has scenes. */
 export async function setSceneNumber(input: {
