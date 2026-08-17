@@ -84,6 +84,7 @@ export function ChannelGrid({
   instruments,
   guests,
   canEdit,
+  canSetUpDesk,
 }: {
   sessionId: string;
   deskName: string | null;
@@ -95,6 +96,18 @@ export function ChannelGrid({
   /** Names typed onto this programme who are not roster singers. */
   guests: string[];
   canEdit: boolean;
+  /**
+   * May SET UP the desk on this programme: which desk it is on, taking its
+   * strips again, and the channel list itself.
+   *
+   * Editors, plus whoever is down as sound engineer or mic coordinator under
+   * "Who is running it". Wider than `canEdit` on purpose — the person running
+   * the sound is usually not an editor, and they are the one who needs it.
+   *
+   * Hiding these is a courtesy, not the permission: the actions enforce the same
+   * rule server-side. See deskActions.ts.
+   */
+  canSetUpDesk: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
@@ -278,7 +291,7 @@ export function ChannelGrid({
               programme already set up — correct, and unhelpful while you are
               still preparing one. This asks for the desk as it is now.
             */}
-            {canEdit && deskName ? (
+            {canSetUpDesk && deskName ? (
               <span className="flex flex-wrap items-center gap-1.5">
                 {/*
                   Which desk this programme is on, changeable after the fact.
@@ -726,7 +739,13 @@ export function ChannelGrid({
           ) : null}
         </div>
 
-        {/* The channel list itself, below the grid where it is edited rarely. */}
+        {/*
+          The channel list itself, below the grid where it is edited rarely, and
+          only for whoever sets the desk up. Everybody else on this page reads the
+          strips and looks for their own name; the patch is not theirs to change,
+          and offering it only invites the accidental edit.
+        */}
+        {canSetUpDesk ? (
         <details
           open={channelsOpen}
           onToggle={(e) => setChannelsOpen((e.currentTarget as HTMLDetailsElement).open)}
@@ -837,6 +856,7 @@ export function ChannelGrid({
             </div>
           ) : null}
         </details>
+        ) : null}
 
         {message ? (
           <p role="status" className={message.ok ? "text-xs text-brass-ink" : "text-xs text-warn"}>

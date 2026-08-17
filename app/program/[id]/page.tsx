@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { getRole, can } from "@/lib/auth";
+import { getRole, can, getSignedInSinger } from "@/lib/auth";
+import { runsSound, type SessionJob } from "@/lib/sessionView";
 import { NoAccess } from "@/components/RequireRole";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { SessionMetaPanel } from "@/app/roster/[id]/SessionMetaPanel";
@@ -103,6 +104,30 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
   if (session.format !== "program") redirect(`/roster/${session.id}`);
 
   const canEdit = can(role, "editPrograms");
+
+  /*
+   * Who may SET UP THE DESK on this programme — which desk it is on, taking its
+   * strips again, and the channel list.
+   *
+   * Sailavan: those "shouldn't be available to anyone but editors and people
+   * marked as sound engineers or mic coordinators", allocated under "Who is
+   * running it". So it is a job on one night, not a standing grant: the person
+   * who agreed to run this programme's sound may set up this programme's
+   * channels, and that says nothing about next week's.
+   *
+   * Distinct from `canRunSound`, which is the standing grant to edit the DESK
+   * itself in /admin — the centre's hardware, the same next week. Two questions,
+   * two answers; see lib/sessionView.ts runsSound.
+   *
+   * Read from the crew already loaded above rather than re-queried, and only for
+   * somebody the app can name: a shared access link is not a person, so it
+   * cannot hold a job.
+   */
+  const me = await getSignedInSinger();
+  const myJobs = me
+    ? session.crew.filter((c) => c.singer.id === me.id).map((c) => c.job as SessionJob)
+    : [];
+  const canSetUpDesk = canEdit || runsSound(myJobs);
 
   const [singers, instruments, categories, places, desks] = await Promise.all([
     prisma.singer.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
@@ -307,6 +332,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
         instruments={instruments}
         guests={guests}
         canEdit={canEdit}
+        canSetUpDesk={canSetUpDesk}
       />
 
       <Card>

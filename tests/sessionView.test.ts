@@ -5,6 +5,7 @@ import {
   resolveSessionView,
   sessionHref,
   JOB_LABELS,
+  runsSound,
 } from "../lib/sessionView";
 
 describe("sessionHref", () => {
@@ -73,5 +74,17 @@ describe("labels", () => {
   it("says why the screen is different", () => {
     expect(jobBanner("soundEngineer")).toBe("You are on sound for this session.");
     expect(jobBanner("micCoordinator")).toBe("You are on mics for this session.");
+  });
+});
+
+describe("runsSound", () => {
+  it("is true for the sound engineer and the mic coordinator", () => {
+    expect(runsSound(["soundEngineer"])).toBe(true);
+    expect(runsSound(["micCoordinator"])).toBe(true);
+    expect(runsSound(["soundEngineer", "micCoordinator"])).toBe(true);
+  });
+
+  it("is false for somebody with no job on the night", () => {
+    expect(runsSound([])).toBe(false);
   });
 });

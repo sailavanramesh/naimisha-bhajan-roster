@@ -1,9 +1,10 @@
 "use server";
 
 import { prisma } from "@/lib/db";
-import { requireCapability } from "@/lib/auth";
+import { requireCapability, getRole, can, getSignedInSinger } from "@/lib/auth";
 import { isChorusColour, type MicColourValue } from "@/lib/micCushion";
 import { proposeChannels } from "@/lib/deskChannels";
+import { runsSound, type SessionJob } from "@/lib/sessionView";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -26,6 +27,47 @@ const Text = (max: number) =>
     .trim()
     .max(max)
     .transform((s) => (s.length === 0 ? null : s));
+
+/**
+ * May this person SET UP the desk on this programme?
+ *
+ * Editors, plus whoever is down as sound engineer or mic coordinator under "Who
+ * is running it" on this session. Sailavan: the desk picker, taking the strips
+ * again and the channel list "shouldn't be available to anyone but editors and
+ * people marked as sound engineers or mic coordinators".
+ *
+ * Wider than `editPrograms`, and that is the point — the person who agreed to run
+ * the sound is usually not an editor, and they are the one standing at the desk.
+ * Narrower than "anybody with the link", because a repatched channel list is how
+ * a programme loses the record of what was actually on channel 6.
+ *
+ * Per session, not standing: the job is for one night. The standing `canRunSound`
+ * grant is a different question — it governs the DESK TEMPLATE in /admin, which is
+ * the centre's hardware — and is deliberately not consulted here.
+ *
+ * Checked here rather than trusted from the page, because hiding a button is not
+ * a permission; a Server Action is a public endpoint.
+ */
+async function requireDeskSetup(sessionId: string): Promise<void> {
+  const role = await getRole();
+  if (can(role, "editPrograms")) return;
+
+  const me = await getSignedInSinger();
+  const jobs = me
+    ? (
+        await prisma.sessionCrew.findMany({
+          where: { sessionId, singerId: me.id },
+          select: { job: true },
+        })
+      ).map((c) => c.job as SessionJob)
+    : [];
+  if (runsSound(jobs)) return;
+
+  throw new Error(
+    "Only an editor, or whoever is down as sound engineer or mic coordinator for " +
+      "this programme, can set up the desk.",
+  );
+}
 
 async function refresh(sessionId: string) {
   revalidatePath(`/program/${sessionId}`);
@@ -98,7 +140,7 @@ export async function setCurrentItem(input: {
  * separate, deliberate act.
  */
 export async function applyDesk(input: { sessionId: string; deskId: string }): Promise<Result> {
-  await requireCapability("editPrograms");
+  await requireDeskSetup(input.sessionId);
 
   const parsed = z.object({ sessionId: Id, deskId: Id }).safeParse(input);
   if (!parsed.success) return { ok: false, error: "Pick a desk." };
@@ -163,7 +205,7 @@ export async function applyDesk(input: { sessionId: string; deskId: string }): P
 export async function suggestChannels(input: {
   sessionId: string;
 }): Promise<{ ok: true; added: number } | { ok: false; error: string }> {
-  await requireCapability("editPrograms");
+  await requireDeskSetup(input.sessionId);
 
   const parsed = z.object({ sessionId: Id }).safeParse(input);
   if (!parsed.success) return { ok: false, error: "Could not do that." };
@@ -249,7 +291,7 @@ export async function addChannel(input: {
   number: string;
   label: string;
 }): Promise<Result> {
-  await requireCapability("editPrograms");
+  await requireDeskSetup(input.sessionId);
 
   const parsed = z
     .object({ sessionId: Id, number: z.string().trim().min(1).max(8), label: Text(60) })
@@ -288,8 +330,6 @@ export async function updateChannel(input: {
   colour: string | null;
   stereo?: boolean;
 }): Promise<Result> {
-  await requireCapability("editPrograms");
-
   const parsed = z
     .object({
       id: Id,
@@ -317,6 +357,7 @@ export async function updateChannel(input: {
     select: { sessionId: true },
   });
   if (!channel) return { ok: false, error: "That channel is gone." };
+  await requireDeskSetup(channel.sessionId);
 
   await prisma.sessionChannel.update({
     where: { id: parsed.data.id },
@@ -346,8 +387,6 @@ export async function updateChannel(input: {
 }
 
 export async function removeChannel(input: { id: string }): Promise<Result> {
-  await requireCapability("editPrograms");
-
   const parsed = z.object({ id: Id }).safeParse(input);
   if (!parsed.success) return { ok: false, error: "Could not remove that." };
 
@@ -356,6 +395,7 @@ export async function removeChannel(input: { id: string }): Promise<Result> {
     select: { sessionId: true },
   });
   if (!channel) return ok;
+  await requireDeskSetup(channel.sessionId);
 
   await prisma.sessionChannel.delete({ where: { id: parsed.data.id } });
   await refresh(channel.sessionId);
@@ -368,8 +408,6 @@ export async function setChannelOpen(input: {
   channelId: string;
   open: boolean;
 }): Promise<Result> {
-  await requireCapability("editPrograms");
-
   const parsed = z
     .object({ itemId: Id, channelId: Id, open: z.boolean() })
     .safeParse(input);
@@ -387,6 +425,7 @@ export async function setChannelOpen(input: {
     },
   });
   if (!item) return { ok: false, error: "That item is gone." };
+  await requireDeskSetup(item.sessionId);
 
   /*
    * OPENING A FADER CARRIES THE LAST ANSWER WITH IT.
@@ -481,8 +520,6 @@ export async function setItemChannelWho(input: {
   withSingerId?: string | null;
   withPerson?: string | null;
 }): Promise<Result> {
-  await requireCapability("editPrograms");
-
   const parsed = z
     .object({
       itemId: Id,
@@ -501,6 +538,7 @@ export async function setItemChannelWho(input: {
     select: { sessionId: true },
   });
   if (!item) return { ok: false, error: "That item is gone." };
+  await requireDeskSetup(item.sessionId);
 
   /*
    * EVERY FIELD IS ONLY MOVED WHEN THE CALLER MENTIONS IT.
@@ -547,8 +585,6 @@ export async function setSceneNumber(input: {
   itemId: string;
   scene: string;
 }): Promise<Result> {
-  await requireCapability("editPrograms");
-
   const parsed = z.object({ itemId: Id, scene: z.string().trim().max(4) }).safeParse(input);
   if (!parsed.success) return { ok: false, error: "Could not save that." };
 
@@ -560,6 +596,7 @@ export async function setSceneNumber(input: {
     select: { sessionId: true },
   });
   if (!item) return { ok: false, error: "That item is gone." };
+  await requireDeskSetup(item.sessionId);
 
   await prisma.programItem.update({
     where: { id: parsed.data.itemId },
@@ -600,7 +637,7 @@ export async function refreshFromDesk(input: {
    */
   deskId?: string;
 }): Promise<{ ok: true; updated: number; added: number } | { ok: false; error: string }> {
-  await requireCapability("editPrograms");
+  await requireDeskSetup(input.sessionId);
 
   const parsed = z.object({ sessionId: Id, deskId: Id.optional() }).safeParse(input);
   if (!parsed.success) return { ok: false, error: "Could not do that." };
@@ -681,8 +718,6 @@ export async function refreshFromDesk(input: {
 export async function carryOverMics(input: {
   itemId: string;
 }): Promise<{ ok: true; copied: number } | { ok: false; error: string }> {
-  await requireCapability("editPrograms");
-
   const parsed = z.object({ itemId: Id }).safeParse(input);
   if (!parsed.success) return { ok: false, error: "Could not do that." };
 
@@ -695,6 +730,7 @@ export async function carryOverMics(input: {
     },
   });
   if (!item) return { ok: false, error: "That item is gone." };
+  await requireDeskSetup(item.sessionId);
 
   /*
    * The most recent answer for each channel, wherever it was given — not

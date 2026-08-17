@@ -83,6 +83,26 @@ export function resolveSessionView(context: SessionViewContext): SessionView {
   return { href: sessionHref(context.sessionId, context.format), forJob: null };
 }
 
+/**
+ * Is this person running the sound on this session?
+ *
+ * The gate on a programme's DESK SETUP — which desk it is on, taking the strips
+ * again, and the channel list. Sailavan: those "shouldn't be available to anyone
+ * but editors and people marked as sound engineers or mic coordinators".
+ *
+ * Deliberately a JOB ON ONE NIGHT rather than the standing `canRunSound` grant,
+ * and the two answer different questions. The grant says who may edit the DESK,
+ * which is the centre's hardware and the same next week. This says who may set
+ * up THIS PROGRAMME'S channels, which is a fact about one evening and about the
+ * person who agreed to run it — allocated under "Who is running it", and true
+ * for that programme only.
+ *
+ * An editor may do it regardless, as with everything else on the page.
+ */
+export function runsSound(jobs: readonly SessionJob[]): boolean {
+  return jobs.some((job) => job === "soundEngineer" || job === "micCoordinator");
+}
+
 export const JOB_LABELS: Record<SessionJob, string> = {
   soundEngineer: "Sound engineer",
   micCoordinator: "Mic coordinator",
