@@ -3,10 +3,15 @@
 import { useState, useTransition } from "react";
 import { Button, Input } from "@/components/ui";
 import {
+  editVerse,
+  fromDraft,
+  joinUp,
   sectionsFor,
+  splitAt,
   splitPastedLayers,
   splitPastedVerses,
-  type PastedVerse,
+  toDraft,
+  type DraftVerse,
 } from "@/lib/songVerses";
 
 /**
@@ -365,9 +370,18 @@ function PasteBox({
                   placeholder="Pallavi, Charanam, Chorus…"
                   className="h-8 w-44 text-xs"
                   onChange={(e) =>
-                    setDraft(edit(draft, vi, (v) => ({ ...v, label: e.target.value })))
+                    setDraft(editVerse(draft, vi, (v) => ({ ...v, label: e.target.value })))
                   }
                 />
+                {vi > 0 ? (
+                  <button
+                    type="button"
+                    className="text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+                    onClick={() => setDraft(joinUp(draft, vi))}
+                  >
+                    join to the one above
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-warn"
@@ -399,7 +413,7 @@ function PasteBox({
                       className="h-8 text-xs"
                       onChange={(e) =>
                         setDraft(
-                          edit(draft, vi, (v) => ({
+                          editVerse(draft, vi, (v) => ({
                             ...v,
                             lines: v.lines.map((l, i) =>
                               i === li ? { ...l, [key]: e.target.value } : l,
@@ -409,21 +423,38 @@ function PasteBox({
                       }
                     />
                   ))}
-                  <button
-                    type="button"
-                    aria-label={`Remove line ${li + 1} of verse ${vi + 1}`}
-                    className="justify-self-end px-1 text-xs text-on-surface-muted hover:text-warn"
-                    onClick={() =>
-                      setDraft(
-                        edit(draft, vi, (v) => ({
-                          ...v,
-                          lines: v.lines.filter((_, i) => i !== li),
-                        })),
-                      )
-                    }
-                  >
-                    ×
-                  </button>
+                  <span className="flex items-center justify-end gap-1">
+                    {/*
+                      Start a new verse here. Offered on every line but the
+                      first, where a break would only leave an empty verse
+                      above it.
+                    */}
+                    <button
+                      type="button"
+                      disabled={li === 0}
+                      title="Start a new verse at this line"
+                      aria-label={`Start a new verse at line ${li + 1} of verse ${vi + 1}`}
+                      className="px-1 text-xs text-on-surface-muted hover:text-on-surface disabled:opacity-30"
+                      onClick={() => setDraft(splitAt(draft, vi, li))}
+                    >
+                      ⏎
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={`Remove line ${li + 1} of verse ${vi + 1}`}
+                      className="px-1 text-xs text-on-surface-muted hover:text-warn"
+                      onClick={() =>
+                        setDraft(
+                          editVerse(draft, vi, (v) => ({
+                            ...v,
+                            lines: v.lines.filter((_, i) => i !== li),
+                          })),
+                        )
+                      }
+                    >
+                      ×
+                    </button>
+                  </span>
                 </div>
               ))}
 
@@ -432,7 +463,7 @@ function PasteBox({
                 className="justify-self-start text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
                 onClick={() =>
                   setDraft(
-                    edit(draft, vi, (v) => ({
+                    editVerse(draft, vi, (v) => ({
                       ...v,
                       lines: [...v.lines, { script: "", roman: "", meaning: "" }],
                     })),
@@ -521,44 +552,4 @@ function PasteBox({
       </Button>
     </div>
   );
-}
-
-/** A verse while it is being reviewed: lines, so the columns can be seen to line up. */
-type DraftVerse = {
-  label: string;
-  lines: { script: string; roman: string; meaning: string }[];
-};
-
-function toDraft(v: PastedVerse): DraftVerse {
-  const script = v.script.split("\n");
-  const roman = v.roman.split("\n");
-  const meaning = v.meaning.split("\n");
-  const rows = Math.max(script.length, roman.length, meaning.length);
-
-  return {
-    label: v.label ?? "",
-    lines: Array.from({ length: rows }, (_, i) => ({
-      script: script[i] ?? "",
-      roman: roman[i] ?? "",
-      meaning: meaning[i] ?? "",
-    })),
-  };
-}
-
-function fromDraft(v: DraftVerse): PastedVerse {
-  const column = (key: "script" | "roman" | "meaning") => {
-    const lines = v.lines.map((l) => l[key]);
-    // All blank means the layer is absent, not a stack of empty lines.
-    return lines.some((l) => l.trim().length > 0) ? lines.join("\n") : "";
-  };
-  return {
-    label: v.label.trim() || null,
-    script: column("script"),
-    roman: column("roman"),
-    meaning: column("meaning"),
-  };
-}
-
-function edit(draft: DraftVerse[], index: number, change: (v: DraftVerse) => DraftVerse) {
-  return draft.map((v, i) => (i === index ? change(v) : v));
 }

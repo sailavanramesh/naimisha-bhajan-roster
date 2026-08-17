@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { splitPastedLayers, verseLayout } from "../lib/songVerses";
+import {
+  fromDraft,
+  joinUp,
+  splitAt,
+  splitPastedLayers,
+  toDraft,
+  verseLayout,
+} from "../lib/songVerses";
 
 /**
  * Kuzhaloothi, as Sailavan pasted it on 2026-08-17 — the shape the group's own
@@ -235,5 +242,82 @@ He Nātha Nārāyaṇa Vāsudevā (2)`;
     expect(v[0].script).toBe("राधे कृष्णा (16)");
     expect(v[0].roman).toBe("Rādhe Kṛṣṇā (16)");
     expect(v[0].meaning).toBe("");
+  });
+});
+
+describe("breaking and joining verses while reviewing a paste", () => {
+  const draft = toDraft({
+    label: "Pallavi",
+    script: "க1\nக2\nக3",
+    roman: "r1\nr2\nr3",
+    meaning: "m1\nm2\nm3",
+  });
+
+  it("lays a pasted verse out as lines across the three columns", () => {
+    expect(draft.label).toBe("Pallavi");
+    expect(draft.lines).toEqual([
+      { script: "க1", roman: "r1", meaning: "m1" },
+      { script: "க2", roman: "r2", meaning: "m2" },
+      { script: "க3", roman: "r3", meaning: "m3" },
+    ]);
+  });
+
+  /*
+   * The parser splits on blank lines, which is what the documents mostly use
+   * and not always what they mean. Breaking by hand is the moment somebody can
+   * see where the verse should have ended.
+   */
+  it("starts a new verse at the chosen line", () => {
+    const out = splitAt([draft], 0, 2);
+    expect(out).toHaveLength(2);
+    expect(out[0].lines.map((l) => l.roman)).toEqual(["r1", "r2"]);
+    expect(out[1].lines.map((l) => l.roman)).toEqual(["r3"]);
+  });
+
+  /* Inheriting "Pallavi" would name the second half after the first. */
+  it("leaves the new verse unlabelled, and the first one as it was", () => {
+    const out = splitAt([draft], 0, 1);
+    expect(out[0].label).toBe("Pallavi");
+    expect(out[1].label).toBe("");
+  });
+
+  it("refuses a break that would leave an empty verse", () => {
+    expect(splitAt([draft], 0, 0)).toHaveLength(1);
+    expect(splitAt([draft], 0, 3)).toHaveLength(1);
+  });
+
+  it("joins a verse back onto the one above — the way out of a wrong break", () => {
+    const broken = splitAt([draft], 0, 1);
+    const rejoined = joinUp(broken, 1);
+    expect(rejoined).toHaveLength(1);
+    expect(rejoined[0].lines.map((l) => l.roman)).toEqual(["r1", "r2", "r3"]);
+    expect(rejoined[0].label).toBe("Pallavi");
+  });
+
+  it("has nothing to join above the first verse", () => {
+    expect(joinUp([draft], 0)).toHaveLength(1);
+  });
+
+  it("gives back layers, dropping one nobody wrote", () => {
+    const back = fromDraft({
+      label: " Chorus ",
+      lines: [
+        { script: "", roman: "r1", meaning: "m1" },
+        { script: "", roman: "r2", meaning: "m2" },
+      ],
+    });
+    expect(back.label).toBe("Chorus");
+    expect(back.script).toBe("");
+    expect(back.roman).toBe("r1\nr2");
+    expect(back.meaning).toBe("m1\nm2");
+  });
+
+  it("survives a round trip through the review", () => {
+    expect(fromDraft(toDraft({ label: null, script: "a\nb", roman: "c\nd", meaning: "" }))).toEqual({
+      label: null,
+      script: "a\nb",
+      roman: "c\nd",
+      meaning: "",
+    });
   });
 });

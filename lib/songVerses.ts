@@ -472,3 +472,79 @@ export function splitPastedLayers(text: string): PastedVerse[] | null {
     meaning: v.meaning.trim().length > 0 ? v.meaning : "",
   }));
 }
+
+/** A verse while it is being reviewed: lines, so the columns can be seen to line up. */
+export type DraftVerse = {
+  label: string;
+  lines: { script: string; roman: string; meaning: string }[];
+};
+
+export function toDraft(v: PastedVerse): DraftVerse {
+  const script = v.script.split("\n");
+  const roman = v.roman.split("\n");
+  const meaning = v.meaning.split("\n");
+  const rows = Math.max(script.length, roman.length, meaning.length);
+
+  return {
+    label: v.label ?? "",
+    lines: Array.from({ length: rows }, (_, i) => ({
+      script: script[i] ?? "",
+      roman: roman[i] ?? "",
+      meaning: meaning[i] ?? "",
+    })),
+  };
+}
+
+export function fromDraft(v: DraftVerse): PastedVerse {
+  const column = (key: "script" | "roman" | "meaning") => {
+    const lines = v.lines.map((l) => l[key]);
+    // All blank means the layer is absent, not a stack of empty lines.
+    return lines.some((l) => l.trim().length > 0) ? lines.join("\n") : "";
+  };
+  return {
+    label: v.label.trim() || null,
+    script: column("script"),
+    roman: column("roman"),
+    meaning: column("meaning"),
+  };
+}
+
+/**
+ * Start a new verse at this line.
+ *
+ * The parser splits verses on blank lines, which is what the documents mostly
+ * use — but not always, and not reliably once a file has been through a few
+ * hands. Sailavan: "allow us to manually create a verse break and make a new
+ * verse at any line." Doing it here, while reviewing, is the moment somebody can
+ * actually see where the verse should have ended.
+ *
+ * The new verse takes no label. Inheriting "Pallavi" would name the second half
+ * after the first, which is exactly the thing being corrected.
+ */
+export function splitAt(draft: DraftVerse[], index: number, line: number): DraftVerse[] {
+  const verse = draft[index];
+  // Breaking above the first line would leave an empty verse behind.
+  if (line <= 0 || line >= verse.lines.length) return draft;
+
+  return [
+    ...draft.slice(0, index),
+    { ...verse, lines: verse.lines.slice(0, line) },
+    { label: "", lines: verse.lines.slice(line) },
+    ...draft.slice(index + 1),
+  ];
+}
+
+/** Put a verse back onto the one above it — the way out of a break made by mistake. */
+export function joinUp(draft: DraftVerse[], index: number): DraftVerse[] {
+  if (index <= 0) return draft;
+  const above = draft[index - 1];
+  return [
+    ...draft.slice(0, index - 1),
+    { ...above, lines: [...above.lines, ...draft[index].lines] },
+    ...draft.slice(index + 1),
+  ];
+}
+
+export function editVerse(draft: DraftVerse[], index: number, change: (v: DraftVerse) => DraftVerse) {
+  return draft.map((v, i) => (i === index ? change(v) : v));
+}
