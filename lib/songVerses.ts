@@ -106,6 +106,33 @@ export function layerLines(text?: string | null): string[] {
 }
 
 /**
+ * A layer's lines WITH its blanks, for lining the layers up against each other.
+ *
+ * `layerLines` strips blank lines off both ends, which is right for reading a
+ * layer on its own — a text that happens to end in a newline should not grow a
+ * phantom line. It is wrong for lining layers up, because in a padded column a
+ * trailing blank is not an artefact: it is a line that HAS no translation, and
+ * it is holding that line's place.
+ *
+ * Sailavan's Shree Krishna Govinda: twelve lines, the last four of them chorus
+ * repeats with no meaning written. Trimmed, the meaning counted eight against
+ * twelve, the layers stopped matching, and the whole translation fell out of the
+ * verse and reappeared as a block at the end — every line's meaning collected at
+ * the bottom, attached to nothing.
+ *
+ * The one thing still dropped is a SINGLE trailing newline, which is what a text
+ * ending in "\n" leaves behind and means nothing. Two or more are padding and
+ * survive — which is exactly the difference between a stray keystroke and a
+ * column that was built to line up.
+ */
+export function alignLines(text?: string | null): string[] {
+  const normalised = (text ?? "").replace(/\r\n?/g, "\n");
+  const lines = normalised.split("\n");
+  if (normalised.endsWith("\n") && !normalised.endsWith("\n\n")) lines.pop();
+  return lines;
+}
+
+/**
  * Do the layers that are present all have the same number of lines?
  *
  * Only the layers that exist count. A verse with a script and a
@@ -113,9 +140,8 @@ export function layerLines(text?: string | null): string[] {
  */
 export function layersAlign(verse: VerseLayers): boolean {
   const counts = [verse.script, verse.roman, verse.meaning]
-    .map(layerLines)
-    .filter((lines) => lines.length > 0)
-    .map((lines) => lines.length);
+    .filter((text) => layerLines(text).length > 0)
+    .map((text) => alignLines(text).length);
   if (counts.length < 2) return false;
   return counts.every((n) => n === counts[0]);
 }
@@ -176,7 +202,7 @@ export function verseLayout(verse: VerseLayers): VerseLayout {
 
   const byCount = new Map<number, Layer[]>();
   for (const layer of present) {
-    const count = layerLines(verse[layer]).length;
+    const count = alignLines(verse[layer]).length;
     byCount.set(count, [...(byCount.get(count) ?? []), layer]);
   }
 
@@ -190,13 +216,13 @@ export function verseLayout(verse: VerseLayers): VerseLayout {
 
   const lines: VerseLine[] = [];
   if (aligned.length > 0) {
-    const length = layerLines(verse[aligned[0]]).length;
+    const length = alignLines(verse[aligned[0]]).length;
     for (let i = 0; i < length; i++) {
-      lines.push({
-        script: aligned.includes("script") ? (layerLines(verse.script)[i] ?? null) : null,
-        roman: aligned.includes("roman") ? (layerLines(verse.roman)[i] ?? null) : null,
-        meaning: aligned.includes("meaning") ? (layerLines(verse.meaning)[i] ?? null) : null,
-      });
+      // A blank here is a line with no translation, and renders as nothing —
+      // which is the point: the lines either side of it stay where they belong.
+      const at = (layer: Layer) =>
+        aligned.includes(layer) ? (alignLines(verse[layer])[i] ?? null) : null;
+      lines.push({ script: at("script"), roman: at("roman"), meaning: at("meaning") });
     }
   }
 

@@ -321,3 +321,52 @@ describe("breaking and joining verses while reviewing a paste", () => {
     });
   });
 });
+
+describe("a verse whose last lines have no translation", () => {
+  /*
+   * Shree Krishna Govinda, as Sailavan built it: twelve lines, the last four
+   * chorus repeats with no meaning written. The meaning column is therefore
+   * eight filled lines followed by four blanks HOLDING THEIR PLACE.
+   *
+   * Trimming those blanks made the meaning count eight against twelve, the
+   * layers stopped matching, and the whole translation fell out of the verse and
+   * reappeared as a block at the end — every line's meaning collected at the
+   * bottom, attached to nothing.
+   */
+  const verse = {
+    script: ["स1", "स2", "स3", "स4", "स5", "स6", "स7", "स8", "स9", "स10", "स11", "स12"].join("\n"),
+    roman: ["r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9", "r10", "r11", "r12"].join("\n"),
+    meaning: ["m1", "m2", "m3", "m4", "m5", "m6", "m7", "m8", "", "", "", ""].join("\n"),
+  };
+
+  it("keeps all three layers zipped, blanks and all", () => {
+    const layout = verseLayout(verse);
+    expect(layout.lines).toHaveLength(12);
+    expect(layout.blocks).toHaveLength(0);
+  });
+
+  it("puts each meaning against its own line, and nothing against the rest", () => {
+    const layout = verseLayout(verse);
+    expect(layout.lines[0]).toEqual({ script: "स1", roman: "r1", meaning: "m1" });
+    expect(layout.lines[7]).toEqual({ script: "स8", roman: "r8", meaning: "m8" });
+    expect(layout.lines[8]).toEqual({ script: "स9", roman: "r9", meaning: "" });
+    expect(layout.lines[11]).toEqual({ script: "स12", roman: "r12", meaning: "" });
+  });
+
+  it("still forgives a layer that merely ends in a newline", () => {
+    const layout = verseLayout({ script: "a\nb", roman: "c\nd\n", meaning: null });
+    expect(layout.lines).toHaveLength(2);
+    expect(layout.blocks).toHaveLength(0);
+  });
+
+  /* A translation written as one paragraph against four lines is still a block. */
+  it("leaves a genuinely different-shaped layer as a block", () => {
+    const layout = verseLayout({
+      script: "a\nb\nc\nd",
+      roman: "e\nf\ng\nh",
+      meaning: "One sentence about the whole verse.",
+    });
+    expect(layout.lines).toHaveLength(4);
+    expect(layout.blocks.map((b) => b.layer)).toEqual(["meaning"]);
+  });
+});
