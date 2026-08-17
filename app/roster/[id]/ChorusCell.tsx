@@ -36,11 +36,6 @@ import {
  * not the other, so each control is enabled on its own.
  */
 
-/** Everything about the list worth re-reading the server for. */
-function signatureOf(mics: readonly ChorusMic[]): string {
-  return mics.map((m) => `${m.position}:${m.singerId}:${m.cushion ?? ""}`).join("|");
-}
-
 export function ChorusCell({
   slotId,
   singers,
@@ -60,22 +55,27 @@ export function ChorusCell({
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   /*
-   * Adopt what the server says when it changes under us.
+   * `mics` SEEDS from the prop and then owns itself. Do not add an effect that
+   * re-adopts the prop — one was here, and it wiped every edit.
    *
-   * Each write revalidates the session, so these props come back a moment
-   * later carrying everyone's edits, not just ours. Compared by VALUE, so the
-   * ordinary case — the server confirming exactly what we already show — costs
-   * nothing; and never while one of our own writes is in flight, or a
-   * revalidation triggered by somebody else would flip a tap back under the
-   * finger that made it.
+   * The prop looks like live server truth and is not. The grid seeds its own
+   * `rows` from `props.initialRows` into useState once, at mount, and never
+   * re-syncs — deliberately, because re-syncing would throw away a
+   * coordinator's unsaved edits. So `r.chorus` is frozen at whatever it was
+   * when the page loaded, and revalidating the session does not move it.
+   *
+   * What that cost: add somebody to a chorus mic, the write succeeds, the cell
+   * shows them — and then the effect compares the fresh list against a prop
+   * still holding the page-load value, decides the server disagrees, and
+   * adopts the empty one. The person vanished from the cell while being saved
+   * perfectly well, which is exactly what the live board showed. Choosing a
+   * cushion did the same thing. Reported by Sailavan, 2026-08-17.
+   *
+   * The server's answer to our own write is the authority instead: every
+   * action returns the whole list for the bhajan and `apply` takes it.
+   * Somebody else's change arrives on the next page load, which is the same
+   * deal the rest of this grid offers.
    */
-  const serverSignature = signatureOf(fromServer);
-  const lastAdopted = useRef(serverSignature);
-  useEffect(() => {
-    if (lastAdopted.current === serverSignature || pending) return;
-    lastAdopted.current = serverSignature;
-    setMics(fromServer);
-  }, [serverSignature, fromServer, pending]);
 
   useEffect(() => {
     return () => {
@@ -93,7 +93,6 @@ export function ChorusCell({
         return;
       }
       setMics(res.mics);
-      lastAdopted.current = signatureOf(res.mics);
       setStatus("saved");
       if (savedTimer.current) clearTimeout(savedTimer.current);
       // Long enough to be read by somebody who was looking elsewhere as they

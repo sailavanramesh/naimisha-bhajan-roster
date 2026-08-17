@@ -57,13 +57,29 @@ export function kindImageSrc(kind: KindLite): string | null {
   return `/api/session-kinds/${kind.id}/image?v=${kind.v}`;
 }
 
+/** What a session with no kind set is called, in a cell and in a tooltip. */
+export const NO_KIND_NAME = "Kind not set";
+
 /**
  * The marks for one day.
  *
  * Sessions of the same kind collapse into one mark with a count, because three
- * Ramayana sessions on a festival day are one thing said three times. Sessions
- * with no kind set produce no mark at all — the bar under the cell already
- * says a session is there, and an empty circle would say nothing twice.
+ * Ramayana sessions on a festival day are one thing said three times.
+ *
+ * A session with NO KIND still gets a mark, which it did not used to. The
+ * argument for showing nothing was that the cell's own wash already says a
+ * session is there — but the wash is a background tint, its lightest step is
+ * one to three bhajans, and that is the ordinary weekday session. Sailavan
+ * built a session on 18 August with no kind set and reported the day as
+ * "slightly darker but not discernible", which is exactly right: one faint
+ * tint was carrying the entire message, with nothing beside it.
+ *
+ * So it gets a neutral mark instead. It also reads as a prompt — a day showing
+ * "?" is asking to be told what it is — which is worth more than the tidiness
+ * of an empty cell.
+ *
+ * Kept LAST, so on a day that holds both a real kind and an untyped session the
+ * real one is what survives `max`.
  *
  * `max` caps how many fit; the rest are counted in `overflow`.
  */
@@ -74,10 +90,14 @@ export function dayMarks(
 ): { marks: DayMark[]; overflow: number } {
   const order: string[] = [];
   const byId = new Map<string, DayMark>();
+  let untyped = 0;
 
   for (const s of sessions) {
     const id = s.categoryId ?? null;
-    if (!id) continue;
+    if (!id) {
+      untyped += 1;
+      continue;
+    }
 
     const existing = byId.get(id);
     if (existing) {
@@ -100,6 +120,16 @@ export function dayMarks(
   }
 
   const all = order.map((id) => byId.get(id)!);
+  if (untyped > 0) {
+    all.push({
+      id: null,
+      name: NO_KIND_NAME,
+      initials: "?",
+      src: null,
+      count: untyped,
+    });
+  }
+
   return { marks: all.slice(0, max), overflow: Math.max(0, all.length - max) };
 }
 

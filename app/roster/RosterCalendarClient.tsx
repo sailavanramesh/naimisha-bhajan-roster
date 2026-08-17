@@ -356,7 +356,7 @@ export default function RosterCalendarClient(props: {
                       m.src ? (
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img
-                          key={m.id}
+                          key={m.id ?? "none"}
                           src={m.src}
                           alt=""
                           title={m.count > 1 ? `${m.name} ×${m.count}` : m.name}
@@ -365,7 +365,7 @@ export default function RosterCalendarClient(props: {
                         />
                       ) : (
                         <span
-                          key={m.id}
+                          key={m.id ?? "none"}
                           title={m.count > 1 ? `${m.name} ×${m.count}` : m.name}
                           className="grid h-4 w-4 place-items-center rounded-full border border-rule bg-brass/15 text-[7px] font-semibold text-on-surface-muted sm:h-5 sm:w-5 sm:text-[8px]"
                         >
