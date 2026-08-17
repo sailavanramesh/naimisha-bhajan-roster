@@ -14,6 +14,7 @@ import {
   suggestOpenChannels,
   updateChannel,
   applyDesk,
+  setItemChannelWho,
 } from "./deskActions";
 
 export type ChannelRow = {
@@ -35,6 +36,12 @@ export type GridItem = {
   sceneNumber: string;
   /** Channel ids open on this item. */
   open: string[];
+  /**
+   * Strips carrying somebody other than their usual occupant, on this item.
+   * A singer's mic on the mridangam for one song, or on one head of a
+   * two-sided drum.
+   */
+  swaps: { channelId: string; instrumentId: string | null; person: string | null; who: string }[];
 };
 
 /**
@@ -55,6 +62,7 @@ export function ChannelGrid({
   channels,
   items,
   singers,
+  instruments,
   canEdit,
 }: {
   sessionId: string;
@@ -63,12 +71,15 @@ export function ChannelGrid({
   channels: ChannelRow[];
   items: GridItem[];
   singers: { id: string; name: string }[];
+  instruments: { id: string; name: string }[];
   canEdit: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [pickedDesk, setPickedDesk] = useState(desks[0]?.id ?? "");
   const [editing, setEditing] = useState<string | null>(null);
+  /** Which item has its mic-swap row open. One at a time; it is a wide row. */
+  const [swapsFor, setSwapsFor] = useState<string | null>(null);
   const [newNumber, setNewNumber] = useState("");
 
   const numbers = songNumbers(items);
@@ -233,30 +244,66 @@ export function ChannelGrid({
             </thead>
 
             <tbody>
-              {items.map((item) => (
+              {items.map((item) => [
                 <tr key={item.id} className="odd:bg-field/40">
-                  <td className="sticky left-0 z-10 max-w-[220px] truncate bg-surface px-2 py-1 odd:bg-field/40">
-                    <span className="mr-1.5 font-mono text-[11px] text-on-surface-muted">
-                      {item.kind === "narration" ? "read" : numbers.get(item.position)}
-                    </span>
-                    {item.title || (item.kind === "narration" ? "Reading" : "Not chosen yet")}
+                  {/*
+                    The TITLE truncates; the actions under it do not.
+
+                    They used to sit on the same line inside a `truncate` cell,
+                    which is `overflow: hidden` — so a long title pushed them
+                    past the 220px edge where they were clipped, unreadable and
+                    literally unclickable. Their own line costs a few pixels of
+                    height and always works.
+                  */}
+                  <td className="sticky left-0 z-10 max-w-[220px] bg-surface px-2 py-1 odd:bg-field/40">
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="shrink-0 font-mono text-[11px] text-on-surface-muted">
+                        {item.kind === "narration" ? "read" : numbers.get(item.position)}
+                      </span>
+                      <span className="min-w-0 truncate">
+                        {item.title || (item.kind === "narration" ? "Reading" : "Not chosen yet")}
+                      </span>
+                    </div>
                     {canEdit ? (
-                      <button
-                        type="button"
-                        disabled={pending}
-                        className="ml-2 text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
-                        onClick={() =>
-                          startTransition(async () => {
-                            const res = await suggestOpenChannels({ itemId: item.id });
-                            say(
-                              res,
-                              res.ok ? `${res.open} channel${res.open === 1 ? "" : "s"} open.` : "",
-                            );
-                          })
-                        }
-                      >
-                        fill from who is on it
-                      </button>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px]">
+                        <button
+                          type="button"
+                          disabled={pending}
+                          className="text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+                          onClick={() =>
+                            startTransition(async () => {
+                              const res = await suggestOpenChannels({ itemId: item.id });
+                              say(
+                                res,
+                                res.ok
+                                  ? `${res.open} channel${res.open === 1 ? "" : "s"} open.`
+                                  : "",
+                              );
+                            })
+                          }
+                        >
+                          fill from who is on it
+                        </button>
+                        {/*
+                          Mic swaps, behind a toggle and counted when there are
+                          any. Kept out of the grid itself: the grid answers "is
+                          this fader up", one tap per cell, and a mic changing
+                          hands is a rarer and wordier question that would have
+                          made every cell carry a control it almost never needs.
+                        */}
+                        {item.open.length > 0 ? (
+                          <button
+                            type="button"
+                            className="text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+                            aria-expanded={swapsFor === item.id}
+                            onClick={() => setSwapsFor(swapsFor === item.id ? null : item.id)}
+                          >
+                            {item.swaps.length > 0
+                              ? `mic swaps (${item.swaps.length})`
+                              : "mic swaps"}
+                          </button>
+                        ) : null}
+                      </div>
                     ) : null}
                   </td>
 
@@ -309,8 +356,78 @@ export function ChannelGrid({
                       </td>
                     );
                   })}
-                </tr>
-              ))}
+                </tr>,
+                swapsFor === item.id ? (
+                  <tr key={`${item.id}-swaps`} className="border-b bg-panel/60">
+                    <td colSpan={2 + channels.length} className="px-2 py-2">
+                      <p className="mb-1.5 text-[11px] text-on-surface-muted">
+                        Who is on each open mic for this item, where it is not the usual
+                        person. Leave both blank and the channel&rsquo;s own name stands.
+                      </p>
+                      <ul className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                        {channels
+                          .filter((c) => item.open.includes(c.id))
+                          .map((c) => {
+                            const swap = item.swaps.find((s) => s.channelId === c.id);
+                            return (
+                              <li key={c.id} className="flex items-center gap-1.5">
+                                <span className="w-7 shrink-0 text-right font-mono text-[11px] text-on-surface-muted">
+                                  {c.number}
+                                </span>
+                                <select
+                                  defaultValue={swap?.instrumentId ?? ""}
+                                  disabled={pending}
+                                  aria-label={`Instrument on channel ${c.number} for this item`}
+                                  className="h-7 min-w-0 flex-1 rounded-key border border-rule-surface bg-field px-1 text-[11px]"
+                                  onChange={(e) =>
+                                    startTransition(async () => {
+                                      const res = await setItemChannelWho({
+                                        itemId: item.id,
+                                        channelId: c.id,
+                                        instrumentId: e.target.value || null,
+                                        // Choosing an instrument clears a typed
+                                        // name: two answers to one question is
+                                        // how a screen starts disagreeing with
+                                        // itself.
+                                        person: null,
+                                      });
+                                      say(res, "");
+                                    })
+                                  }
+                                >
+                                  <option value="">{c.who ?? "usual"}</option>
+                                  {instruments.map((i) => (
+                                    <option key={i.id} value={i.id}>
+                                      {i.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                <Input
+                                  defaultValue={swap?.person ?? ""}
+                                  disabled={pending}
+                                  aria-label={`Or a name on channel ${c.number} for this item`}
+                                  placeholder="or a name"
+                                  className="h-7 w-24 shrink-0 text-[11px]"
+                                  onBlur={(e) =>
+                                    startTransition(async () => {
+                                      const res = await setItemChannelWho({
+                                        itemId: item.id,
+                                        channelId: c.id,
+                                        person: e.target.value || null,
+                                        instrumentId: null,
+                                      });
+                                      say(res, "");
+                                    })
+                                  }
+                                />
+                              </li>
+                            );
+                          })}
+                      </ul>
+                    </td>
+                  </tr>
+                ) : null,
+              ])}
             </tbody>
           </table>
         </div>

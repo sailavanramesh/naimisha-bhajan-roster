@@ -136,7 +136,11 @@ export async function applyDesk(input: { sessionId: string; deskId: string }): P
         number: String(c.number),
         label: c.label,
         kind: c.kind,
+        // The cushion and the mic come across with the strip: they are what the
+        // programme's copy is FOR — a record of how the desk was patched that
+        // night, which stays true when the desk is re-patched next year.
         colour: c.colour,
+        mic: c.mic,
       })),
     }),
   ]);
@@ -357,6 +361,69 @@ export async function setChannelOpen(input: {
       open: parsed.data.open,
     },
     update: { open: parsed.data.open },
+  });
+
+  await refresh(item.sessionId);
+  return ok;
+}
+
+/**
+ * Say who is on a strip FOR ONE ITEM, when it is not its usual occupant.
+ *
+ * Sailavan: a mic used for a singer will, on another song, be used for an
+ * instrument — or for one head of a two-sided drum, where a dholak or a
+ * mridangam is miked twice. Without this the desk view names the singer on
+ * channel 3 for a song where channel 3 is the mridangam, which is worse than
+ * saying nothing at all.
+ *
+ * The same three answers as everywhere else — a managed instrument, a roster
+ * singer, or a name typed in — and clearing all three puts the channel's own
+ * occupant back, which is the ordinary state and the way out of a mistake.
+ */
+export async function setItemChannelWho(input: {
+  itemId: string;
+  channelId: string;
+  instrumentId?: string | null;
+  singerId?: string | null;
+  person?: string | null;
+}): Promise<Result> {
+  await requireCapability("editPrograms");
+
+  const parsed = z
+    .object({
+      itemId: Id,
+      channelId: Id,
+      instrumentId: z.union([Id, z.null()]).optional(),
+      singerId: z.union([Id, z.null()]).optional(),
+      person: z.union([Text(60), z.null()]).optional(),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Could not change that." };
+
+  const item = await prisma.programItem.findUnique({
+    where: { id: parsed.data.itemId },
+    select: { sessionId: true },
+  });
+  if (!item) return { ok: false, error: "That item is gone." };
+
+  const who = {
+    instrumentId: parsed.data.instrumentId ?? null,
+    singerId: parsed.data.singerId ?? null,
+    person: parsed.data.person ?? null,
+  };
+
+  /*
+   * Upsert rather than update: a swap can be recorded on a channel that has no
+   * row yet. It arrives CLOSED, because saying who would be on a fader is not
+   * the same as putting the fader up, and guessing the second from the first is
+   * how a mic ends up live when nobody asked for it.
+   */
+  await prisma.programItemChannel.upsert({
+    where: {
+      itemId_channelId: { itemId: parsed.data.itemId, channelId: parsed.data.channelId },
+    },
+    create: { itemId: parsed.data.itemId, channelId: parsed.data.channelId, open: false, ...who },
+    update: who,
   });
 
   await refresh(item.sessionId);

@@ -14,7 +14,6 @@ import {
 import { googleSignInConfigured } from "@/lib/authConfig";
 import { SessionCategories } from "./SessionCategories";
 import { Instruments } from "./Instruments";
-import { Desks } from "./Desks";
 import { AddRepertoireForm } from "./AddRepertoireForm";
 
 import { getRole, can } from "@/lib/auth";
@@ -95,28 +94,6 @@ export default async function AdminPage({
   ]);
   const eligibleByName = new Map(eligibilityCounts.map((e) => [e.instrument, e._count._all]));
 
-  // The desks and their strips. A template a programme copies from.
-  const desks = (
-    await prisma.desk.findMany({
-      orderBy: [{ isDefault: "desc" }, { name: "asc" }],
-      include: {
-        channels: { orderBy: { number: "asc" } },
-        _count: { select: { sessions: true } },
-      },
-    })
-  ).map((d) => ({
-    id: d.id,
-    name: d.name,
-    kind: d.kind,
-    isDefault: d.isDefault,
-    usedBy: d._count.sessions,
-    channels: d.channels.map((c) => ({
-      id: c.id,
-      number: c.number,
-      label: c.label,
-      kind: c.kind as string,
-    })),
-  }));
   const instruments = instrumentRows.map((i) => ({
     id: i.id,
     name: i.name,
@@ -287,6 +264,26 @@ export default async function AdminPage({
                 />
                 edits words
               </label>
+              {/*
+                The second grant, and the same argument. The sound engineer and
+                the mic coordinator have to keep the desk and its cushion
+                allocation right; making them an editor to do it would hand them
+                the whole roster.
+              */}
+              <label
+                className="flex items-center gap-1.5 text-[11px] text-on-surface-muted"
+                title="May edit the desks, their strips and which cushion is on which channel"
+              >
+                <input
+                  key={`sound-${s.canRunSound}`}
+                  type="checkbox"
+                  name="canRunSound"
+                  defaultChecked={s.canRunSound}
+                  disabled={!canEdit}
+                  className="h-4 w-4"
+                />
+                runs sound
+              </label>
               <div className="flex items-center gap-2">
                 {canEdit ? (
                   <Button type="submit" className="h-10 w-[4.5rem] shrink-0 text-xs">Save</Button>
@@ -423,13 +420,16 @@ export default async function AdminPage({
         <CardHeader>
           <CardTitle>Sound desks</CardTitle>
           <p className="mt-1 text-sm text-on-surface-muted">
-            The desks and the strips printed on them. A music programme copies these when it
-            picks a desk and edits its own copy, so tidying a label here never rewrites what a
-            past programme says was on a channel.
+            The desks, their strips, and which cushion is on which channel. On a page of their
+            own because the people who keep them right are the sound engineer and the mic
+            coordinator, and they are not editors — tick &ldquo;runs sound&rdquo; against
+            somebody above to let them in.
           </p>
         </CardHeader>
         <CardContent>
-          <Desks desks={desks} canEdit={canEdit} />
+          <Link href="/admin/desks" className="text-sm underline underline-offset-2">
+            Sound desks →
+          </Link>
         </CardContent>
       </Card>
 

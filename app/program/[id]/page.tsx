@@ -10,7 +10,7 @@ import { timeLabel } from "@/lib/sessionsOfDay";
 import { ProgramEditor } from "./ProgramEditor";
 import { ProgramCrew } from "./ProgramCrew";
 import { ChannelGrid } from "./ChannelGrid";
-import { sortChannels } from "@/lib/deskChannels";
+import { occupantFor, sortChannels } from "@/lib/deskChannels";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +57,17 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
               singer: { select: { id: true, name: true } },
             },
           },
-          channels: { select: { channelId: true, open: true } },
+          channels: {
+            select: {
+              channelId: true,
+              open: true,
+              // The per-item override: who is on this strip for THIS item.
+              instrumentId: true,
+              person: true,
+              singer: { select: { name: true } },
+              instrument: { select: { name: true } },
+            },
+          },
         },
       },
     },
@@ -206,8 +216,27 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
           title: item.title ?? "",
           sceneNumber: item.sceneNumber === null ? "" : String(item.sceneNumber),
           open: item.channels.filter((c) => c.open).map((c) => c.channelId),
+          swaps: item.channels
+            .map((c) => ({
+              channelId: c.channelId,
+              instrumentId: c.instrumentId,
+              person: c.person,
+              who: occupantFor(
+                { who: null },
+                {
+                  instrumentName: c.instrument?.name,
+                  singerName: c.singer?.name,
+                  person: c.person,
+                },
+              ),
+            }))
+            .filter(
+              (s): s is { channelId: string; instrumentId: string | null; person: string | null; who: string } =>
+                s.who !== null,
+            ),
         }))}
         singers={singers}
+        instruments={instruments}
         canEdit={canEdit}
       />
 

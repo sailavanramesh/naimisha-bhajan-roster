@@ -20,6 +20,13 @@ export type ProposedChannel = {
   singerId?: string | null;
   person?: string | null;
   instrumentId?: string | null;
+  /**
+   * The cushion on this strip, where the strip has a fixed one. Absent from
+   * anything proposed from a programme's people — a cushion is a fact about
+   * the desk, and `proposeChannels` is reading the running order, which knows
+   * nothing about the hardware.
+   */
+  colour?: CushionColour | null;
 };
 
 export type ItemPeople = {
@@ -239,4 +246,117 @@ export function blankStrips(count: number): ProposedChannel[] {
     label: `Channel ${i + 1}`,
     kind: "spare" as ChannelKind,
   }));
+}
+
+export type CushionColour = "blue" | "grey" | "green" | "orange" | "pink";
+
+/**
+ * The centre's own allocation: which cushion is on which channel.
+ *
+ * Sailavan, 2026-08-17 — "mic cushions are always fixed channels". They do not
+ * move week to week, so the desk knows them and a programme copies them, rather
+ * than somebody re-deciding on the night.
+ *
+ * Channel 4 is deliberately a mic with NO cushion, and it is listed rather than
+ * omitted so the gap reads as a fact about the desk instead of a strip somebody
+ * forgot. Channel 9 is not a cushion at all — it is the tabla, which is fixed to
+ * its channel for the same reason the cushions are.
+ *
+ * A starting point, not a rule: every strip is editable afterwards by anybody
+ * with `manageDesks`, which is the whole point of the grant.
+ */
+export const FIXED_STRIPS: ReadonlyArray<{
+  number: number;
+  label: string;
+  kind: ChannelKind;
+  colour: CushionColour | null;
+}> = [
+  { number: 1, label: "Blue", kind: "vocal", colour: "blue" },
+  { number: 2, label: "Grey", kind: "vocal", colour: "grey" },
+  { number: 3, label: "Green", kind: "vocal", colour: "green" },
+  { number: 4, label: "No cushion", kind: "vocal", colour: null },
+  { number: 5, label: "Orange", kind: "vocal", colour: "orange" },
+  { number: 6, label: "Pink", kind: "vocal", colour: "pink" },
+  { number: 9, label: "Tabla", kind: "instrument", colour: null },
+];
+
+/**
+ * A new desk's strips: the fixed allocation, then blanks up to the input count.
+ *
+ * The cushions and the tabla land on the channels they are actually on, and
+ * everything else arrives numbered and unlabelled as before. A desk smaller than
+ * the fixed list simply gets the part of it that fits.
+ */
+export function defaultStrips(count: number): ProposedChannel[] {
+  const total = Math.max(0, Math.min(count, 64));
+  const fixed = new Map(FIXED_STRIPS.map((s) => [s.number, s]));
+
+  return Array.from({ length: total }, (_, i) => {
+    const n = i + 1;
+    const known = fixed.get(n);
+    return {
+      number: String(n),
+      label: known?.label ?? `Channel ${n}`,
+      kind: known?.kind ?? ("spare" as ChannelKind),
+      colour: known?.colour ?? null,
+    };
+  });
+}
+
+/**
+ * A name shortened to fit a channel tile.
+ *
+ * The desk view puts twelve or more strips across a screen, so a tile is about
+ * three characters wide and the full name was never going to fit. Three letters
+ * of a first name is what a sound person writes on tape anyway.
+ *
+ * A multi-word name gives its initials — "All girls" reads better as "AG" than
+ * as "All" — up to three of them, which is how "Sri Sai Ram" becomes "SSR".
+ * A single word is simply cut, keeping its capital: "Prasanna" → "Pra".
+ */
+export function shortName(name: string | null | undefined): string {
+  const clean = (name ?? "").trim().replace(/\s+/g, " ");
+  if (!clean) return "";
+
+  const words = clean.split(" ").filter(Boolean);
+  if (words.length > 1) {
+    return words
+      .slice(0, 3)
+      .map((w) => w[0]?.toUpperCase() ?? "")
+      .join("");
+  }
+  return clean.slice(0, 3);
+}
+
+/**
+ * Who or what is on a strip for one item.
+ *
+ * The per-item override wins where there is one, and there usually is not. A
+ * mic does not belong to one person all evening: the strip that is a singer on
+ * song 1 may be the mridangam on song 4, and the desk view must say the one that
+ * is true now rather than the one that is true most of the time.
+ *
+ * The three answers are checked in the order they are specific — a named
+ * instrument, then a roster singer, then a name typed in — and the channel's own
+ * occupant is the fallback, which is the ordinary case.
+ */
+export function occupantFor(
+  channel: { who?: string | null },
+  override?: {
+    instrumentName?: string | null;
+    singerName?: string | null;
+    person?: string | null;
+  } | null,
+): string | null {
+  const from = (v?: string | null) => {
+    const t = (v ?? "").trim();
+    return t.length > 0 ? t : null;
+  };
+
+  return (
+    from(override?.instrumentName) ??
+    from(override?.singerName) ??
+    from(override?.person) ??
+    from(channel.who)
+  );
 }

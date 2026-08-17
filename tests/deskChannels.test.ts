@@ -2,6 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   blankStrips,
   currentItemOf,
+  defaultStrips,
+  occupantFor,
+  shortName,
   channelLabel,
   proposeChannels,
   proposeOpenChannels,
@@ -240,5 +243,106 @@ describe("stepItem", () => {
 
   it("has nowhere to go in an empty running order", () => {
     expect(stepItem([], null, 1)).toBeNull();
+  });
+});
+
+describe("defaultStrips", () => {
+  const strips = defaultStrips(20);
+
+  it("puts the centre's cushions on the channels they are actually on", () => {
+    const colours = Object.fromEntries(strips.map((s) => [s.number, s.colour ?? null]));
+    expect(colours["1"]).toBe("blue");
+    expect(colours["2"]).toBe("grey");
+    expect(colours["3"]).toBe("green");
+    expect(colours["5"]).toBe("orange");
+    expect(colours["6"]).toBe("pink");
+  });
+
+  /* Channel 4 is a mic with no cushion, and that is a fact about the desk
+     rather than a strip somebody forgot to fill in. */
+  it("leaves channel 4 without a cushion, and says so", () => {
+    const four = strips.find((s) => s.number === "4");
+    expect(four?.colour ?? null).toBeNull();
+    expect(four?.label).toBe("No cushion");
+    expect(four?.kind).toBe("vocal");
+  });
+
+  it("fixes the tabla to channel 9, as an instrument", () => {
+    const nine = strips.find((s) => s.number === "9");
+    expect(nine?.label).toBe("Tabla");
+    expect(nine?.kind).toBe("instrument");
+  });
+
+  it("numbers the rest plainly and leaves them spare", () => {
+    const twelve = strips.find((s) => s.number === "12");
+    expect(twelve?.label).toBe("Channel 12");
+    expect(twelve?.kind).toBe("spare");
+    expect(strips).toHaveLength(20);
+  });
+
+  it("gives a small desk only the part of the allocation that fits", () => {
+    const small = defaultStrips(4);
+    expect(small).toHaveLength(4);
+    expect(small.map((s) => s.colour ?? null)).toEqual(["blue", "grey", "green", null]);
+  });
+
+  it("refuses a silly count, like blankStrips", () => {
+    expect(defaultStrips(0)).toEqual([]);
+    expect(defaultStrips(9999)).toHaveLength(64);
+  });
+});
+
+describe("shortName", () => {
+  it("takes three letters of a single name", () => {
+    expect(shortName("Prasanna")).toBe("Pra");
+    expect(shortName("Ashwin")).toBe("Ash");
+  });
+
+  it("initials a name with more than one word", () => {
+    expect(shortName("All girls")).toBe("AG");
+    expect(shortName("Sri Sai Ram")).toBe("SSR");
+  });
+
+  it("stops at three initials", () => {
+    expect(shortName("One Two Three Four")).toBe("OTT");
+  });
+
+  it("has nothing to say about nothing", () => {
+    expect(shortName(null)).toBe("");
+    expect(shortName("   ")).toBe("");
+  });
+
+  it("copes with a short name rather than padding it", () => {
+    expect(shortName("Jo")).toBe("Jo");
+  });
+});
+
+describe("occupantFor", () => {
+  const channel = { who: "Prasanna" };
+
+  it("says the channel's own occupant when nothing overrides it", () => {
+    expect(occupantFor(channel, null)).toBe("Prasanna");
+    expect(occupantFor(channel, {})).toBe("Prasanna");
+  });
+
+  /* The case this exists for: a singer's mic on the mridangam for one song. */
+  it("lets an instrument take the strip for one item", () => {
+    expect(occupantFor(channel, { instrumentName: "Mridangam" })).toBe("Mridangam");
+  });
+
+  it("lets another singer take it", () => {
+    expect(occupantFor(channel, { singerName: "Rhuben" })).toBe("Rhuben");
+  });
+
+  it("lets a typed name take it — one head of a two-sided drum", () => {
+    expect(occupantFor(channel, { person: "Dholak L" })).toBe("Dholak L");
+  });
+
+  it("ignores an override that is only whitespace", () => {
+    expect(occupantFor(channel, { person: "   " })).toBe("Prasanna");
+  });
+
+  it("has nothing to say about a spare strip", () => {
+    expect(occupantFor({ who: null }, null)).toBeNull();
   });
 });

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/db";
 import { getRole, can } from "@/lib/auth";
-import { sortChannels } from "@/lib/deskChannels";
+import { occupantFor, sortChannels } from "@/lib/deskChannels";
 import { songNumbers, instrumentsLabel, performersLabel } from "@/lib/program";
 import { DeskBoard, type DeskChannel, type DeskItem } from "./DeskBoard";
 
@@ -54,7 +54,17 @@ export default async function ProgramDeskPage({
         orderBy: { position: "asc" },
         include: {
           song: { select: { title: true } },
-          channels: { select: { channelId: true, open: true } },
+          channels: {
+            select: {
+              channelId: true,
+              open: true,
+              // The per-item override: a strip carrying somebody or something
+              // other than its usual occupant for this one item.
+              person: true,
+              singer: { select: { name: true } },
+              instrument: { select: { name: true } },
+            },
+          },
           performers: {
             orderBy: { createdAt: "asc" },
             include: { singer: { select: { name: true } } },
@@ -123,6 +133,25 @@ export default async function ProgramDeskPage({
     // Only what the item explicitly opens. A channel with no row here is
     // closed — an absent row is a fader down, never an unknown.
     openChannelIds: item.channels.filter((c) => c.open).map((c) => c.channelId),
+    /*
+     * Strips carrying somebody other than their usual occupant, for this item
+     * alone. Sent as the few rows that differ rather than a name per channel
+     * per item, which for a long programme would be hundreds of strings saying
+     * what the channel list already says.
+     */
+    swaps: item.channels
+      .map((c) => ({
+        channelId: c.channelId,
+        who: occupantFor(
+          { who: null },
+          {
+            instrumentName: c.instrument?.name,
+            singerName: c.singer?.name,
+            person: c.person,
+          },
+        ),
+      }))
+      .filter((s): s is { channelId: string; who: string } => s.who !== null),
   }));
 
   const channels: DeskChannel[] = sortChannels(session.channels).map((c) => ({
@@ -130,6 +159,11 @@ export default async function ProgramDeskPage({
     number: c.number,
     label: c.label,
     kind: c.kind,
+    // The cushion is FIXED to the strip — channel 1 is the blue cushion — so it
+    // is what the desk view colours the tile with, not something derived from
+    // whoever happens to be on it.
+    colour: c.colour,
+    mic: c.mic,
     who: c.singer?.name ?? (c.person?.trim() || c.instrument?.name || null),
   }));
 

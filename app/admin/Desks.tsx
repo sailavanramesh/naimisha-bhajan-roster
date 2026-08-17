@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Button, Input } from "@/components/ui";
+import { CHORUS_COLOURS, type MicColourValue } from "@/lib/micCushion";
 import { addDesk, removeDesk, updateDeskChannel } from "./deskActions";
 
 export type DeskRow = {
@@ -10,7 +11,16 @@ export type DeskRow = {
   kind: "analog" | "digital";
   isDefault: boolean;
   usedBy: number;
-  channels: { id: string; number: number; label: string; kind: string }[];
+  channels: {
+    id: string;
+    number: number;
+    label: string;
+    kind: string;
+    /** The cushion fixed to this strip. Null is a mic with no cushion. */
+    colour: MicColourValue | null;
+    /** Which mic is on it — "Wired", "Pegasus", "WL1", "Rode". */
+    mic: string | null;
+  }[];
 };
 
 const KINDS = ["vocal", "instrument", "track", "spare"] as const;
@@ -149,66 +159,132 @@ export function Desks({ desks, canEdit }: { desks: DeskRow[]; canEdit: boolean }
   );
 }
 
+/**
+ * One strip on a desk.
+ *
+ * The cushion sits HERE, on the desk, rather than on a programme, because the
+ * cushions do not move — channel 1 is the blue cushion every week. A programme
+ * copies the allocation when it picks the desk and may correct its own copy;
+ * this is the standing truth the copy is taken from.
+ */
 function ChannelRow({
   channel,
   canEdit,
   onMessage,
 }: {
-  channel: { id: string; number: number; label: string; kind: string };
+  channel: DeskRow["channels"][number];
   canEdit: boolean;
   onMessage: (m: { ok: boolean; text: string } | null) => void;
 }) {
   const [label, setLabel] = useState(channel.label);
-  const [kind, setKind] = useState(channel.kind);
+  // Typed to the enum rather than to `string`: every save carries the kind
+  // alongside whatever it is actually changing, so a loose type here would
+  // spread through all four of them.
+  const [kind, setKind] = useState(channel.kind as (typeof KINDS)[number]);
+  const [colour, setColour] = useState<MicColourValue | null>(channel.colour);
+  const [mic, setMic] = useState(channel.mic ?? "");
   const [pending, startTransition] = useTransition();
 
-  const save = (nextLabel: string, nextKind: string) =>
+  const save = (patch: Parameters<typeof updateDeskChannel>[0]) =>
     startTransition(async () => {
-      const res = await updateDeskChannel({
-        id: channel.id,
-        label: nextLabel,
-        kind: nextKind as (typeof KINDS)[number],
-      });
+      const res = await updateDeskChannel(patch);
       if (!res.ok) onMessage({ ok: false, text: res.error });
     });
+
+  if (!canEdit) {
+    return (
+      <li className="flex flex-wrap items-center gap-2 text-sm">
+        <span className="w-8 shrink-0 text-right font-mono text-xs text-on-surface-muted">
+          {channel.number}
+        </span>
+        <span>
+          {channel.label}
+          <span className="ml-2 text-xs text-on-surface-muted">
+            {channel.kind}
+            {channel.mic ? ` · ${channel.mic}` : ""}
+          </span>
+        </span>
+      </li>
+    );
+  }
 
   return (
     <li className="flex flex-wrap items-center gap-2 text-sm">
       <span className="w-8 shrink-0 text-right font-mono text-xs text-on-surface-muted">
         {channel.number}
       </span>
-      {canEdit ? (
-        <>
-          <Input
-            value={label}
-            aria-label={`Label for channel ${channel.number}`}
-            className="h-8 w-44"
-            onChange={(e) => setLabel(e.target.value)}
-            onBlur={() => label !== channel.label && save(label, kind)}
-          />
-          <select
-            value={kind}
-            aria-label={`What channel ${channel.number} carries`}
-            disabled={pending}
-            className="h-8 rounded-key border border-rule-surface bg-field px-2 text-xs"
-            onChange={(e) => {
-              setKind(e.target.value);
-              save(label, e.target.value);
-            }}
-          >
-            {KINDS.map((k) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
-          </select>
-        </>
-      ) : (
-        <span>
-          {channel.label}
-          <span className="ml-2 text-xs text-on-surface-muted">{channel.kind}</span>
+
+      <Input
+        value={label}
+        aria-label={`Label for channel ${channel.number}`}
+        className="h-8 w-40"
+        onChange={(e) => setLabel(e.target.value)}
+        onBlur={() => label !== channel.label && save({ id: channel.id, label, kind })}
+      />
+
+      <select
+        value={kind}
+        aria-label={`What channel ${channel.number} carries`}
+        disabled={pending}
+        className="h-8 rounded-key border border-rule-surface bg-field px-2 text-xs"
+        onChange={(e) => {
+          const next = e.target.value as (typeof KINDS)[number];
+          setKind(next);
+          save({ id: channel.id, label, kind: next });
+        }}
+      >
+        {KINDS.map((k) => (
+          <option key={k} value={k}>
+            {k}
+          </option>
+        ))}
+      </select>
+
+      {/*
+        The cushion, on vocal strips only. An instrument strip has no cushion to
+        put a colour on, and offering one there would invite somebody to record
+        a thing that does not exist.
+      */}
+      {kind === "vocal" ? (
+        <span className="flex items-center gap-1">
+          {CHORUS_COLOURS.map((c) => {
+            const on = colour === c.value;
+            return (
+              <button
+                key={c.value}
+                type="button"
+                disabled={pending}
+                aria-pressed={on}
+                aria-label={`${c.label} cushion on channel ${channel.number}`}
+                title={`${c.label} cushion on channel ${channel.number}`}
+                className={`h-4 w-4 rounded-full border transition-transform ${
+                  on ? "scale-110 border-on-surface" : "border-rule-surface opacity-70"
+                } hover:opacity-100`}
+                style={{ background: c.dot }}
+                onClick={() => {
+                  // A second tap on the colour it already is clears it, which
+                  // is how every other cushion control in the app behaves —
+                  // and "no cushion" is a real state: channel 4 is one.
+                  const next = on ? null : (c.value as MicColourValue);
+                  setColour(next);
+                  save({ id: channel.id, label, kind, colour: next });
+                }}
+              />
+            );
+          })}
         </span>
-      )}
+      ) : null}
+
+      {/* Which mic is actually on it. Free text: it is the sound person's own
+          shorthand for their own gear, and nothing computes on it. */}
+      <Input
+        value={mic}
+        aria-label={`Mic on channel ${channel.number}`}
+        placeholder="mic"
+        className="h-8 w-28"
+        onChange={(e) => setMic(e.target.value)}
+        onBlur={() => mic !== (channel.mic ?? "") && save({ id: channel.id, label, kind, mic })}
+      />
     </li>
   );
 }

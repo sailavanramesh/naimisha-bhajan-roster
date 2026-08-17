@@ -66,6 +66,7 @@ export async function getSignedInSinger(): Promise<{
   role: Role;
   /** Per-person grants on top of the role. See canWithGrants. */
   canEditWords: boolean;
+  canRunSound: boolean;
 } | null> {
   if (!googleSignInConfigured) return null;
   const session = await auth().catch(() => null);
@@ -74,7 +75,14 @@ export async function getSignedInSinger(): Promise<{
 
   const singer = await prisma.singer.findUnique({
     where: { email },
-    select: { id: true, name: true, email: true, role: true, canEditWords: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      role: true,
+      canEditWords: true,
+      canRunSound: true,
+    },
   });
   // Signed in but not on the allowlist: a viewer, deliberately. Sign-in never
   // creates a singer.
@@ -88,6 +96,7 @@ export async function getSignedInSinger(): Promise<{
     email: singer.email,
     role,
     canEditWords: singer.canEditWords,
+    canRunSound: singer.canRunSound,
   };
 }
 
@@ -107,6 +116,7 @@ export async function canWithGrantsFor(capability: Capability): Promise<boolean>
   const role = signedIn?.role ?? (await getRole());
   return canWithGrants(role, capability, {
     canEditWords: signedIn?.canEditWords ?? false,
+    canRunSound: signedIn?.canRunSound ?? false,
   });
 }
 

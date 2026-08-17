@@ -154,8 +154,9 @@ const SingerAccess = z.object({
     .transform((v) => v.toLowerCase())
     .refine((v) => v === "" || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v), "That is not an email address"),
   role: z.enum(["owner", "coordinator", "singer"]),
-  /// The one per-person grant. See lib/capabilities.ts canWithGrants.
+  /// The two per-person grants. See lib/capabilities.ts canWithGrants.
   canEditWords: z.boolean(),
+  canRunSound: z.boolean(),
 });
 
 /**
@@ -174,9 +175,10 @@ export async function setSingerAccess(formData: FormData): Promise<void> {
     role: String(formData.get("role") ?? "singer"),
     // An unchecked box submits nothing at all, so absent means false.
     canEditWords: formData.get("canEditWords") === "on",
+    canRunSound: formData.get("canRunSound") === "on",
   });
   if (!parsed.success) throw new Error(parsed.error.issues[0]?.message ?? "Could not save access.");
-  const { singerId, role, canEditWords } = parsed.data;
+  const { singerId, role, canEditWords, canRunSound } = parsed.data;
   const email = normaliseEmail(parsed.data.email);
 
   if (email) {
@@ -191,10 +193,11 @@ export async function setSingerAccess(formData: FormData): Promise<void> {
 
   await prisma.singer.update({
     where: { id: singerId },
-    data: { email, role: role as "coordinator" | "singer", canEditWords },
+    data: { email, role: role as "coordinator" | "singer", canEditWords, canRunSound },
   });
 
   revalidatePath("/admin");
+  revalidatePath("/admin/desks");
 }
 
 const NewSinger = z.object({

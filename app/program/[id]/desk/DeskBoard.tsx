@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import { useSessionVersion } from "@/components/useSessionVersion";
-import { currentItemOf, stepItem } from "@/lib/deskChannels";
+import { currentItemOf, occupantFor, shortName, stepItem } from "@/lib/deskChannels";
 import { hasMoreBelow } from "@/lib/liveBoard";
+import { micColourDot, micColourLabel, type MicColourValue } from "@/lib/micCushion";
 import { setCurrentItem } from "../deskActions";
 
 export type DeskChannel = {
@@ -12,7 +13,11 @@ export type DeskChannel = {
   number: string;
   label: string;
   kind: string;
-  /** Who or what is on the strip. Null on a spare. */
+  /** The cushion fixed to this strip. Null is a mic with no cushion. */
+  colour: MicColourValue | null;
+  /** Which mic is on it — "Wired", "Pegasus", "WL1". Reference only. */
+  mic: string | null;
+  /** Who or what is usually on the strip. Null on a spare. */
   who: string | null;
 };
 
@@ -27,6 +32,8 @@ export type DeskItem = {
   who: string;
   played: string;
   openChannelIds: string[];
+  /** Strips carrying somebody other than their usual occupant, for this item. */
+  swaps: { channelId: string; who: string }[];
 };
 
 /**
@@ -146,6 +153,13 @@ export function DeskBoard({
 
   const openIds = new Set(item?.openChannelIds ?? []);
   const openCount = channels.filter((c) => openIds.has(c.id)).length;
+  /*
+   * Who is on a strip FOR THIS ITEM, where that is not its usual occupant — a
+   * singer's mic taken by the mridangam for one song, or by one head of a
+   * two-sided drum. Empty for almost every item, which is why it travels as the
+   * exceptions rather than as a name per channel.
+   */
+  const swaps = new Map((item?.swaps ?? []).map((s) => [s.channelId, s.who]));
 
   return (
     <div className="fixed inset-0 z-[100] flex h-[100dvh] overflow-hidden overscroll-none bg-ground text-on-ground">
@@ -234,52 +248,138 @@ export function DeskBoard({
                     Pick a desk on the programme page and the strips arrive here.
                   </p>
                 ) : (
-                  <ul className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2">
-                    {channels.map((c) => {
-                      const isOpen = openIds.has(c.id);
-                      return (
-                        <li
-                          key={c.id}
-                          /*
-                            Open is stated three ways — brightness, weight and
-                            the word itself in the label read out to a screen
-                            reader. A dark hall and a colour-blind operator are
-                            both ordinary, and this is the one thing on screen
-                            that must not be guessed at.
-                          */
-                          className={[
-                            "flex items-center gap-2 rounded-[10px] border px-2 py-2",
-                            isOpen
-                              ? "border-brass/70 bg-brass/15 text-on-ground"
-                              : "border-rule bg-surface/30 text-on-ground-muted opacity-55",
-                          ].join(" ")}
-                        >
-                          <span
-                            aria-hidden
-                            className={[
-                              "grid h-9 w-9 shrink-0 place-items-center rounded-[8px] font-mono text-base font-bold",
-                              isOpen
-                                ? "bg-brass text-ivory"
-                                : "border border-rule bg-transparent",
-                            ].join(" ")}
-                          >
-                            {c.number}
-                          </span>
-                          <span className="min-w-0">
-                            <span className="block truncate text-sm font-semibold leading-tight">
-                              {c.label}
+                  <>
+                    {/*
+                      A strip is a narrow tile, not a row.
+
+                      Sailavan wanted at least twelve channels across at once,
+                      and a twenty-channel desk read as a list of twenty full
+                      names is a scroll, not a glance. 64px is what fits twelve
+                      on a laptop and still holds three characters legibly; the
+                      same auto-fill drops to four or five across on a phone
+                      without a second layout to keep honest.
+                    */}
+                    <ul className="grid grid-cols-[repeat(auto-fill,minmax(64px,1fr))] gap-1.5">
+                      {channels.map((c) => {
+                        const isOpen = openIds.has(c.id);
+                        const swapped = swaps.get(c.id) ?? null;
+                        const who = occupantFor(c, { person: swapped });
+                        /*
+                         * THE CUSHION IS THE COLOUR, and only on a vocal strip.
+                         *
+                         * The cushions are fixed to channels — 1 is blue, 2 is
+                         * grey — so the tile can be the cushion the person is
+                         * holding, and the desk matches screen to hand without
+                         * reading a word. An instrument strip has no cushion,
+                         * so colouring it would invent one.
+                         */
+                        const cushion =
+                          c.kind === "vocal" && c.colour ? micColourDot(c.colour) : null;
+
+                        const label = [
+                          `Channel ${c.number}`,
+                          who,
+                          c.kind === "vocal" && c.colour
+                            ? `${micColourLabel(c.colour)} cushion`
+                            : null,
+                          c.mic,
+                          swapped ? "for this item only" : null,
+                        ]
+                          .filter(Boolean)
+                          .join(" · ");
+
+                        return (
+                          <li key={c.id}>
+                            <span
+                              title={`${label} — ${isOpen ? "open" : "closed"}`}
+                              className={[
+                                "flex h-full flex-col items-stretch overflow-hidden rounded-[8px] border",
+                                isOpen
+                                  ? "border-on-ground/25"
+                                  : "border-rule opacity-40 grayscale",
+                              ].join(" ")}
+                            >
+                              {/* The number on top, always legible: it is what
+                                  the fader is labelled and how the strip is
+                                  named out loud. */}
+                              <span
+                                aria-hidden
+                                className={[
+                                  "block border-b px-1 py-0.5 text-center font-mono text-[11px] font-bold leading-none",
+                                  isOpen
+                                    ? "border-on-ground/20 bg-surface/60 text-on-ground"
+                                    : "border-rule text-on-ground-muted",
+                                ].join(" ")}
+                              >
+                                {c.number}
+                              </span>
+
+                              <span
+                                aria-hidden
+                                className={[
+                                  "flex min-h-[34px] flex-1 flex-col items-center justify-center px-0.5 py-1 text-center",
+                                  cushion
+                                    ? ""
+                                    : isOpen
+                                      ? "bg-brass/25"
+                                      : "bg-transparent",
+                                ].join(" ")}
+                                style={
+                                  cushion
+                                    ? {
+                                        // Full cushion colour when the fader is
+                                        // up; a wash of it when it is down, so a
+                                        // closed strip still says which cushion
+                                        // it is without competing for attention.
+                                        background: isOpen ? cushion : `${cushion}33`,
+                                        color: isOpen ? "#fff" : undefined,
+                                      }
+                                    : undefined
+                                }
+                              >
+                                <span className="block w-full truncate text-[13px] font-bold leading-none">
+                                  {shortName(who) || "—"}
+                                </span>
+                                {c.mic ? (
+                                  <span className="mt-0.5 block w-full truncate text-[9px] leading-none opacity-80">
+                                    {c.mic}
+                                  </span>
+                                ) : null}
+                              </span>
+
+                              {/*
+                                Colour is never the only carrier. A dark hall
+                                and a colour-blind operator are both ordinary,
+                                so open/closed is also brightness, also
+                                greyscale, and also said in words here.
+                              */}
+                              <span className="sr-only">
+                                {`${label} — ${isOpen ? "open" : "closed"}`}
+                              </span>
                             </span>
-                            {c.who && c.who !== c.label ? (
-                              <span className="block truncate text-xs leading-tight">{c.who}</span>
-                            ) : null}
-                          </span>
-                          <span className="sr-only">
-                            {`Channel ${c.number}, ${c.label}, ${isOpen ? "open" : "closed"}`}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                          </li>
+                        );
+                      })}
+                    </ul>
+
+                    {/*
+                      The tiles are three letters wide, which is enough to find
+                      a fader and not enough to be sure whose it is. This line
+                      spells the open ones out, so the channel number and the
+                      person can always be tied together on the same screen.
+                    */}
+                    {openCount > 0 ? (
+                      <p className="mt-3 text-xs leading-relaxed text-on-ground-muted">
+                        {channels
+                          .filter((c) => openIds.has(c.id))
+                          .map((c) => {
+                            const who = occupantFor(c, { person: swaps.get(c.id) ?? null });
+                            return `${c.number} ${who ?? c.label}`;
+                          })
+                          .join("  ·  ")}
+                      </p>
+                    ) : null}
+                  </>
                 )}
               </div>
 

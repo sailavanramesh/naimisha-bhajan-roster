@@ -213,6 +213,17 @@ model Singer {
   /// wanted named people keeping the words up to date without handing them the
   /// roster. See canWithGrants().
   canEditWords Boolean  @default(false)
+  /// The second per-person grant: this person runs the sound.
+  ///
+  /// Sailavan wanted the sound engineer and the mic coordinator to keep the
+  /// desk and its cushion allocation right without becoming editors — the same
+  /// shape of problem as canEditWords, and the same answer. Granted in /admin.
+  ///
+  /// Deliberately NOT read from SessionCrew, which records who is on the job
+  /// for one programme. The cushion allocation is a standing fact about a desk
+  /// ("channel 1 is the blue cushion"), so the permission to change it is a
+  /// standing fact about a person.
+  canRunSound  Boolean  @default(false)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -227,6 +238,8 @@ model Singer {
   programInstruments ProgramItemInstrument[]
   crew               SessionCrew[]
   deskChannels       SessionChannel[]
+  /// Items where this person is on a strip that is not usually theirs.
+  itemChannels       ProgramItemChannel[]
 }
 
 model Bhajan {
@@ -365,9 +378,9 @@ model Session {
   /// reset by somebody filling in a pitch an hour later: the people are
   /// decided, which is what the quiet "the roster is up" announces. Slot
   /// updatedAt cannot answer it, because every pitch edit bumps that too.
-  rosterChangedAt DateTime?
+  rosterChangedAt     DateTime?
   /// Which desk this programme is mixed on. Null until one is picked.
-  deskId          String?
+  deskId              String?
   /// Which item in the running order the programme is ON right now.
   ///
   /// A POSITION, not an item id, so it survives an item being deleted mid-
@@ -380,17 +393,17 @@ model Session {
   /// the programme rather than one per device. Null until somebody starts, which
   /// reads as "we have not begun".
   currentItemPosition Int?
-  type            SessionType   @default(Weekday)
+  type                SessionType   @default(Weekday)
   /// See SessionFormat. Defaults to `bhajans` so every existing row is
   /// unaffected by this column arriving.
-  format          SessionFormat @default(bhajans)
-  status          SessionStatus @default(Published)
+  format              SessionFormat @default(bhajans)
+  status              SessionStatus @default(Published)
   /// Seed for the generator, so a generated set is reproducible and shareable.
-  seed            String?
-  templateId      String?
-  notes           String?       @db.Text
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
+  seed                String?
+  templateId          String?
+  notes               String?       @db.Text
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
   template          SessionTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
   slots             SessionSlot[]
@@ -682,6 +695,9 @@ model Instrument {
 
   programItems    ProgramItemInstrument[]
   sessionChannels SessionChannel[]
+  /// Items where this instrument takes over a strip that is not usually its —
+  /// a singer's mic on the mridangam for one song.
+  itemChannels    ProgramItemChannel[]
 }
 
 /// One instrument on one program item, and who is playing it.
@@ -865,7 +881,17 @@ model DeskChannel {
   label  String
   kind   ChannelKind @default(vocal)
   /// For a vocal strip whose mic wears a coloured cushion.
+  ///
+  /// The cushions are FIXED to channels and do not move: channel 1 is the blue
+  /// cushion every week. That is why this lives on the desk rather than on a
+  /// programme — it describes the hardware, and a programme copies it.
   colour MicColour?
+  /// Which mic is actually on the strip — "Wired", "Pegasus", "WL1", "Rode".
+  ///
+  /// Free text on purpose. This is the sound person's own shorthand for their
+  /// own gear, it changes when a mic is replaced, and a managed list of mic
+  /// models would be a table to maintain for something nothing computes on.
+  mic    String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -897,6 +923,8 @@ model SessionChannel {
   person       String?
   instrumentId String?
   note         String?
+  /// Which mic is on the strip, copied from the desk and correctable here.
+  mic          String?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -920,13 +948,35 @@ model ProgramItemChannel {
   open      Boolean @default(false)
   note      String?
 
+  /// WHO OR WHAT IS ON THIS STRIP FOR THIS ITEM, when it is not the usual
+  /// occupant.
+  ///
+  /// A mic does not belong to one person all evening. Sailavan: a mic used for
+  /// a singer will, on another song, be used for an instrument — or for one
+  /// side of a two-headed drum, where a dholak or a mridangam is miked twice
+  /// and each head is its own strip. Without this the desk view would name the
+  /// singer on channel 3 for a song where channel 3 is the mridangam, which is
+  /// worse than saying nothing.
+  ///
+  /// All three are overrides and all three are null in the ordinary case,
+  /// where the channel's own occupant stands. Same three answers as
+  /// SessionChannel — a roster singer, a name typed in, or a managed
+  /// instrument — because it is the same question asked per item.
+  singerId     String?
+  person       String?
+  instrumentId String?
+
   updatedAt DateTime @updatedAt
 
-  item    ProgramItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  channel SessionChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  item       ProgramItem    @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  channel    SessionChannel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  singer     Singer?        @relation(fields: [singerId], references: [id], onDelete: SetNull)
+  instrument Instrument?    @relation(fields: [instrumentId], references: [id], onDelete: SetNull)
 
   @@id([itemId, channelId])
   @@index([channelId])
+  @@index([singerId])
+  @@index([instrumentId])
 }
 
 /// Somebody doing a job at a session rather than singing at it.

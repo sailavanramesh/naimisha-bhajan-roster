@@ -41,6 +41,7 @@ export type Capability =
   | "manageNotificationRules" // owner only: when the day-of reminders go out
   | "editPrograms" // build a music program: its running order, performers, crew
   | "editSongWords" // lyrics and meanings in the song catalogue
+  | "manageDesks" // the desks, their strips, and which cushion is on which channel
   | "viewAllPages";
 
 const EDITOR_CAPABILITIES: Capability[] = [
@@ -61,6 +62,7 @@ const EDITOR_CAPABILITIES: Capability[] = [
   // being the person who decides a Guru Poornima running order.
   "editPrograms",
   "editSongWords",
+  "manageDesks",
   "viewAllPages",
 ];
 
@@ -90,10 +92,11 @@ export function can(role: Role, capability: Capability): boolean {
 /**
  * What one PERSON may be granted beyond their role.
  *
- * Exactly one thing so far. Sailavan wanted named people keeping the lyrics and
- * meanings up to date without handing them the roster, and the four roles are a
- * ladder — the only way to give somebody words-editing was to make them an
- * editor, which is far more power than was meant.
+ * Two things so far, and both for the same reason. Sailavan wanted named people
+ * keeping the lyrics up to date, and the sound person keeping the desk and its
+ * cushion allocation right, without handing either of them the roster — and the
+ * four roles are a ladder, so the only way to give somebody one of those was to
+ * make them an editor, which is far more power than was meant.
  *
  * Deliberately a separate, additive check rather than a fifth role: roles stay
  * a ladder that can be reasoned about, and a grant can only ever ADD. Nothing
@@ -101,10 +104,12 @@ export function can(role: Role, capability: Capability): boolean {
  */
 export type Grants = {
   canEditWords?: boolean;
+  canRunSound?: boolean;
 };
 
 const GRANTED: Record<keyof Grants, Capability> = {
   canEditWords: "editSongWords",
+  canRunSound: "manageDesks",
 };
 
 export function canWithGrants(
