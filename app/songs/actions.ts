@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { requireCapability, requireGrantedCapability } from "@/lib/auth";
-import { nextSectionLabel, splitPastedVerses } from "@/lib/songVerses";
+import { nextSectionLabel } from "@/lib/songVerses";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -281,34 +281,51 @@ export async function removeVerse(input: { id: string }): Promise<Result> {
   return ok;
 }
 
+
 /**
- * Paste a whole song in at once, split on blank lines.
+ * Add verses that a person has already looked at.
  *
- * How every one of these songs arrives the first time: out of a Google Doc.
- * It APPENDS rather than replacing, so pasting the transliteration and then
- * the meanings does not wipe the first paste — and so a mis-paste costs a few
- * deletes rather than the whole song.
+ * The other paste guesses and writes in one motion. This one is the second half
+ * of a two-step: the browser parses, shows what it made of the document, and
+ * only what comes back from that review is written. Sailavan: "the paste verses
+ * may not always be exactly the same, so it should send it through to the person
+ * after processing it so they can review and reassign as necessary."
  *
- * `layer` says which of the three columns the pasted text is.
+ * So this takes finished verses and does no guessing of its own. It appends,
+ * like every other paste here — a document arriving in two halves must not wipe
+ * the first half.
  */
-export async function pasteVerses(input: {
+export async function addPastedVerses(input: {
   songId: string;
-  layer: "script" | "roman" | "meaning";
-  text: string;
+  verses: { label: string | null; script: string; roman: string; meaning: string }[];
 }): Promise<{ ok: true; added: number } | { ok: false; error: string }> {
   await requireGrantedCapability("editSongWords");
 
+  const Layer = z.string().max(20_000);
   const parsed = z
     .object({
       songId: Id,
-      layer: z.enum(["script", "roman", "meaning"]),
-      text: z.string().max(100_000),
+      verses: z
+        .array(
+          z.object({
+            label: z.union([z.string().trim().max(40), z.null()]),
+            script: Layer,
+            roman: Layer,
+            meaning: Layer,
+          }),
+        )
+        .min(1)
+        .max(100),
     })
     .safeParse(input);
   if (!parsed.success) return { ok: false, error: "Could not read that." };
 
-  const blocks = splitPastedVerses(parsed.data.text);
-  if (blocks.length === 0) return { ok: false, error: "There was nothing to paste." };
+  // A verse with nothing in any layer is a row somebody emptied while reviewing;
+  // it means "drop this", not "store a blank".
+  const verses = parsed.data.verses.filter(
+    (v) => (v.script + v.roman + v.meaning).trim().length > 0,
+  );
+  if (verses.length === 0) return { ok: false, error: "There was nothing to add." };
 
   const last = await prisma.songVerse.findFirst({
     where: { songId: parsed.data.songId },
@@ -318,18 +335,20 @@ export async function pasteVerses(input: {
   let order = (last?.order ?? 0) + 1;
 
   await prisma.$transaction(
-    blocks.map((block) =>
+    verses.map((v) =>
       prisma.songVerse.create({
         data: {
           songId: parsed.data.songId,
           order: order++,
-          label: block.label,
-          [parsed.data.layer]: block.body,
+          label: v.label && v.label.length > 0 ? v.label : null,
+          script: v.script.trim().length > 0 ? v.script : null,
+          roman: v.roman.trim().length > 0 ? v.roman : null,
+          meaning: v.meaning.trim().length > 0 ? v.meaning : null,
         },
       }),
     ),
   );
 
   await refresh(parsed.data.songId);
-  return { ok: true, added: blocks.length };
+  return { ok: true, added: verses.length };
 }

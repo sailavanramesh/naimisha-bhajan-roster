@@ -275,3 +275,93 @@ function tidyHeading(heading: string): string {
     .toLocaleLowerCase()
     .replace(/(^|\s)(\p{L})/gu, (_, space: string, letter: string) => space + letter.toLocaleUpperCase());
 }
+
+/**
+ * Is this line written in a script other than Latin?
+ *
+ * Tamil, Devanagari, Telugu, Kannada — the letter itself says so, which is far
+ * more reliable than guessing from punctuation or length. Checked letter by
+ * letter because a line is routinely mixed: "மகர குண்டலமாடவும் (Kannan)".
+ */
+function isScriptLine(line: string): boolean {
+  for (const ch of line) {
+    if (!/\p{L}/u.test(ch)) continue;
+    if (!/\p{Script=Latin}/u.test(ch)) return true;
+  }
+  return false;
+}
+
+export type PastedVerse = {
+  label: string | null;
+  script: string;
+  roman: string;
+  meaning: string;
+};
+
+/**
+ * One paste, all three layers — for the way the documents are actually written.
+ *
+ * The source documents interleave the layers line by line rather than keeping
+ * them in three blocks:
+ *
+ *     குழலூதி மனமெல்லாம் கொள்ளைகொண்ட          ← the line, in Tamil
+ *     Kuzhaloothi manamellaam kollai konda      ← how it is sung
+ *     Playing His flute, He has stolen my heart ← what it means
+ *
+ * Pasting that used to mean doing it three times, picking out every third line
+ * by hand each time, having already reformatted the document — for a song of
+ * twenty lines, sixty decisions. Sailavan asked whether it could just take what
+ * he has and let him fix it afterwards. It can: the SCRIPT line is recognisable
+ * on sight, so it starts a group and the Latin lines under it fill the other two
+ * layers.
+ *
+ * Every group contributes exactly one line to each layer, PADDING with an empty
+ * line where a translation is missing. That is what keeps the layers the same
+ * length, which is the whole condition `verseLayout` needs to show them aligned
+ * line by line rather than as three blocks.
+ *
+ * Returns null when the text is not this shape — no non-Latin line anywhere, or
+ * a stray line before the first one — and the caller falls back to pasting a
+ * single layer. Guessing at a Latin-only document would mean deciding which of
+ * two indistinguishable lines is the transliteration and which is the meaning,
+ * and getting that wrong silently is worse than not trying.
+ */
+export function splitPastedLayers(text: string): PastedVerse[] | null {
+  const blocks = splitPastedVerses(text);
+  if (blocks.length === 0) return null;
+
+  const out: PastedVerse[] = [];
+
+  for (const block of blocks) {
+    const lines = block.body
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+
+    const groups: { script: string; rest: string[] }[] = [];
+    for (const line of lines) {
+      if (isScriptLine(line)) {
+        groups.push({ script: line, rest: [] });
+      } else if (groups.length > 0) {
+        groups[groups.length - 1].rest.push(line);
+      } else {
+        // Latin before any script line: not the interleaved shape.
+        return null;
+      }
+    }
+
+    if (groups.length === 0) return null;
+
+    out.push({
+      label: block.label,
+      script: groups.map((g) => g.script).join("\n"),
+      roman: groups.map((g) => g.rest[0] ?? "").join("\n"),
+      // Anything past the transliteration is the meaning. Joined rather than
+      // dropped: a translation that wrapped onto two lines in the document is
+      // one meaning, and losing half of it would be silent.
+      meaning: groups.map((g) => g.rest.slice(1).join(" ")).join("\n"),
+    });
+  }
+
+  return out;
+}

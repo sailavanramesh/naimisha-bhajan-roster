@@ -2,7 +2,12 @@
 
 import { useState, useTransition } from "react";
 import { Button, Input } from "@/components/ui";
-import { sectionsFor } from "@/lib/songVerses";
+import {
+  sectionsFor,
+  splitPastedLayers,
+  splitPastedVerses,
+  type PastedVerse,
+} from "@/lib/songVerses";
 
 /**
  * The section families, named by what they contain rather than by the tradition
@@ -12,7 +17,13 @@ const SECTION_GROUPS = [
   { label: "Pallavi / charanam", sections: sectionsFor("carnatic") },
   { label: "Verse / chorus", sections: sectionsFor("western") },
 ] as const;
-import { addVerse, moveVerse, pasteVerses, removeVerse, updateVerse } from "@/app/songs/actions";
+import {
+  addPastedVerses,
+  addVerse,
+  moveVerse,
+  removeVerse,
+  updateVerse,
+} from "@/app/songs/actions";
 import type { VerseView } from "./Verses";
 
 /**
@@ -273,12 +284,23 @@ function VerseRow({
 }
 
 /**
- * Paste a document in.
+ * Paste a document in — read it first, then agree with it.
  *
- * Splits on blank lines, one verse per block, and lifts a shouted heading —
- * PALLAVI, CARAṆAM 1 — onto the verse rather than leaving it as a first line.
- * Appends, so pasting the transliteration and then the meanings does not wipe
- * the first paste.
+ * The documents interleave the three layers line by line, so pasting used to
+ * mean doing it three times and picking out every third line by hand. It now
+ * reads the whole thing at once (see lib/songVerses.ts `splitPastedLayers`).
+ *
+ * But it PROPOSES rather than writes. Sailavan: "the paste verses may not
+ * always be exactly the same, so it should send it through to the person after
+ * processing it so they can review and reassign as necessary." A parser that
+ * guesses and commits is only as good as its worst guess, and a wrong guess
+ * written straight into the words of a song is worse than no parser — you have
+ * to find it before you can fix it. So what it made of the document is laid out
+ * line by line, in the three columns it will be stored as, and nothing is
+ * written until somebody says so.
+ *
+ * The parse happens in the browser, because it is a pure function and there is
+ * nothing to ask a server about.
  */
 function PasteBox({
   songId,
@@ -287,21 +309,191 @@ function PasteBox({
   songId: string;
   onMessage: (m: { ok: boolean; text: string } | null) => void;
 }) {
-  const [layer, setLayer] = useState<"script" | "roman" | "meaning">("roman");
   const [text, setText] = useState("");
+  const [layer, setLayer] = useState<"script" | "roman" | "meaning">("roman");
+  const [draft, setDraft] = useState<DraftVerse[] | null>(null);
+  const [guessed, setGuessed] = useState(true);
   const [pending, startTransition] = useTransition();
+
+  function read() {
+    const auto = splitPastedLayers(text);
+    if (auto) {
+      setDraft(auto.map(toDraft));
+      setGuessed(true);
+      return;
+    }
+    /*
+     * Not the interleaved shape — no non-Latin line to key on. Rather than
+     * guess which of two Latin lines is the transliteration and which is the
+     * meaning, fall back to the old behaviour and ask: one layer, chosen here.
+     */
+    const blocks = splitPastedVerses(text);
+    if (blocks.length === 0) {
+      onMessage({ ok: false, text: "There was nothing to read." });
+      return;
+    }
+    setDraft(
+      blocks.map((b) =>
+        toDraft({
+          label: b.label,
+          script: layer === "script" ? b.body : "",
+          roman: layer === "roman" ? b.body : "",
+          meaning: layer === "meaning" ? b.body : "",
+        }),
+      ),
+    );
+    setGuessed(false);
+  }
+
+  if (draft) {
+    const lineCount = draft.reduce((n, v) => n + v.lines.length, 0);
+    return (
+      <div className="grid gap-3 rounded-[12px] border border-dashed border-rule-surface p-3">
+        <p className="text-xs text-on-surface-muted">
+          {guessed
+            ? `Read as ${draft.length} verse${draft.length === 1 ? "" : "s"}, ${lineCount} line${lineCount === 1 ? "" : "s"}. Check the columns before adding — anything can be edited here, and nothing is saved yet.`
+            : `No script line to key on, so this went in as the ${layer}. ${draft.length} verse${draft.length === 1 ? "" : "s"}.`}
+        </p>
+
+        <ol className="grid gap-3">
+          {draft.map((verse, vi) => (
+            <li key={vi} className="grid gap-1.5 rounded-[10px] border border-rule-surface p-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Input
+                  value={verse.label}
+                  aria-label={`Section for verse ${vi + 1}`}
+                  placeholder="Pallavi, Charanam, Chorus…"
+                  className="h-8 w-44 text-xs"
+                  onChange={(e) =>
+                    setDraft(edit(draft, vi, (v) => ({ ...v, label: e.target.value })))
+                  }
+                />
+                <button
+                  type="button"
+                  className="text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-warn"
+                  onClick={() => setDraft(draft.filter((_, i) => i !== vi))}
+                >
+                  drop this verse
+                </button>
+              </div>
+
+              {/* One row per line of the song, in the three columns it is stored
+                  as — so a line in the wrong column is visible at a glance and
+                  fixed by typing, which is what "reassign" needs to mean. */}
+              <div className="hidden gap-1 text-[10px] uppercase tracking-wide text-on-surface-muted sm:grid sm:grid-cols-[1fr_1fr_1fr_auto]">
+                <span>Script</span>
+                <span>Transliteration</span>
+                <span>Meaning</span>
+                <span />
+              </div>
+
+              {verse.lines.map((line, li) => (
+                <div key={li} className="grid gap-1 sm:grid-cols-[1fr_1fr_1fr_auto]">
+                  {(["script", "roman", "meaning"] as const).map((key) => (
+                    <Input
+                      key={key}
+                      dir="auto"
+                      value={line[key]}
+                      aria-label={`${key} of line ${li + 1}, verse ${vi + 1}`}
+                      placeholder={key}
+                      className="h-8 text-xs"
+                      onChange={(e) =>
+                        setDraft(
+                          edit(draft, vi, (v) => ({
+                            ...v,
+                            lines: v.lines.map((l, i) =>
+                              i === li ? { ...l, [key]: e.target.value } : l,
+                            ),
+                          })),
+                        )
+                      }
+                    />
+                  ))}
+                  <button
+                    type="button"
+                    aria-label={`Remove line ${li + 1} of verse ${vi + 1}`}
+                    className="justify-self-end px-1 text-xs text-on-surface-muted hover:text-warn"
+                    onClick={() =>
+                      setDraft(
+                        edit(draft, vi, (v) => ({
+                          ...v,
+                          lines: v.lines.filter((_, i) => i !== li),
+                        })),
+                      )
+                    }
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+
+              <button
+                type="button"
+                className="justify-self-start text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+                onClick={() =>
+                  setDraft(
+                    edit(draft, vi, (v) => ({
+                      ...v,
+                      lines: [...v.lines, { script: "", roman: "", meaning: "" }],
+                    })),
+                  )
+                }
+              >
+                add a line
+              </button>
+            </li>
+          ))}
+        </ol>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="primary"
+            className="h-8 text-xs"
+            disabled={pending || draft.length === 0}
+            onClick={() =>
+              startTransition(async () => {
+                const res = await addPastedVerses({ songId, verses: draft.map(fromDraft) });
+                if (res.ok) {
+                  onMessage({
+                    ok: true,
+                    text: `Added ${res.added} verse${res.added === 1 ? "" : "s"}.`,
+                  });
+                  setDraft(null);
+                  setText("");
+                } else onMessage({ ok: false, text: res.error });
+              })
+            }
+          >
+            Add {draft.length} verse{draft.length === 1 ? "" : "s"}
+          </Button>
+          <button
+            type="button"
+            className="text-[11px] text-on-surface-muted underline underline-offset-2"
+            onClick={() => setDraft(null)}
+          >
+            back to the text
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-2 rounded-[12px] border border-dashed border-rule-surface p-3">
       <p className="text-xs text-on-surface-muted">
-        One verse per blank line. A heading on its own line — PALLAVI, Charanam 1 — becomes the
-        section. This ADDS verses; it never replaces what is already here.
+        Paste the whole song, however the document has it — script, transliteration and meaning
+        line by line is read as all three at once. One verse per blank line; a heading on its own
+        line becomes the section. You get to check it before anything is saved, and this always
+        ADDS to what is already here.
       </p>
       <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-on-surface-muted">This text is the</span>
+        <span className="text-xs text-on-surface-muted">
+          If there is no script to go by, treat it as the
+        </span>
         <select
           value={layer}
-          aria-label="Which layer is being pasted"
+          aria-label="Which layer plain text should be treated as"
           className="h-8 rounded-key border border-rule-surface bg-field px-2 text-xs"
           onChange={(e) => setLayer(e.target.value as "script" | "roman" | "meaning")}
         >
@@ -323,18 +515,50 @@ function PasteBox({
         variant="primary"
         className="h-8 justify-self-start text-xs"
         disabled={pending || text.trim().length === 0}
-        onClick={() =>
-          startTransition(async () => {
-            const res = await pasteVerses({ songId, layer, text });
-            if (res.ok) {
-              onMessage({ ok: true, text: `Added ${res.added} verse${res.added === 1 ? "" : "s"}.` });
-              setText("");
-            } else onMessage({ ok: false, text: res.error });
-          })
-        }
+        onClick={read}
       >
-        Add these verses
+        Read it
       </Button>
     </div>
   );
+}
+
+/** A verse while it is being reviewed: lines, so the columns can be seen to line up. */
+type DraftVerse = {
+  label: string;
+  lines: { script: string; roman: string; meaning: string }[];
+};
+
+function toDraft(v: PastedVerse): DraftVerse {
+  const script = v.script.split("\n");
+  const roman = v.roman.split("\n");
+  const meaning = v.meaning.split("\n");
+  const rows = Math.max(script.length, roman.length, meaning.length);
+
+  return {
+    label: v.label ?? "",
+    lines: Array.from({ length: rows }, (_, i) => ({
+      script: script[i] ?? "",
+      roman: roman[i] ?? "",
+      meaning: meaning[i] ?? "",
+    })),
+  };
+}
+
+function fromDraft(v: DraftVerse): PastedVerse {
+  const column = (key: "script" | "roman" | "meaning") => {
+    const lines = v.lines.map((l) => l[key]);
+    // All blank means the layer is absent, not a stack of empty lines.
+    return lines.some((l) => l.trim().length > 0) ? lines.join("\n") : "";
+  };
+  return {
+    label: v.label.trim() || null,
+    script: column("script"),
+    roman: column("roman"),
+    meaning: column("meaning"),
+  };
+}
+
+function edit(draft: DraftVerse[], index: number, change: (v: DraftVerse) => DraftVerse) {
+  return draft.map((v, i) => (i === index ? change(v) : v));
 }
