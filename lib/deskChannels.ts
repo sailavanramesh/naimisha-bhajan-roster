@@ -384,6 +384,29 @@ export function stripNumber(number: string, stereo: boolean): string {
 }
 
 /**
+ * Strips whose input has already been claimed by a stereo pair below them.
+ *
+ * A desk cannot say "19/20" on one strip and "20" on the next; input 20 is one
+ * socket, and two strips claiming it is a desk that does not exist. Pairing now
+ * swallows the strip above it, so this cannot be created any more — but it WAS
+ * created, by the bug that let 19 and 20 each be ticked into overlapping pairs,
+ * and Sailavan is looking at the leftover on a real desk right now.
+ *
+ * So: name the condition, and let the page offer the repair rather than leaving
+ * somebody to work out that they must untick two boxes in the right order. It
+ * returns the numbers of the strips that should not be there.
+ *
+ * Pure, and cheap enough to run on every render of the desk list.
+ */
+export function overlappedStrips(
+  strips: ReadonlyArray<{ number: number; stereo: boolean }>,
+): number[] {
+  const claimed = new Set<number>();
+  for (const s of strips) if (s.stereo) claimed.add(s.number + 1);
+  return strips.filter((s) => claimed.has(s.number)).map((s) => s.number);
+}
+
+/**
  * A name shortened to fit a channel tile.
  *
  * The desk view puts twelve or more strips across a screen, so a tile is about

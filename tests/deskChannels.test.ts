@@ -12,6 +12,7 @@ import {
   sortChannels,
   stepItem,
   type ItemPeople,
+  overlappedStrips,
 } from "../lib/deskChannels";
 
 const NAMES = {
@@ -428,5 +429,38 @@ describe("stripNumber", () => {
 
   it("leaves a number it cannot read alone", () => {
     expect(stripNumber("AUX", true)).toBe("AUX");
+  });
+});
+
+describe("overlappedStrips", () => {
+  it("says nothing about a desk whose pairs do not collide", () => {
+    expect(
+      overlappedStrips([
+        { number: 12, stereo: false },
+        { number: 13, stereo: true },
+        { number: 15, stereo: true },
+      ]),
+    ).toEqual([]);
+  });
+
+  /* The leftover on the real MG20XU: 19 paired, and a 20 still sitting there. */
+  it("names the strip a pair below it has already claimed", () => {
+    expect(
+      overlappedStrips([
+        { number: 18, stereo: false },
+        { number: 19, stereo: true },
+        { number: 20, stereo: false },
+      ]),
+    ).toEqual([20]);
+  });
+
+  it("names a claimed strip even when it claims one of its own", () => {
+    // 19/20 and 20/21, which is how the bug left it.
+    expect(
+      overlappedStrips([
+        { number: 19, stereo: true },
+        { number: 20, stereo: true },
+      ]),
+    ).toEqual([20]);
   });
 });

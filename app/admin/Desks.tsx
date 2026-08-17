@@ -3,8 +3,14 @@
 import { useState, useTransition } from "react";
 import { Button, Input } from "@/components/ui";
 import { CHORUS_COLOURS, type MicColourValue } from "@/lib/micCushion";
-import { stripNumber } from "@/lib/deskChannels";
-import { addDesk, duplicateDesk, removeDesk, updateDeskChannel } from "./deskActions";
+import { stripNumber, overlappedStrips } from "@/lib/deskChannels";
+import {
+  absorbOverlappingStrip,
+  addDesk,
+  duplicateDesk,
+  removeDesk,
+  updateDeskChannel,
+} from "./deskActions";
 
 export type DeskRow = {
   id: string;
@@ -122,6 +128,12 @@ export function Desks({ desks, canEdit }: { desks: DeskRow[]; canEdit: boolean }
                 ) : null}
               </div>
 
+              {/*
+                Two strips cannot both claim input 20 — see overlappedStrips. The
+                condition is flagged on the row itself with the repair beside it,
+                rather than left for somebody to deduce from a channel list that
+                reads "19/20" and then "20".
+              */}
               {open === desk.id ? (
                 <ul className="mt-2 grid gap-1 border-t border-rule-surface pt-2">
                   {desk.channels.map((c) => (
@@ -130,6 +142,7 @@ export function Desks({ desks, canEdit }: { desks: DeskRow[]; canEdit: boolean }
                     channel={c}
                     monoInputs={desk.monoInputs}
                     canEdit={canEdit}
+                    overlapped={overlappedStrips(desk.channels).includes(c.number)}
                     onMessage={setMessage}
                   />
                   ))}
@@ -212,11 +225,14 @@ function ChannelRow({
   channel,
   monoInputs,
   canEdit,
+  overlapped,
   onMessage,
 }: {
   channel: DeskRow["channels"][number];
   monoInputs: number;
   canEdit: boolean;
+  /** Its input is already claimed by the stereo pair below it. */
+  overlapped: boolean;
   onMessage: (m: { ok: boolean; text: string } | null) => void;
 }) {
   const [label, setLabel] = useState(channel.label);
@@ -256,6 +272,42 @@ function ChannelRow({
       if (!res.ok) onMessage({ ok: false, text: res.error });
       else onMessage(null);
     });
+
+  /*
+   * A strip the pair below it has already swallowed. Editing its label or cushion
+   * would be writing on a fader that is not there, so the row offers the one
+   * thing worth doing to it.
+   */
+  if (overlapped) {
+    return (
+      <li className="flex flex-wrap items-center gap-2 rounded-key border border-warn/40 bg-warn/5 px-2 py-1.5 text-sm">
+        <span className="w-12 shrink-0 text-right font-mono text-xs text-on-surface-muted">
+          {channel.number}
+        </span>
+        <span className="min-w-0 text-xs text-on-surface-muted">
+          <strong className="text-on-surface">{channel.label}</strong> — input{" "}
+          {channel.number} is already part of the {channel.number - 1}/{channel.number} pair
+          above.
+        </span>
+        {canEdit ? (
+          <Button
+            type="button"
+            variant="secondary"
+            className="ms-auto h-7 text-xs"
+            disabled={pending}
+            onClick={() =>
+              startTransition(async () => {
+                const res = await absorbOverlappingStrip({ id: channel.id });
+                onMessage(res.ok ? null : { ok: false, text: res.error });
+              })
+            }
+          >
+            Remove this row
+          </Button>
+        ) : null}
+      </li>
+    );
+  }
 
   if (!canEdit) {
     return (

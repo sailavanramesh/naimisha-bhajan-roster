@@ -321,6 +321,52 @@ export async function updateDeskChannel(input: {
 }
 
 /**
+ * Drop a strip whose input a stereo pair below it has already claimed.
+ *
+ * The repair for what the overlapping-pairs bug left behind: a twenty-input desk
+ * showing both "19/20" and "20". Input 20 is one socket, so one of those strips
+ * has to go, and the pair is the one Sailavan meant to keep.
+ *
+ * Deliberately NOT a general "delete this channel". It refuses anything that is
+ * not overlapped, so it cannot be used to punch a hole in the middle of a desk —
+ * a missing strip is worse than a spare one, because the channel then simply is
+ * not on the list and nobody can say what is patched into it. The only thing this
+ * can do is make the desk describe a desk that exists.
+ *
+ * See overlappedStrips.
+ */
+export async function absorbOverlappingStrip(input: {
+  id: string;
+}): Promise<Result> {
+  await requireGrantedCapability("manageDesks");
+
+  const parsed = z.object({ id: z.string().min(1) }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Could not do that." };
+
+  const channel = await prisma.deskChannel.findUnique({
+    where: { id: parsed.data.id },
+    select: { id: true, number: true, deskId: true },
+  });
+  if (!channel) return ok;
+
+  const below = await prisma.deskChannel.findFirst({
+    where: { deskId: channel.deskId, number: channel.number - 1, stereo: true },
+    select: { number: true },
+  });
+  if (!below) {
+    return {
+      ok: false,
+      error: `Channel ${channel.number} is a strip of its own — nothing has claimed it.`,
+    };
+  }
+
+  await prisma.deskChannel.delete({ where: { id: channel.id } });
+  await pushDeskToFutureProgrammes(channel.deskId);
+  revalidatePath("/admin/desks");
+  return ok;
+}
+
+/**
  * Remove a desk.
  *
  * Its programmes keep their channels — those are copies, and the relation is
