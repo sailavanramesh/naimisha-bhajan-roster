@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackLink } from "@/components/BackLink";
 import { prisma } from "@/lib/db";
 import { getRole, can, canWithGrantsFor } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
@@ -66,12 +67,17 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">{song.title}</h1>
           {facts ? <p className="mt-0.5 text-sm text-on-ground-muted">{facts}</p> : null}
         </div>
-        <Link
-          href="/songs"
-          className="text-sm text-on-ground-muted underline underline-offset-2 hover:text-on-ground"
-        >
-          All songs
-        </Link>
+        {/*
+          Back to wherever you came from — the programme that sings this song,
+          or the song list. Sailavan: "if I go into a song's lyrics from a
+          program, when I go back it should go to the program."
+
+          It said "All songs", which is a destination rather than a way back, so
+          arriving from a programme and pressing it landed you in the catalogue
+          with the running order lost. Same component and same reasoning as the
+          bhajan page; the list is still one tap away in the sidebar.
+        */}
+        <BackLink fallback="/songs" label="Back" className="h-9 text-sm" />
       </div>
 
       {song.referenceUrl || song.bhajan ? (

@@ -281,12 +281,50 @@ function tidyHeading(heading: string): string {
  *
  * Tamil, Devanagari, Telugu, Kannada — the letter itself says so, which is far
  * more reliable than guessing from punctuation or length. Checked letter by
- * letter because a line is routinely mixed: "மகர குண்டலமாடவும் (Kannan)".
+ * letter because a line is routinely mixed: "मकर कुण्डलम् (Kannan)".
  */
 function isScriptLine(line: string): boolean {
   for (const ch of line) {
     if (!/\p{L}/u.test(ch)) continue;
     if (!/\p{Script=Latin}/u.test(ch)) return true;
+  }
+  return false;
+}
+
+/**
+ * Words that are common in English and vanishingly rare in a transliteration.
+ *
+ * This is how a MEANING is told apart from a transliteration when both are
+ * written in Latin letters, which is the case in half the group's documents —
+ * "Kandu Njan Kannane Kayamboo Varnane" then "I saw Krishna, the One with the
+ * complexion of the kayamboo flower."
+ *
+ * Function words, not vocabulary: "Krishna", "Radha" and "flute" appear in both
+ * kinds of line, whereas "the", "of" and "with" only appear in the English one.
+ */
+const ENGLISH_MARKERS = new Set(
+  ("a an the of and or is are was were be been am to in on at with for from by " +
+    "my your his her its our their you i he she we they them us it this that these " +
+    "those who whom which what when where how not no all every any come comes came " +
+    "stand stands stood become becomes became have has had do does did o oh even " +
+    "may might can could will would upon before after within without into out")
+    .split(" "),
+);
+
+/**
+ * Does this Latin line read as English rather than as a transliteration?
+ *
+ * TWO markers, not one. A single "a" or "o" turns up in plenty of
+ * transliterations — "Baaro krShnayya", "Sāṁvariya" — and one hit would call
+ * them translations. Two whole function words in the same line is a thing
+ * transliterated Sanskrit, Tamil or Marathi essentially never does.
+ */
+function looksEnglish(line: string): boolean {
+  const words = line.toLowerCase().match(/\p{L}+/gu) ?? [];
+  let hits = 0;
+  for (const word of words) {
+    if (ENGLISH_MARKERS.has(word)) hits += 1;
+    if (hits >= 2) return true;
   }
   return false;
 }
@@ -298,33 +336,83 @@ export type PastedVerse = {
   meaning: string;
 };
 
+type Line = { script: string; roman: string; meaning: string };
+
+/** Runs of script lines and the Latin lines that follow them, paired up. */
+function pairScriptRun(script: string[], latin: string[]): Line[] {
+  const empty = { script: "", roman: "", meaning: "" };
+
+  /*
+   * Twice as many Latin lines as script lines: transliteration and meaning,
+   * alternating. The commonest shape in the documents.
+   */
+  if (latin.length === script.length * 2) {
+    return script.map((s, i) => ({ script: s, roman: latin[2 * i], meaning: latin[2 * i + 1] }));
+  }
+
+  /*
+   * As many as there are: transliteration only, no translation. Written as a
+   * BLOCK in some documents — two lines of Devanagari, then the same two
+   * transliterated — which is why this pairs by index across the whole run
+   * rather than taking the line immediately below each one.
+   */
+  if (latin.length === script.length) {
+    return script.map((s, i) => ({ ...empty, script: s, roman: latin[i] }));
+  }
+
+  // Anything else: line them up as far as they go, and let the leftovers land
+  // in the last meaning rather than disappear.
+  return script.map((s, i) => {
+    const isLast = i === script.length - 1;
+    const roman = latin[i] ?? "";
+    const rest = isLast ? latin.slice(script.length).join(" ") : "";
+    return { script: s, roman, meaning: rest };
+  });
+}
+
+/** Latin-only text: transliteration, and the English lines that translate it. */
+function pairLatinOnly(lines: string[]): Line[] | null {
+  if (!lines.some(looksEnglish)) return null;
+
+  const out: Line[] = [];
+  for (const line of lines) {
+    if (looksEnglish(line) && out.length > 0) {
+      const last = out[out.length - 1];
+      // A translation that wrapped is one meaning, not two.
+      last.meaning = last.meaning ? `${last.meaning} ${line}` : line;
+      continue;
+    }
+    out.push({ script: "", roman: line, meaning: "" });
+  }
+  return out;
+}
+
 /**
  * One paste, all three layers — for the way the documents are actually written.
  *
- * The source documents interleave the layers line by line rather than keeping
- * them in three blocks:
+ * They are written four ways, all of them in the group's own files:
  *
- *     குழலூதி மனமெல்லாம் கொள்ளைகொண்ட          ← the line, in Tamil
- *     Kuzhaloothi manamellaam kollai konda      ← how it is sung
- *     Playing His flute, He has stolen my heart ← what it means
+ *   1. script / transliteration / meaning, line by line
+ *   2. transliteration / meaning, line by line, with no script at all
+ *   3. a run of script lines followed by the same run transliterated
+ *   4. any of those under a heading — PALLAVI, CARAṆAM 1
  *
- * Pasting that used to mean doing it three times, picking out every third line
- * by hand each time, having already reformatted the document — for a song of
- * twenty lines, sixty decisions. Sailavan asked whether it could just take what
- * he has and let him fix it afterwards. It can: the SCRIPT line is recognisable
- * on sight, so it starts a group and the Latin lines under it fill the other two
- * layers.
+ * Pasting used to mean one layer at a time, picking out every second or third
+ * line by hand. What makes it possible to do at once is that each layer is
+ * recognisable on sight: a script line is not in Latin letters, and an English
+ * line carries function words that a transliteration does not.
  *
- * Every group contributes exactly one line to each layer, PADDING with an empty
- * line where a translation is missing. That is what keeps the layers the same
- * length, which is the whole condition `verseLayout` needs to show them aligned
- * line by line rather than as three blocks.
+ * Every line contributes exactly one entry to each layer, PADDING where a
+ * translation is missing — which keeps the three the same length, which is the
+ * whole condition `verseLayout` needs to zip them line by line rather than show
+ * three blocks.
  *
- * Returns null when the text is not this shape — no non-Latin line anywhere, or
- * a stray line before the first one — and the caller falls back to pasting a
- * single layer. Guessing at a Latin-only document would mean deciding which of
- * two indistinguishable lines is the transliteration and which is the meaning,
- * and getting that wrong silently is worse than not trying.
+ * It is a proposal. Everything it decides is laid out for review before a word
+ * is written, so being wrong about a line is a thing somebody corrects rather
+ * than a thing they have to discover later.
+ *
+ * Returns null only when there is nothing to go on — no script, and nothing that
+ * reads as English — in which case the caller asks which single layer it is.
  */
 export function splitPastedLayers(text: string): PastedVerse[] | null {
   const blocks = splitPastedVerses(text);
@@ -337,31 +425,50 @@ export function splitPastedLayers(text: string): PastedVerse[] | null {
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
+    if (lines.length === 0) continue;
 
-    const groups: { script: string; rest: string[] }[] = [];
-    for (const line of lines) {
-      if (isScriptLine(line)) {
-        groups.push({ script: line, rest: [] });
-      } else if (groups.length > 0) {
-        groups[groups.length - 1].rest.push(line);
-      } else {
-        // Latin before any script line: not the interleaved shape.
-        return null;
+    let paired: Line[] | null;
+
+    if (lines.some(isScriptLine)) {
+      paired = [];
+      let i = 0;
+      while (i < lines.length) {
+        // A run of script lines, then the Latin lines belonging to it.
+        const script: string[] = [];
+        while (i < lines.length && isScriptLine(lines[i])) script.push(lines[i++]);
+        const latin: string[] = [];
+        while (i < lines.length && !isScriptLine(lines[i])) latin.push(lines[i++]);
+
+        if (script.length === 0) {
+          // Latin before any script line — treat it on its own terms.
+          const only = pairLatinOnly(latin);
+          if (!only) return null;
+          paired.push(...only);
+          continue;
+        }
+        paired.push(...pairScriptRun(script, latin));
       }
+    } else {
+      paired = pairLatinOnly(lines);
     }
 
-    if (groups.length === 0) return null;
+    if (!paired || paired.length === 0) return null;
 
     out.push({
       label: block.label,
-      script: groups.map((g) => g.script).join("\n"),
-      roman: groups.map((g) => g.rest[0] ?? "").join("\n"),
-      // Anything past the transliteration is the meaning. Joined rather than
-      // dropped: a translation that wrapped onto two lines in the document is
-      // one meaning, and losing half of it would be silent.
-      meaning: groups.map((g) => g.rest.slice(1).join(" ")).join("\n"),
+      script: paired.map((l) => l.script).join("\n"),
+      roman: paired.map((l) => l.roman).join("\n"),
+      meaning: paired.map((l) => l.meaning).join("\n"),
     });
   }
 
-  return out;
+  if (out.length === 0) return null;
+
+  // A layer nobody wrote is absent, not a stack of empty lines.
+  return out.map((v) => ({
+    ...v,
+    script: v.script.trim().length > 0 ? v.script : "",
+    roman: v.roman.trim().length > 0 ? v.roman : "",
+    meaning: v.meaning.trim().length > 0 ? v.meaning : "",
+  }));
 }

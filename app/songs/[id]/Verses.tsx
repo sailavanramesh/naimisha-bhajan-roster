@@ -89,27 +89,39 @@ export function Verses({ verses }: { verses: VerseView[] }) {
 }
 
 /**
- * The section heading — Pallavi, Charanam 2, Chorus.
+ * The section heading — Pallavi, Charanam 2, Chorus, Madhyama Kaalam.
  *
- * Tinted by family so a Carnatic kriti and a Western-structured song are
- * distinguishable at a glance, and left plain when the group has written its
- * own label. An unrecognised heading is not a mistake to be highlighted; it is
- * just a heading the app has no opinion about.
+ * ONE LOOK FOR ALL OF THEM.
+ *
+ * There were three: brass for a Carnatic name, grey for a Western one, and a
+ * faint dashed outline for anything the app did not recognise. The reasoning was
+ * that the family should be legible at a glance — but the family is already
+ * legible, because it is written in the chip: nobody mistakes "Chorus" for a
+ * kriti section. What the three tints actually did was rank the group's own
+ * headings below the app's vocabulary. Sailavan wrote "Madhyama Kaalam" and
+ * "Caranam" and they came out looking provisional beside PALLAVI, which is
+ * backwards — the group's words for its own music are not a lesser kind of
+ * heading.
+ *
+ * So every heading gets the same chip, and a name the app does not know carries
+ * a small dot. Sailavan: "if it's a custom one then there can be a small marker
+ * but it should look largely the same." The dot is worth keeping because it says
+ * why a heading will not auto-number — "Caranam" is not "Charanam", so nothing
+ * counts it — and that is a real difference rather than a judgement.
  */
 function SectionHeading({ label }: { label: string }) {
-  const family = sectionFamily(label);
-  const tint =
-    family === "carnatic"
-      ? "border-brass/50 bg-brass/[0.12] text-brass-ink"
-      : family === "western"
-        ? "border-rule-surface bg-field text-on-surface"
-        : "border-dashed border-rule-surface text-on-surface-muted";
+  const own = sectionFamily(label) === null;
 
   return (
     <span
-      className={`justify-self-start rounded-full border px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide ${tint}`}
+      title={own ? "The group's own heading" : label}
+      className="flex items-center gap-1 justify-self-start rounded-full border border-brass/50 bg-brass/[0.12] px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-brass-ink"
     >
+      {own ? (
+        <span aria-hidden className="inline-block h-1 w-1 rounded-full bg-brass-ink/60" />
+      ) : null}
       {label}
+      {own ? <span className="sr-only"> (the group&rsquo;s own heading)</span> : null}
     </span>
   );
 }
