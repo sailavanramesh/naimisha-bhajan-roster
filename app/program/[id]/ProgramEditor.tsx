@@ -15,7 +15,7 @@ import {
   removeProgramItem,
   updateProgramItem,
 } from "./actions";
-import { createSong, setItemSong } from "@/app/songs/actions";
+import { createSong, renameSong, setItemSong } from "@/app/songs/actions";
 import { Verses, type VerseView } from "@/app/songs/[id]/Verses";
 import { VerseEditor } from "@/app/songs/[id]/VerseEditor";
 
@@ -275,12 +275,34 @@ function ItemCard({
             <div className="grid gap-2 sm:grid-cols-2">
               <label className="grid gap-1 text-xs text-on-surface-muted">
                 {isReading ? "What it is called" : "Song"}
-                <Input
-                  value={draft.title}
-                  disabled={!canEdit}
-                  onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-                  placeholder={isReading ? "e.g. Opening words" : "e.g. Guru Meri Pooja"}
-                />
+                {/*
+                  ONCE A SONG IS CATALOGUED, ITS NAME LIVES THERE.
+
+                  ProgramItem.title is documented as the name to use "for an item
+                  whose song is not catalogued yet" — so while a song IS linked,
+                  editing that field changes something nothing displays. Sailavan
+                  renamed an item to "Paasuram" and every screen kept saying
+                  "Guru Meri Pooja", because they all read `song.title ??
+                  item.title` and the song still said the old name.
+
+                  So a linked item renames the CATALOGUE ENTRY, which is the
+                  thing everybody reads, and says that is what it is doing.
+                */}
+                {!isReading && item.songId ? (
+                  <SongTitle
+                    songId={item.songId}
+                    title={item.songTitle ?? ""}
+                    canEdit={canEdit}
+                    onError={onError}
+                  />
+                ) : (
+                  <Input
+                    value={draft.title}
+                    disabled={!canEdit}
+                    onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+                    placeholder={isReading ? "e.g. Opening words" : "e.g. Guru Meri Pooja"}
+                  />
+                )}
                 {!isReading ? <SongLink item={item} canEdit={canEdit} onError={onError} /> : null}
 
               </label>
@@ -757,5 +779,56 @@ function Instruments({
         </div>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * The name of a catalogued song, edited from the programme that sings it.
+ *
+ * Saves on blur rather than through the item's Save button, because it writes to
+ * a different row than everything else on this form — the Song, which other
+ * programmes share. Keeping it on its own write also keeps the item's save from
+ * having to know about the catalogue.
+ */
+function SongTitle({
+  songId,
+  title,
+  canEdit,
+  onError,
+}: {
+  songId: string;
+  title: string;
+  canEdit: boolean;
+  onError: (message: string | null) => void;
+}) {
+  const [value, setValue] = useState(title);
+  const [pending, startTransition] = useTransition();
+
+  return (
+    <span className="grid gap-0.5">
+      <Input
+        value={value}
+        disabled={!canEdit || pending}
+        aria-label="Song name, in the catalogue"
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={() => {
+          const next = value.trim();
+          if (next === title || next.length === 0) {
+            setValue(title);
+            return;
+          }
+          startTransition(async () => {
+            const res = await renameSong({ songId, title: next });
+            if (!res.ok) {
+              onError(res.error);
+              setValue(title);
+            } else onError(null);
+          });
+        }}
+      />
+      <span className="text-[10px] text-on-surface-muted">
+        Renames it in the song catalogue, for every programme that sings it.
+      </span>
+    </span>
   );
 }

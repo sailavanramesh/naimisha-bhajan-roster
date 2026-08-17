@@ -352,3 +352,49 @@ export async function addPastedVerses(input: {
   await refresh(parsed.data.songId);
   return { ok: true, added: verses.length };
 }
+
+/**
+ * Rename a catalogue song, and nothing else.
+ *
+ * `updateSong` takes every field at once, which is right for the song's own page
+ * and wrong everywhere else: calling it from a programme to change a title means
+ * sending language, tradition, composer and notes as well, and whatever the
+ * caller does not happen to know gets blanked.
+ *
+ * This exists because renaming a song from a programme item is a real thing to
+ * want. Sailavan renamed an item to "Paasuram" and the catalogue kept saying
+ * "Guru Meri Pooja" — the item's own `title` is only meant to hold a name while
+ * the song is NOT catalogued (see ProgramItem.title), so once it is, the
+ * catalogue entry is what a rename has to reach.
+ *
+ * It renames the entry the whole centre shares, so the caller is expected to
+ * have said so. `Song.title` is unique, and a clash is reported rather than
+ * swallowed.
+ */
+export async function renameSong(input: { songId: string; title: string }): Promise<Result> {
+  await requireGrantedCapability("editSongWords");
+
+  const parsed = z
+    .object({ songId: Id, title: z.string().trim().min(1).max(120) })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Give the song a name." };
+
+  const clash = await prisma.song.findFirst({
+    where: {
+      title: { equals: parsed.data.title, mode: "insensitive" },
+      id: { not: parsed.data.songId },
+    },
+    select: { title: true },
+  });
+  if (clash) {
+    return { ok: false, error: `"${clash.title}" is already in the catalogue.` };
+  }
+
+  await prisma.song.update({
+    where: { id: parsed.data.songId },
+    data: { title: parsed.data.title },
+  });
+
+  await refresh(parsed.data.songId);
+  return { ok: true };
+}
