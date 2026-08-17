@@ -89,7 +89,7 @@ export function DeskBoard({
    * person on the desk wants faders at the moment the singer beside them wants
    * the words, and making them agree would make the shared item useless.
    */
-  const [pane, setPane] = useState<"desk" | "words">("desk");
+  const [pane, setPane] = useState<"desk" | "all" | "words">("desk");
 
   /*
    * Where WE think we are, so a press moves the screen at once.
@@ -309,6 +309,10 @@ export function DeskBoard({
               {(
                 [
                   { key: "desk", label: "Desk" },
+                  // The mic person's view: every song at once, so a mic changing
+                  // hands between two of them is a thing you can SEE rather than
+                  // hold in your head across two presses of Next.
+                  { key: "all", label: "All songs" },
                   { key: "words", label: "Words" },
                 ] as const
               ).map((t) => (
@@ -394,6 +398,71 @@ export function DeskBoard({
                 </span>
               ) : null}
             </div>
+
+            {/* ---- every song at once ---- */}
+            {pane === "all" ? (
+              <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+                {/*
+                  Sailavan: "add an option to see all the songs' desk view in the
+                  one screen... mostly used by the mic person, or people who are
+                  watching the transition of mics."
+
+                  That is a different question from "what now": it is "what
+                  changes between these two", and it cannot be answered by a view
+                  that shows one item. The same drawn desk, once per song, so the
+                  difference between two rows IS the handover.
+
+                  Read-only on purpose. This is the screen somebody watches from
+                  the side of the hall, and the item everybody is on is moved by
+                  the header above — tapping a song's name here still moves it,
+                  because that is what tapping a song means everywhere else on
+                  this screen.
+                */}
+                <ul className="grid gap-4">
+                  {items.map((it) => {
+                    const here = it.position === item.position;
+                    const open = new Set(it.openChannelIds);
+                    const swapped = new Map(it.swaps.map((sw) => [sw.channelId, sw.who]));
+
+                    return (
+                      <li key={it.position} className="grid gap-1.5">
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => go(it.position)}
+                          className="flex flex-wrap items-baseline gap-2 text-left"
+                        >
+                          <span
+                            className={[
+                              "rounded-key px-1.5 py-0.5 font-mono text-[11px] font-bold",
+                              here ? "bg-brass-ink text-ivory" : "text-on-ground-muted",
+                            ].join(" ")}
+                          >
+                            {it.kind === "narration" ? "read" : it.songNumber}
+                          </span>
+                          <span className={here ? "font-semibold" : ""}>{it.title}</span>
+                          <span className="text-xs text-on-ground-muted">
+                            {open.size} of {channels.length} open
+                            {it.sceneNumber !== null ? ` · scene ${it.sceneNumber}` : ""}
+                            {here ? " · now" : ""}
+                          </span>
+                        </button>
+
+                        <DeskStrips
+                          dense
+                          strips={channels.map((c) => ({
+                            ...c,
+                            who: occupantFor(c, { person: swapped.get(c.id) ?? null }),
+                          }))}
+                          openIds={open}
+                          swappedIds={new Set(swapped.keys())}
+                        />
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
 
             {/* ---- the words ---- */}
             {pane === "words" ? (
