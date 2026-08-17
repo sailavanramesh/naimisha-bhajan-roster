@@ -6,6 +6,7 @@ import {
   addInstrument,
   moveInstrument,
   renameInstrument,
+  setInstrumentChannels,
   setInstrumentActive,
   setInstrumentScope,
 } from "./instrumentActions";
@@ -17,6 +18,8 @@ export type InstrumentRow = {
   active: boolean;
   /** How many program items already name it. Retiring is safe; deleting is not. */
   used: number;
+  /** How many desk channels it needs. Two for a two-headed drum. */
+  channels: number;
   /** How many people are listed as eligible for it, by name. */
   eligible: number;
 };
@@ -118,6 +121,9 @@ export function Instruments({
                   {i.name}
                   <span className="ml-2 text-xs font-normal text-on-surface-muted">
                     {SCOPE_LABEL[i.scope]}
+                    {/* Only worth saying when it is not one — every other
+                        instrument on the list needs exactly one strip. */}
+                    {i.channels > 1 ? ` · ${i.channels} channels` : ""}
                     {i.eligible > 0 ? ` · ${i.eligible} eligible` : ""}
                     {i.used > 0 ? ` · on ${i.used} item${i.used === 1 ? "" : "s"}` : ""}
                   </span>
@@ -126,6 +132,35 @@ export function Instruments({
 
               {canEdit && editing?.id !== i.id ? (
                 <>
+                  {/*
+                    How many strips it takes on the desk. A dholak is miked on
+                    both heads; a keyboard in stereo is a pair. See
+                    lib/deskChannels.ts proposeChannels, which builds that many.
+                  */}
+                  <label className="flex items-center gap-1 text-[11px] text-on-surface-muted">
+                    <span className="sr-only sm:not-sr-only">channels</span>
+                    <select
+                      value={i.channels}
+                      disabled={pending}
+                      aria-label={`How many channels ${i.name} needs`}
+                      className="h-7 rounded-key border border-rule-surface bg-field px-1 text-[11px]"
+                      onChange={(e) =>
+                        startTransition(async () => {
+                          const res = await setInstrumentChannels({
+                            id: i.id,
+                            channels: Number(e.target.value),
+                          });
+                          say(res, "");
+                        })
+                      }
+                    >
+                      {[1, 2, 3, 4].map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
                   <span className="flex items-center gap-1">
                     <button
                       type="button"

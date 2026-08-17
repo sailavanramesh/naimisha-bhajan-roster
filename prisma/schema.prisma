@@ -690,6 +690,18 @@ model Instrument {
   scope  InstrumentScope @default(program)
   active Boolean         @default(true)
 
+  /// How many desk channels this instrument needs.
+  ///
+  /// One for nearly everything, and not for everything: a two-headed drum — a
+  /// dholak, a mridangam, a khol — is miked on each head and takes two strips,
+  /// and a stereo keyboard takes two. Building the channel list from a
+  /// programme's players used to give each instrument one strip and leave
+  /// somebody to notice, on the night, that the mridangam had half a mic.
+  ///
+  /// Read by lib/deskChannels.ts `proposeChannels`, which numbers the extra
+  /// strips and labels them "Mridangam 1", "Mridangam 2".
+  channels Int @default(1)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -880,6 +892,14 @@ model DeskChannel {
   socket Int?
   label  String
   kind   ChannelKind @default(vocal)
+  /// A MONO/STEREO strip, whose number is the first of its pair.
+  ///
+  /// The centre's MG20XU has sixteen strips: twelve mono (1-12) and four
+  /// mono/stereo (13/14, 15/16, 17/18, 19/20) — Yamaha's own words, and the
+  /// reason this is a property of the DESK. Whether such a strip is being used
+  /// as a stereo pair or as one mono channel is a decision per programme, not
+  /// per desk, so that lives on SessionChannel.
+  stereo Boolean @default(false)
   /// For a vocal strip whose mic wears a coloured cushion.
   ///
   /// The cushions are FIXED to channels and do not move: channel 1 is the blue
@@ -914,6 +934,16 @@ model SessionChannel {
   number String
   label  String
   kind   ChannelKind @default(vocal)
+
+  /// Whether THIS programme is using the strip as a stereo pair.
+  ///
+  /// Only meaningful on a strip the desk says is mono/stereo. Sailavan: if it
+  /// is going to be a mono channel then 13/14 is one channel — and that is a
+  /// decision taken per programme, because it depends on what is plugged into
+  /// it that night, not on the desk. Copied from the desk as the starting
+  /// point and corrected here.
+  stereo Boolean @default(false)
+
   colour MicColour?
 
   /// Who or what is on it. A roster singer, a name typed in, or an instrument

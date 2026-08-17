@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import { useSessionVersion } from "@/components/useSessionVersion";
-import { currentItemOf, occupantFor, shortName, stepItem } from "@/lib/deskChannels";
+import { currentItemOf, occupantFor, stepItem, stripNumber } from "@/lib/deskChannels";
 import { hasMoreBelow } from "@/lib/liveBoard";
 import { micColourDot, micColourLabel, type MicColourValue } from "@/lib/micCushion";
 import { setCurrentItem } from "../deskActions";
@@ -17,9 +17,25 @@ export type DeskChannel = {
   colour: MicColourValue | null;
   /** Which mic is on it — "Wired", "Pegasus", "WL1". Reference only. */
   mic: string | null;
+  /** Is this programme running the strip as a stereo pair? */
+  stereo: boolean;
   /** Who or what is usually on the strip. Null on a spare. */
   who: string | null;
 };
+
+/**
+ * What to write in a channel tile.
+ *
+ * Whoever is on the strip, if anybody. Failing that the strip's own label —
+ * "Lead vocal", "Tabla" — which still tells the desk what the fader is for.
+ * But never a bare "Channel 12": that is the number already printed directly
+ * above it, and repeating it fills the tile while saying nothing.
+ */
+function boxName(who: string | null, label: string): string | null {
+  if (who) return who;
+  const plain = /^channel\s*\d+$/i.test(label.trim());
+  return plain ? null : label;
+}
 
 export type DeskItem = {
   position: number;
@@ -259,7 +275,7 @@ export function DeskBoard({
                       same auto-fill drops to four or five across on a phone
                       without a second layout to keep honest.
                     */}
-                    <ul className="grid grid-cols-[repeat(auto-fill,minmax(64px,1fr))] gap-1.5">
+                    <ul className="grid grid-cols-[repeat(auto-fill,minmax(76px,1fr))] gap-1.5">
                       {channels.map((c) => {
                         const isOpen = openIds.has(c.id);
                         const swapped = swaps.get(c.id) ?? null;
@@ -277,7 +293,7 @@ export function DeskBoard({
                           c.kind === "vocal" && c.colour ? micColourDot(c.colour) : null;
 
                         const label = [
-                          `Channel ${c.number}`,
+                          `Channel ${stripNumber(c.number, c.stereo)}`,
                           who,
                           c.kind === "vocal" && c.colour
                             ? `${micColourLabel(c.colour)} cushion`
@@ -311,7 +327,7 @@ export function DeskBoard({
                                     : "border-rule text-on-ground-muted",
                                 ].join(" ")}
                               >
-                                {c.number}
+                                {stripNumber(c.number, c.stereo)}
                               </span>
 
                               <span
@@ -337,8 +353,27 @@ export function DeskBoard({
                                     : undefined
                                 }
                               >
-                                <span className="block w-full truncate text-[13px] font-bold leading-none">
-                                  {shortName(who) || "—"}
+                                {/*
+                                  THE NAME, not an abbreviation of it.
+
+                                  Three letters was enough to tell two strips
+                                  apart and not enough to be sure whose one was,
+                                  which at a desk is the only question. A tile
+                                  76px wide holds "Prasanna" outright, so it
+                                  shows the name and lets CSS cut the long ones;
+                                  `shortName` is the fallback for a name too
+                                  long to survive that, and the full text is in
+                                  the tooltip either way.
+
+                                  A strip nobody is on falls back to its own
+                                  label — but not to "Channel 12", which is the
+                                  number already printed above it.
+                                */}
+                                <span
+                                  className="block w-full truncate text-[12px] font-bold leading-tight"
+                                  title={who ?? c.label}
+                                >
+                                  {boxName(who, c.label) ?? "—"}
                                 </span>
                                 {c.mic ? (
                                   <span className="mt-0.5 block w-full truncate text-[9px] leading-none opacity-80">
@@ -374,7 +409,7 @@ export function DeskBoard({
                           .filter((c) => openIds.has(c.id))
                           .map((c) => {
                             const who = occupantFor(c, { person: swaps.get(c.id) ?? null });
-                            return `${c.number} ${who ?? c.label}`;
+                            return `${stripNumber(c.number, c.stereo)} ${who ?? c.label}`;
                           })
                           .join("  ·  ")}
                       </p>

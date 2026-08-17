@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Button, Card, CardContent, Input } from "@/components/ui";
 import { CHORUS_COLOURS, micColourDot, type MicColourValue } from "@/lib/micCushion";
+import { shortName, stripNumber } from "@/lib/deskChannels";
 import { songNumbers } from "@/lib/program";
 import {
   addChannel,
@@ -23,6 +24,8 @@ export type ChannelRow = {
   label: string;
   kind: "vocal" | "instrument" | "track" | "spare";
   colour: MicColourValue | null;
+  /** Is this programme running the strip as a stereo pair? */
+  stereo: boolean;
   singerId: string | null;
   person: string | null;
   who: string | null;
@@ -222,11 +225,20 @@ export function ChannelGrid({
                 <th className="w-14 border-b border-rule-surface px-1 py-1.5 text-center font-semibold">
                   Scene
                 </th>
+                {/*
+                  The column says WHO, not just which number.
+
+                  A grid of bare numbers made you hold the channel list in your
+                  head to read it — the tick under "7" means nothing until you
+                  remember that 7 is the tabla. Three letters underneath is
+                  enough to read a column without looking anything up, and the
+                  full name is in the tooltip for when it is not.
+                */}
                 {channels.map((c) => (
                   <th
                     key={c.id}
-                    className="w-9 border-b border-rule-surface px-0.5 py-1.5 text-center align-bottom font-semibold"
-                    title={`${c.number} · ${c.label}${c.who ? ` (${c.who})` : ""}`}
+                    className="w-11 border-b border-rule-surface px-0.5 py-1.5 text-center align-bottom font-semibold"
+                    title={`${stripNumber(c.number, c.stereo)} · ${c.label}${c.who ? ` (${c.who})` : ""}`}
                   >
                     <span className="flex flex-col items-center gap-0.5">
                       {c.colour ? (
@@ -236,7 +248,10 @@ export function ChannelGrid({
                           style={{ background: micColourDot(c.colour) ?? undefined }}
                         />
                       ) : null}
-                      <span className="font-mono text-xs">{c.number}</span>
+                      <span className="font-mono text-xs">{stripNumber(c.number, c.stereo)}</span>
+                      <span className="block w-full truncate text-[9px] font-normal leading-none text-on-surface-muted">
+                        {shortName(c.who ?? c.label)}
+                      </span>
                     </span>
                   </th>
                 ))}
@@ -334,7 +349,7 @@ export function ChannelGrid({
                           disabled={!canEdit || pending}
                           role="switch"
                           aria-checked={open}
-                          aria-label={`Channel ${c.number} on ${item.title || "this item"}`}
+                          aria-label={`Channel ${stripNumber(c.number, c.stereo)} on ${item.title || "this item"}`}
                           className={`h-6 w-6 rounded border text-xs leading-none ${
                             open
                               ? "border-brass/60 bg-brass/20 text-brass-ink"
@@ -371,13 +386,13 @@ export function ChannelGrid({
                             const swap = item.swaps.find((s) => s.channelId === c.id);
                             return (
                               <li key={c.id} className="flex items-center gap-1.5">
-                                <span className="w-7 shrink-0 text-right font-mono text-[11px] text-on-surface-muted">
-                                  {c.number}
+                                <span className="w-9 shrink-0 text-right font-mono text-[11px] text-on-surface-muted">
+                                  {stripNumber(c.number, c.stereo)}
                                 </span>
                                 <select
                                   defaultValue={swap?.instrumentId ?? ""}
                                   disabled={pending}
-                                  aria-label={`Instrument on channel ${c.number} for this item`}
+                                  aria-label={`Instrument on channel ${stripNumber(c.number, c.stereo)} for this item`}
                                   className="h-7 min-w-0 flex-1 rounded-key border border-rule-surface bg-field px-1 text-[11px]"
                                   onChange={(e) =>
                                     startTransition(async () => {
@@ -405,7 +420,7 @@ export function ChannelGrid({
                                 <Input
                                   defaultValue={swap?.person ?? ""}
                                   disabled={pending}
-                                  aria-label={`Or a name on channel ${c.number} for this item`}
+                                  aria-label={`Or a name on channel ${stripNumber(c.number, c.stereo)} for this item`}
                                   placeholder="or a name"
                                   className="h-7 w-24 shrink-0 text-[11px]"
                                   onBlur={(e) =>
@@ -440,8 +455,8 @@ export function ChannelGrid({
           <ul className="mt-2 grid gap-1">
             {channels.map((c) => (
               <li key={c.id} className="flex flex-wrap items-center gap-2 text-sm">
-                <span className="w-8 shrink-0 text-right font-mono text-xs text-on-surface-muted">
-                  {c.number}
+                <span className="w-11 shrink-0 text-right font-mono text-xs text-on-surface-muted">
+                  {stripNumber(c.number, c.stereo)}
                 </span>
                 {editing === c.id && canEdit ? (
                   <ChannelEditor
@@ -564,6 +579,7 @@ function ChannelEditor({
   const [singerId, setSingerId] = useState(channel.singerId ?? "");
   const [person, setPerson] = useState(channel.person ?? "");
   const [colour, setColour] = useState<MicColourValue | null>(channel.colour);
+  const [stereo, setStereo] = useState(channel.stereo);
   const [pending, startTransition] = useTransition();
 
   return (
@@ -585,6 +601,25 @@ function ChannelEditor({
         <option value="track">track</option>
         <option value="spare">spare</option>
       </select>
+      {/*
+        Stereo is decided HERE, on the programme, not on the desk.
+
+        The desk says which strips CAN be a pair — the MG20XU's last four. What
+        is plugged into one on a given night is what decides whether it is being
+        used as a pair or as a single mono channel, and that changes programme to
+        programme. Sailavan: if it is going to be a mono channel then 13/14 is
+        one channel.
+      */}
+      <label className="flex items-center gap-1 text-[11px] text-on-surface-muted">
+        <input
+          type="checkbox"
+          checked={stereo}
+          aria-label="Used as a stereo pair"
+          className="h-3.5 w-3.5"
+          onChange={(e) => setStereo(e.target.checked)}
+        />
+        stereo
+      </label>
       <select
         value={singerId}
         aria-label="Who is on it"
@@ -640,6 +675,7 @@ function ChannelEditor({
               singerId,
               person,
               colour,
+              stereo,
             });
             if (res.ok) onDone();
             else onMessage({ ok: false, text: res.error });

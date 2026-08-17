@@ -27,6 +27,8 @@ export type ProposedChannel = {
    * nothing about the hardware.
    */
   colour?: CushionColour | null;
+  /** A mono/stereo pair, whose `number` is the first of the two. */
+  stereo?: boolean;
 };
 
 export type ItemPeople = {
@@ -52,6 +54,8 @@ export function proposeChannels(
   names: {
     singerName: (id: string) => string | undefined;
     instrumentName: (id: string) => string | undefined;
+    /** How many strips this instrument needs. Absent means one, as it was. */
+    instrumentChannels?: (id: string) => number | undefined;
   },
 ): ProposedChannel[] {
   const vocals: ProposedChannel[] = [];
@@ -88,14 +92,31 @@ export function proposeChannels(
       if (seenInstrument.has(i.instrumentId)) continue;
       seenInstrument.add(i.instrumentId);
       const label = names.instrumentName(i.instrumentId) ?? "Instrument";
-      instruments.push({
-        number: "",
-        label,
-        // A backing track is not an instrument anybody plays, and the desk
-        // treats it differently — no gain riding, no gate.
-        kind: /karaoke|track/i.test(label) ? "track" : "instrument",
-        instrumentId: i.instrumentId,
-      });
+      // A backing track is not an instrument anybody plays, and the desk
+      // treats it differently — no gain riding, no gate.
+      const kind: ChannelKind = /karaoke|track/i.test(label) ? "track" : "instrument";
+
+      /*
+       * ONE STRIP PER MIC, not one per instrument.
+       *
+       * A two-headed drum is miked on each head and a stereo keyboard takes a
+       * pair, so an instrument says how many channels it needs (Instrument.
+       * channels, set in /admin). Proposing one strip for a mridangam left
+       * somebody to discover on the night that half of it was not going
+       * through the desk.
+       *
+       * Numbered in the label only when there is more than one, because
+       * "Tabla 1" with no Tabla 2 anywhere is a question rather than a fact.
+       */
+      const count = Math.max(1, Math.min(names.instrumentChannels?.(i.instrumentId) ?? 1, 8));
+      for (let n = 1; n <= count; n++) {
+        instruments.push({
+          number: "",
+          label: count > 1 ? `${label} ${n}` : label,
+          kind,
+          instrumentId: i.instrumentId,
+        });
+      }
     }
   }
 
@@ -281,26 +302,68 @@ export const FIXED_STRIPS: ReadonlyArray<{
 ];
 
 /**
+ * How many inputs a desk has before its remaining ones pair up.
+ *
+ * Twelve, from the MG20XU the centre actually mixes on. Yamaha's own
+ * specification calls it "Mono [MIC/LINE]: 12; Mono/Stereo [MIC/LINE]: 4" — so
+ * a twenty-input desk is SIXTEEN strips: 1 to 12 on their own, then 13/14,
+ * 15/16, 17/18 and 19/20.
+ */
+export const MONO_INPUTS = 12;
+
+/**
  * A new desk's strips: the fixed allocation, then blanks up to the input count.
  *
  * The cushions and the tabla land on the channels they are actually on, and
  * everything else arrives numbered and unlabelled as before. A desk smaller than
  * the fixed list simply gets the part of it that fits.
+ *
+ * `inputs` is what the desk is NAMED for — a "20-channel" mixer — which is not
+ * how many strips it has. Everything past `monoInputs` is a pair, so twenty
+ * inputs make sixteen strips. Getting this wrong the other way would put four
+ * faders on the sheet that do not exist on the desk.
  */
-export function defaultStrips(count: number): ProposedChannel[] {
-  const total = Math.max(0, Math.min(count, 64));
+export function defaultStrips(
+  inputs: number,
+  { monoInputs = MONO_INPUTS }: { monoInputs?: number } = {},
+): ProposedChannel[] {
+  const total = Math.max(0, Math.min(inputs, 64));
   const fixed = new Map(FIXED_STRIPS.map((s) => [s.number, s]));
+  const out: ProposedChannel[] = [];
 
-  return Array.from({ length: total }, (_, i) => {
-    const n = i + 1;
+  for (let n = 1; n <= total; ) {
+    // Past the mono inputs the strips pair up — but never leave a half pair at
+    // the end of an odd desk, which would be a fader with one side of nothing.
+    const stereo = n > monoInputs && n + 1 <= total;
     const known = fixed.get(n);
-    return {
+
+    out.push({
       number: String(n),
-      label: known?.label ?? `Channel ${n}`,
+      label: known?.label ?? (stereo ? `Channel ${n}/${n + 1}` : `Channel ${n}`),
       kind: known?.kind ?? ("spare" as ChannelKind),
       colour: known?.colour ?? null,
-    };
-  });
+      stereo,
+    });
+
+    n += stereo ? 2 : 1;
+  }
+
+  return out;
+}
+
+/**
+ * How a strip is numbered when it is written down: "13/14", or just "13".
+ *
+ * A stereo strip is ONE fader carrying two inputs, and the desk prints both
+ * numbers on it, so that is what every view shows. When the same strip is being
+ * used as a single mono channel — which is a decision per programme, since it
+ * depends on what is plugged in that night — it is written as the one number it
+ * is behaving as.
+ */
+export function stripNumber(number: string, stereo: boolean): string {
+  if (!stereo) return number;
+  const n = Number(number);
+  return Number.isFinite(n) ? `${n}/${n + 1}` : number;
 }
 
 /**

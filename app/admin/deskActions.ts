@@ -28,6 +28,8 @@ export async function addDesk(input: {
     .object({
       name: z.string().trim().min(1).max(60),
       kind: z.enum(["analog", "digital"]),
+      // INPUTS, not strips: a "20-channel" desk is sixteen faders. See
+      // lib/deskChannels.ts defaultStrips.
       channels: z.number().int().min(0).max(64),
     })
     .safeParse(input);
@@ -67,6 +69,7 @@ export async function addDesk(input: {
         label: sp.label,
         kind: sp.kind,
         colour: sp.colour ?? null,
+        stereo: sp.stereo ?? false,
       })),
     });
   }
@@ -88,6 +91,7 @@ export async function updateDeskChannel(input: {
   kind: "vocal" | "instrument" | "track" | "spare";
   colour?: string | null;
   mic?: string | null;
+  stereo?: boolean;
 }): Promise<Result> {
   await requireGrantedCapability("manageDesks");
 
@@ -104,6 +108,7 @@ export async function updateDeskChannel(input: {
         .refine((v) => v === undefined || v === null || isChorusColour(v), "not a cushion"),
       // "Wired", "Pegasus", "WL1", "Rode" — the sound person's own shorthand.
       mic: z.union([z.string().trim().max(40), z.null()]).optional(),
+      stereo: z.boolean().optional(),
     })
     .safeParse(input);
   if (!parsed.success) return { ok: false, error: "Could not save that." };
@@ -122,6 +127,7 @@ export async function updateDeskChannel(input: {
       ...(parsed.data.mic === undefined
         ? {}
         : { mic: parsed.data.mic?.trim() || null }),
+      ...(parsed.data.stereo === undefined ? {} : { stereo: parsed.data.stereo }),
     },
   });
 

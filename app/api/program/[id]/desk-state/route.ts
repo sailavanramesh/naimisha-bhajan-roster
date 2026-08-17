@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
-import { currentItemOf, sortChannels } from "@/lib/deskChannels";
+import { currentItemOf, sortChannels, stripNumber } from "@/lib/deskChannels";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -39,6 +39,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
           number: true,
           label: true,
           kind: true,
+          stereo: true,
           singer: { select: { name: true } },
           person: true,
           instrument: { select: { name: true } },
@@ -72,7 +73,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
 
   const channels = sortChannels(session.channels).map((c) => ({
     id: c.id,
+    /** The strip's own number. "13" even when it is running as 13/14. */
     number: c.number,
+    /** How the desk prints it tonight — "13/14" for a pair, else the number. */
+    printed: stripNumber(c.number, c.stereo),
+    stereo: c.stereo,
     label: c.label,
     kind: c.kind,
     who: c.singer?.name ?? c.person ?? c.instrument?.name ?? null,

@@ -164,6 +164,7 @@ export default async function ProgramDeskPage({
     // whoever happens to be on it.
     colour: c.colour,
     mic: c.mic,
+    stereo: c.stereo,
     who: c.singer?.name ?? (c.person?.trim() || c.instrument?.name || null),
   }));
 

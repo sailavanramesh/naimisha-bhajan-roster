@@ -42,6 +42,7 @@ export default async function DesksPage() {
       kind: c.kind as string,
       colour: c.colour,
       mic: c.mic,
+      stereo: c.stereo,
     })),
   }));
 

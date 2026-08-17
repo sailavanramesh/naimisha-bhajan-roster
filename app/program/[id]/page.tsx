@@ -204,6 +204,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
           label: c.label,
           kind: c.kind,
           colour: c.colour,
+          stereo: c.stereo,
           singerId: c.singerId,
           person: c.person,
           // What to show in brackets: the person on it, or the instrument.

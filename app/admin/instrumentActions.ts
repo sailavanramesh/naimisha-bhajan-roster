@@ -114,6 +114,37 @@ export async function setInstrumentScope(input: {
 }
 
 /**
+ * How many desk channels this instrument needs.
+ *
+ * One for nearly everything. A two-headed drum — a dholak, a mridangam, a khol
+ * — is miked on each head and takes two, and a stereo keyboard takes two.
+ * Building a programme's channel list used to give every instrument one strip,
+ * so the mridangam arrived with half a mic and somebody found out on the night.
+ *
+ * Capped at 8: past that it is not an instrument, it is a drum kit, and whoever
+ * is patching that is not going to be helped by a number box.
+ */
+export async function setInstrumentChannels(input: {
+  id: string;
+  channels: number;
+}): Promise<Result> {
+  await requireCapability("manageAllocations");
+
+  const parsed = z
+    .object({ id: z.string().min(1), channels: z.number().int().min(1).max(8) })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: "That is not a number of channels." };
+
+  await prisma.instrument.update({
+    where: { id: parsed.data.id },
+    data: { channels: parsed.data.channels },
+  });
+
+  revalidatePath("/admin");
+  return { ok: true };
+}
+
+/**
  * Retire an instrument, or bring it back.
  *
  * Never a delete. Past programs record what was actually played on them, and

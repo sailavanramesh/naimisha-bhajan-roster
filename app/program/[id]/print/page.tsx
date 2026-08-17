@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/db";
 import { getRole, can } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
-import { sortChannels } from "@/lib/deskChannels";
+import { sortChannels, stripNumber } from "@/lib/deskChannels";
 import { instrumentsLabel, performersLabel, songNumbers } from "@/lib/program";
 import { micColourLabel } from "@/lib/micCushion";
 
@@ -97,7 +97,7 @@ export default async function ProgramPrintPage({ params }: { params: Promise<{ i
               const who = c.singer?.name ?? c.person ?? c.instrument?.name ?? null;
               return (
                 <li key={c.id} className="flex gap-2 border-b border-black/15 py-0.5">
-                  <span className="w-6 shrink-0 text-right font-mono font-bold">{c.number}</span>
+                  <span className="w-9 shrink-0 text-right font-mono font-bold">{stripNumber(c.number, c.stereo)}</span>
                   <span className="min-w-0 flex-1">
                     {c.label}
                     {who && who !== c.label ? ` (${who})` : ""}
@@ -122,7 +122,7 @@ export default async function ProgramPrintPage({ params }: { params: Promise<{ i
                 <th className="w-10 border border-black/30 px-1 py-0.5">Scene</th>
                 {channels.map((c) => (
                   <th key={c.id} className="w-6 border border-black/30 px-0.5 py-0.5 font-mono">
-                    {c.number}
+                    {stripNumber(c.number, c.stereo)}
                   </th>
                 ))}
               </tr>

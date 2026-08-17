@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { Button, Input } from "@/components/ui";
 import { CHORUS_COLOURS, type MicColourValue } from "@/lib/micCushion";
+import { stripNumber } from "@/lib/deskChannels";
 import { addDesk, removeDesk, updateDeskChannel } from "./deskActions";
 
 export type DeskRow = {
@@ -20,6 +21,8 @@ export type DeskRow = {
     colour: MicColourValue | null;
     /** Which mic is on it — "Wired", "Pegasus", "WL1", "Rode". */
     mic: string | null;
+    /** A mono/stereo pair — 13/14 on the MG20XU. Its number is the first one. */
+    stereo: boolean;
   }[];
 };
 
@@ -127,7 +130,10 @@ export function Desks({ desks, canEdit }: { desks: DeskRow[]; canEdit: boolean }
             inputMode="numeric"
             className="h-9 w-20"
           />
-          <span className="text-xs text-on-surface-muted">channels</span>
+          <span className="text-xs text-on-surface-muted">
+            inputs
+            <span className="ms-1 opacity-70">(20 makes 16 strips: 12 mono, 4 stereo)</span>
+          </span>
           <Button
             type="button"
             variant="primary"
@@ -183,6 +189,7 @@ function ChannelRow({
   const [kind, setKind] = useState(channel.kind as (typeof KINDS)[number]);
   const [colour, setColour] = useState<MicColourValue | null>(channel.colour);
   const [mic, setMic] = useState(channel.mic ?? "");
+  const [stereo, setStereo] = useState(channel.stereo);
   const [pending, startTransition] = useTransition();
 
   const save = (patch: Parameters<typeof updateDeskChannel>[0]) =>
@@ -194,8 +201,8 @@ function ChannelRow({
   if (!canEdit) {
     return (
       <li className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="w-8 shrink-0 text-right font-mono text-xs text-on-surface-muted">
-          {channel.number}
+        <span className="w-12 shrink-0 text-right font-mono text-xs text-on-surface-muted">
+          {stripNumber(String(channel.number), channel.stereo)}
         </span>
         <span>
           {channel.label}
@@ -210,8 +217,8 @@ function ChannelRow({
 
   return (
     <li className="flex flex-wrap items-center gap-2 text-sm">
-      <span className="w-8 shrink-0 text-right font-mono text-xs text-on-surface-muted">
-        {channel.number}
+      <span className="w-12 shrink-0 text-right font-mono text-xs text-on-surface-muted">
+        {stripNumber(String(channel.number), stereo)}
       </span>
 
       <Input
@@ -274,6 +281,27 @@ function ChannelRow({
           })}
         </span>
       ) : null}
+
+      {/*
+        A mono/stereo strip. The MG20XU's last four are 13/14, 15/16, 17/18 and
+        19/20 — Yamaha's "Mono: 12; Mono/Stereo: 4" — and marking it here is
+        what makes the strip print as a pair. Whether a given programme USES it
+        as a pair is a separate decision, taken on the programme.
+      */}
+      <label className="flex items-center gap-1 text-[11px] text-on-surface-muted">
+        <input
+          type="checkbox"
+          checked={stereo}
+          disabled={pending}
+          aria-label={`Channel ${channel.number} is a stereo pair`}
+          className="h-3.5 w-3.5"
+          onChange={(e) => {
+            setStereo(e.target.checked);
+            save({ id: channel.id, label, kind, stereo: e.target.checked });
+          }}
+        />
+        stereo
+      </label>
 
       {/* Which mic is actually on it. Free text: it is the sound person's own
           shorthand for their own gear, and nothing computes on it. */}

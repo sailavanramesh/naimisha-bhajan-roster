@@ -141,6 +141,9 @@ export async function applyDesk(input: { sessionId: string; deskId: string }): P
         // night, which stays true when the desk is re-patched next year.
         colour: c.colour,
         mic: c.mic,
+        // How the desk is BUILT. Whether this programme uses the pair as a
+        // pair is its own decision from here on.
+        stereo: c.stereo,
       })),
     }),
   ]);
@@ -176,7 +179,7 @@ export async function suggestChannels(input: {
       },
     }),
     prisma.singer.findMany({ select: { id: true, name: true } }),
-    prisma.instrument.findMany({ select: { id: true, name: true } }),
+    prisma.instrument.findMany({ select: { id: true, name: true, channels: true } }),
     prisma.sessionChannel.findMany({
       where: { sessionId: parsed.data.sessionId },
       select: { number: true, singerId: true, person: true, instrumentId: true },
@@ -185,6 +188,8 @@ export async function suggestChannels(input: {
 
   const singerName = new Map(singers.map((s) => [s.id, s.name]));
   const instrumentName = new Map(instruments.map((i) => [i.id, i.name]));
+  // A two-headed drum is two strips. See Instrument.channels.
+  const instrumentChannels = new Map(instruments.map((i) => [i.id, i.channels]));
 
   const proposed = proposeChannels(
     items.map((i) => ({
@@ -195,6 +200,7 @@ export async function suggestChannels(input: {
     {
       singerName: (id) => singerName.get(id),
       instrumentName: (id) => instrumentName.get(id),
+      instrumentChannels: (id) => instrumentChannels.get(id),
     },
   );
 
@@ -276,6 +282,7 @@ export async function updateChannel(input: {
   singerId: string;
   person: string;
   colour: string | null;
+  stereo?: boolean;
 }): Promise<Result> {
   await requireCapability("editPrograms");
 
@@ -289,6 +296,8 @@ export async function updateChannel(input: {
       colour: z
         .union([z.string(), z.null()])
         .refine((v) => v === null || v === "" || isChorusColour(v), "not a cushion colour"),
+      // Whether THIS programme runs the pair as a pair. See SessionChannel.
+      stereo: z.boolean().optional(),
     })
     .safeParse(input);
   if (!parsed.success) return { ok: false, error: "Could not save that channel." };
@@ -308,6 +317,7 @@ export async function updateChannel(input: {
       // A singer carries their own name; storing it twice lets the two disagree.
       person: parsed.data.singerId ? null : parsed.data.person,
       colour: parsed.data.colour ? (parsed.data.colour as MicColourValue) : null,
+      ...(parsed.data.stereo === undefined ? {} : { stereo: parsed.data.stereo }),
     },
   });
 

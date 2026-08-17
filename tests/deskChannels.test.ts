@@ -3,6 +3,7 @@ import {
   blankStrips,
   currentItemOf,
   defaultStrips,
+  stripNumber,
   occupantFor,
   shortName,
   channelLabel,
@@ -277,7 +278,28 @@ describe("defaultStrips", () => {
     const twelve = strips.find((s) => s.number === "12");
     expect(twelve?.label).toBe("Channel 12");
     expect(twelve?.kind).toBe("spare");
-    expect(strips).toHaveLength(20);
+  });
+
+  /*
+   * A "20-channel" MG20XU is SIXTEEN strips — Yamaha's own spec reads
+   * "Mono: 12; Mono/Stereo: 4". Twenty would put four faders on the sheet that
+   * do not exist on the desk.
+   */
+  it("turns twenty inputs into twelve mono strips and four stereo pairs", () => {
+    expect(strips).toHaveLength(16);
+    expect(strips.filter((s) => s.stereo).map((s) => s.number)).toEqual(["13", "15", "17", "19"]);
+    expect(strips.filter((s) => !s.stereo)).toHaveLength(12);
+    expect(strips.find((s) => s.number === "13")?.label).toBe("Channel 13/14");
+  });
+
+  it("never leaves half a pair at the end of an odd desk", () => {
+    const odd = defaultStrips(15);
+    expect(odd.map((s) => s.number)).toEqual([
+      "1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13", "15",
+    ]);
+    expect(odd.find((s) => s.number === "13")?.stereo).toBe(true);
+    // 15 has nothing to pair with, so it stays a mono strip.
+    expect(odd.find((s) => s.number === "15")?.stereo).toBe(false);
   });
 
   it("gives a small desk only the part of the allocation that fits", () => {
@@ -288,7 +310,8 @@ describe("defaultStrips", () => {
 
   it("refuses a silly count, like blankStrips", () => {
     expect(defaultStrips(0)).toEqual([]);
-    expect(defaultStrips(9999)).toHaveLength(64);
+    // 64 inputs is the cap: twelve mono strips plus twenty-six stereo pairs.
+    expect(defaultStrips(9999)).toHaveLength(38);
   });
 });
 
@@ -344,5 +367,66 @@ describe("occupantFor", () => {
 
   it("has nothing to say about a spare strip", () => {
     expect(occupantFor({ who: null }, null)).toBeNull();
+  });
+});
+
+describe("proposeChannels — instruments that need more than one strip", () => {
+  const items: ItemPeople[] = [
+    {
+      itemId: "i1",
+      performers: [{ singerId: "s1" }],
+      instruments: [{ instrumentId: "mridangam" }, { instrumentId: "tabla" }],
+    },
+  ];
+  const names = {
+    singerName: (id: string) => ({ s1: "Prasanna" })[id],
+    instrumentName: (id: string) => ({ mridangam: "Mridangam", tabla: "Tabla" })[id],
+    instrumentChannels: (id: string) => ({ mridangam: 2, tabla: 1 })[id],
+  };
+
+  it("gives a two-headed drum a strip per head, numbered", () => {
+    const labels = proposeChannels(items, names).map((c) => c.label);
+    expect(labels).toEqual(["Prasanna", "Mridangam 1", "Mridangam 2", "Tabla"]);
+  });
+
+  /* "Tabla 1" with no Tabla 2 anywhere is a question, not a fact. */
+  it("does not number an instrument that only needs one", () => {
+    expect(proposeChannels(items, names).find((c) => c.instrumentId === "tabla")?.label).toBe(
+      "Tabla",
+    );
+  });
+
+  it("still numbers every strip in order across the whole list", () => {
+    expect(proposeChannels(items, names).map((c) => c.number)).toEqual(["1", "2", "3", "4"]);
+  });
+
+  it("treats a missing count as one, so nothing changes for existing desks", () => {
+    const labels = proposeChannels(items, {
+      singerName: names.singerName,
+      instrumentName: names.instrumentName,
+    }).map((c) => c.label);
+    expect(labels).toEqual(["Prasanna", "Mridangam", "Tabla"]);
+  });
+
+  it("refuses a silly count rather than making a hundred strips", () => {
+    const many = proposeChannels(items, { ...names, instrumentChannels: () => 999 });
+    expect(many.filter((c) => c.instrumentId === "mridangam")).toHaveLength(8);
+  });
+});
+
+describe("stripNumber", () => {
+  it("writes a stereo strip the way the desk prints it", () => {
+    expect(stripNumber("13", true)).toBe("13/14");
+    expect(stripNumber("19", true)).toBe("19/20");
+  });
+
+  /* Used as one mono channel, it is written as the one number it behaves as. */
+  it("writes a mono strip as its own number", () => {
+    expect(stripNumber("13", false)).toBe("13");
+    expect(stripNumber("4", false)).toBe("4");
+  });
+
+  it("leaves a number it cannot read alone", () => {
+    expect(stripNumber("AUX", true)).toBe("AUX");
   });
 });
