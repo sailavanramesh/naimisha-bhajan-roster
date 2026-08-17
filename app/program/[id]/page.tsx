@@ -46,6 +46,17 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
       programItems: {
         orderBy: { position: "asc" },
         include: {
+          song: {
+            select: {
+              title: true,
+              // The words, so they can be read and edited ON the item rather
+              // than two hops away in the catalogue.
+              verses: {
+                orderBy: { order: "asc" },
+                select: { id: true, label: true, script: true, roman: true, meaning: true },
+              },
+            },
+          },
           performers: {
             orderBy: { order: "asc" },
             include: { singer: { select: { id: true, name: true } } },
@@ -128,6 +139,8 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
     position: item.position,
     kind: item.kind,
     songId: item.songId,
+    songTitle: item.song?.title ?? null,
+    verses: item.song?.verses ?? [],
     title: item.title ?? "",
     narration: item.narration ?? "",
     pitchNote: item.pitchNote ?? "",

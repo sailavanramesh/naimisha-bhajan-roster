@@ -16,6 +16,8 @@ import {
   updateProgramItem,
 } from "./actions";
 import { createSong, setItemSong } from "@/app/songs/actions";
+import { Verses, type VerseView } from "@/app/songs/[id]/Verses";
+import { VerseEditor } from "@/app/songs/[id]/VerseEditor";
 
 export type EditorItem = {
   id: string;
@@ -23,6 +25,9 @@ export type EditorItem = {
   kind: "song" | "narration";
   /** The catalogue entry, when this item has one. Null while it is a bare title. */
   songId: string | null;
+  songTitle: string | null;
+  /** Its words, so they can be read and edited here rather than two hops away. */
+  verses: VerseView[];
   title: string;
   narration: string;
   pitchNote: string;
@@ -277,6 +282,7 @@ function ItemCard({
                   placeholder={isReading ? "e.g. Opening words" : "e.g. Guru Meri Pooja"}
                 />
                 {!isReading ? <SongLink item={item} canEdit={canEdit} onError={onError} /> : null}
+
               </label>
 
               {!isReading ? (
@@ -310,6 +316,39 @@ function ItemCard({
                 </div>
               ) : null}
             </div>
+
+              {/*
+                THE WORDS, ON THE ITEM.
+
+                Sailavan: "in each individual song, I can't see a section for
+                the song's lyrics and meanings and ascribing it line by line."
+                They existed — in the song catalogue, behind a link, and only
+                once somebody had thought to add the song to that catalogue
+                first. Two hops and a prerequisite, for the thing a singer most
+                wants to look at.
+
+                So they are here, collapsed, and the section itself is what
+                offers to create the catalogue entry when there is not one yet.
+                Same components as the song page — read and edit — so the line
+                by line alignment of script, transliteration and meaning is
+                literally the same code, not a second version of it.
+              */}
+              {!isReading && item.songId ? (
+                <details className="rounded-[10px] border border-rule-surface">
+                  <summary className="cursor-pointer select-none px-3 py-2 text-xs font-semibold">
+                    Words and meaning
+                    <span className="ms-2 font-normal text-on-surface-muted">
+                      {item.verses.length === 0
+                        ? "none yet"
+                        : `${item.verses.length} verse${item.verses.length === 1 ? "" : "s"}`}
+                    </span>
+                  </summary>
+                  <div className="grid gap-3 px-3 pb-3">
+                    <Verses verses={item.verses} />
+                    <VerseEditor songId={item.songId} verses={item.verses} canEdit={canEdit} />
+                  </div>
+                </details>
+              ) : null}
 
             {isReading ? (
               <label className="grid gap-1 text-xs text-on-surface-muted">
