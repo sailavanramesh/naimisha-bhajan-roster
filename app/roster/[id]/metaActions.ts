@@ -13,6 +13,12 @@ const Input = z.object({
   location: z.string().max(120),
   /** "HH:MM", or "" for none. */
   startsAt: z.string().regex(/^$|^([01]\d|2[0-3]):[0-5]\d$/, "Use a time like 19:00."),
+  /**
+   * "YYYY-MM-DD". A session put on the wrong day has to be movable — Sailavan,
+   * 2026-08-17 — and the alternative was delete and rebuild, which throws away
+   * the roster with the mistake.
+   */
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date like 2026-08-18."),
 });
 
 /**
@@ -38,12 +44,21 @@ export async function updateSessionMeta(input: {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Could not save." };
   }
-  const { sessionId, categoryId, topic, location, startsAt } = parsed.data;
+  const { sessionId, categoryId, topic, location, startsAt, date } = parsed.data;
 
   if (categoryId) {
     const exists = await prisma.sessionCategory.count({ where: { id: categoryId } });
     if (exists === 0) return { ok: false, error: "That category no longer exists." };
   }
+
+  /*
+   * Midnight UTC, like every other date written here. The column is @db.Date
+   * and the group is in Melbourne: building the Date any other way lets the
+   * local zone shift the session onto the day before, which is the bug the
+   * date column exists to avoid (CLAUDE.md, "Dates are session dates").
+   */
+  const when = new Date(`${date}T00:00:00.000Z`);
+  if (Number.isNaN(when.getTime())) return { ok: false, error: "That is not a date." };
 
   await prisma.session.update({
     where: { id: sessionId },
@@ -52,10 +67,15 @@ export async function updateSessionMeta(input: {
       topic: topic.trim() || null,
       location: location.trim() || null,
       startsAt: startsAt || null,
+      date: when,
     },
   });
 
   revalidatePath(`/roster/${sessionId}`);
+  revalidatePath(`/program/${sessionId}`);
+  // The calendar and the month strip both read by date, so a session that has
+  // moved has moved on them too.
+  revalidatePath("/roster");
   return { ok: true };
 }
 

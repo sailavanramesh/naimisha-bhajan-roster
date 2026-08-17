@@ -567,6 +567,8 @@ export default async function RosterSessionPage({
               categoryId: session.categoryId,
               topic: session.topic,
               location: session.location,
+              // The column is @db.Date, so the ISO day is the whole value.
+              date: session.date.toISOString().slice(0, 10),
               startsAt: session.startsAt,
             }}
           />

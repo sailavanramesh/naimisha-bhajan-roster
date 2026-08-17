@@ -10,6 +10,8 @@ export type SessionMeta = {
   location: string | null;
   /** "HH:MM" or null. */
   startsAt: string | null;
+  /** "YYYY-MM-DD". The day this session is on, and can be moved to. */
+  date: string;
 };
 
 /**
@@ -107,6 +109,24 @@ export function SessionMetaPanel({
                 </option>
               ))}
             </select>
+          </label>
+
+          {/*
+            The DATE, editable.
+
+            Sailavan, 2026-08-17: a session put on the wrong day should be
+            movable "in case it's wrong". It was not, and the only cure was to
+            delete and rebuild — which throws away the roster along with the
+            mistake.
+          */}
+          <label className="grid gap-1 text-[11px] text-on-surface-muted">
+            Date
+            <input
+              type="date"
+              value={value.date}
+              onChange={(e) => setValue((v) => ({ ...v, date: e.target.value || v.date }))}
+              className="h-9 rounded-[10px] border border-rule-surface bg-field px-2 text-sm text-on-surface"
+            />
           </label>
 
           <label className="grid gap-1 text-[11px] text-on-surface-muted">
