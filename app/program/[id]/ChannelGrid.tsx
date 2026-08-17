@@ -77,6 +77,7 @@ export function ChannelGrid({
   items,
   singers,
   instruments,
+  guests,
   canEdit,
 }: {
   sessionId: string;
@@ -86,6 +87,8 @@ export function ChannelGrid({
   items: GridItem[];
   singers: { id: string; name: string }[];
   instruments: { id: string; name: string }[];
+  /** Names typed onto this programme who are not roster singers. */
+  guests: string[];
   canEdit: boolean;
 }) {
   const [pending, startTransition] = useTransition();
@@ -515,6 +518,7 @@ export function ChannelGrid({
                                   }
                                   singers={singers}
                                   instruments={instruments}
+                                  guests={guests}
                                   disabled={pending}
                                   emptyLabel={c.who ?? "usual"}
                                   className="h-7 min-w-0 flex-1 rounded-key border border-rule-surface bg-field px-1 text-[11px]"
@@ -527,11 +531,12 @@ export function ChannelGrid({
                                         singerId: picked.kind === "singer" ? picked.id : null,
                                         instrumentId:
                                           picked.kind === "instrument" ? picked.id : null,
-                                        // Picking from the list clears a typed
-                                        // name: two answers to one question is
-                                        // how a screen starts disagreeing with
-                                        // itself.
-                                        person: null,
+                                        // A guest is stored as the name, which
+                                        // is all the programme knows about them.
+                                        // Exactly one of the three is ever set:
+                                        // two answers to one question is how a
+                                        // screen starts disagreeing with itself.
+                                        person: picked.kind === "person" ? picked.name : null,
                                       });
                                       say(res, "");
                                     })
@@ -700,6 +705,7 @@ export function ChannelGrid({
                   }
                   singers={singers}
                   instruments={instruments}
+                  guests={guests}
                   disabled={!canEdit || pending}
                   emptyLabel={deskStrip.who ?? "usual"}
                   label={`Who is on channel ${stripNumber(deskStrip.number, deskStrip.stereo)} for this item`}
@@ -710,7 +716,7 @@ export function ChannelGrid({
                         channelId: deskStrip.id,
                         singerId: picked.kind === "singer" ? picked.id : null,
                         instrumentId: picked.kind === "instrument" ? picked.id : null,
-                        person: null,
+                        person: picked.kind === "person" ? picked.name : null,
                       });
                       say(res, "");
                     })
@@ -766,6 +772,7 @@ export function ChannelGrid({
                     channel={c}
                     singers={singers}
                     instruments={instruments}
+                    guests={guests}
                     onDone={() => setEditing(null)}
                     onMessage={setMessage}
                   />
@@ -871,12 +878,14 @@ function ChannelEditor({
   channel,
   singers,
   instruments,
+  guests,
   onDone,
   onMessage,
 }: {
   channel: ChannelRow;
   singers: { id: string; name: string }[];
   instruments: { id: string; name: string }[];
+  guests: string[];
   onDone: () => void;
   onMessage: (m: { ok: boolean; text: string } | null) => void;
 }) {
@@ -887,7 +896,9 @@ function ChannelEditor({
       ? { kind: "singer", id: channel.singerId }
       : channel.instrumentId
         ? { kind: "instrument", id: channel.instrumentId }
-        : { kind: "none" },
+        : channel.person
+          ? { kind: "person", name: channel.person }
+          : { kind: "none" },
   );
   const [person, setPerson] = useState(channel.person ?? "");
   const [colour, setColour] = useState<MicColourValue | null>(channel.colour);
@@ -936,6 +947,7 @@ function ChannelEditor({
         value={who}
         singers={singers}
         instruments={instruments}
+        guests={guests}
         label="Who or what is on it"
         onPick={(picked) => {
           setWho(picked);
@@ -982,7 +994,7 @@ function ChannelEditor({
               kind,
               singerId: who.kind === "singer" ? who.id : "",
               instrumentId: who.kind === "instrument" ? who.id : "",
-              person,
+              person: who.kind === "person" ? who.name : person,
               colour,
               stereo,
             });
@@ -1023,17 +1035,21 @@ function ChannelEditor({
 export type ChannelWho =
   | { kind: "none" }
   | { kind: "singer"; id: string }
-  | { kind: "instrument"; id: string };
+  | { kind: "instrument"; id: string }
+  /** A guest, who has a name in this programme and no row in the roster. */
+  | { kind: "person"; name: string };
 
 export function whoValue(who: ChannelWho): string {
   if (who.kind === "singer") return `s:${who.id}`;
   if (who.kind === "instrument") return `i:${who.id}`;
+  if (who.kind === "person") return `p:${who.name}`;
   return "";
 }
 
 export function parseWho(value: string): ChannelWho {
   if (value.startsWith("s:")) return { kind: "singer", id: value.slice(2) };
   if (value.startsWith("i:")) return { kind: "instrument", id: value.slice(2) };
+  if (value.startsWith("p:")) return { kind: "person", name: value.slice(2) };
   return { kind: "none" };
 }
 
@@ -1041,6 +1057,7 @@ function WhoSelect({
   value,
   singers,
   instruments,
+  guests,
   label,
   disabled,
   className,
@@ -1050,6 +1067,8 @@ function WhoSelect({
   value: ChannelWho;
   singers: { id: string; name: string }[];
   instruments: { id: string; name: string }[];
+  /** Names typed onto this programme who are not roster singers. */
+  guests: string[];
   label: string;
   disabled?: boolean;
   className?: string;
@@ -1079,6 +1098,22 @@ function WhoSelect({
           {instruments.map((i) => (
             <option key={i.id} value={`i:${i.id}`}>
               {i.name}
+            </option>
+          ))}
+        </optgroup>
+      ) : null}
+      {/*
+        Guests — people singing on this programme who have no row in the roster.
+        Sailavan: "if I have added a guest to sing a song, they should show up in
+        the mic selection list." They need a mic like anybody else, and typing
+        the name a second time into the free-text box is asking somebody to
+        repeat what the programme already knows.
+      */}
+      {guests.length > 0 ? (
+        <optgroup label="Guests">
+          {guests.map((name) => (
+            <option key={name} value={`p:${name}`}>
+              {name}
             </option>
           ))}
         </optgroup>

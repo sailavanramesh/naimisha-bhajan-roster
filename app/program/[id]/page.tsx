@@ -134,6 +134,30 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
     timeZone: "UTC",
   }).format(session.date);
 
+  /*
+   * Guests: everybody named on this programme who is not a roster singer.
+   *
+   * They sing and they need a mic, so they belong in the channel picker —
+   * Sailavan, 2026-08-17. Taken from the programme rather than from a table,
+   * because that is the only place a guest exists: a ProgramPerformer with a
+   * name and no singerId, or somebody typed in as playing an instrument.
+   * De-duplicated case-insensitively, since the same guest gets typed twice.
+   */
+  const guests = (() => {
+    const byLower = new Map<string, string>();
+    for (const item of session.programItems) {
+      for (const p of item.performers) {
+        const name = (p.singerId ? null : p.name)?.trim();
+        if (name) byLower.set(name.toLowerCase(), name);
+      }
+      for (const i of item.instruments) {
+        const name = (i.singerId ? null : i.person)?.trim();
+        if (name) byLower.set(name.toLowerCase(), name);
+      }
+    }
+    return [...byLower.values()].sort((a, b) => a.localeCompare(b));
+  })();
+
   const items = session.programItems.map((item) => ({
     id: item.id,
     position: item.position,
@@ -265,6 +289,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
         }))}
         singers={singers}
         instruments={instruments}
+        guests={guests}
         canEdit={canEdit}
       />
 
