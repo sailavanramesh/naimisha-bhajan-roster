@@ -532,3 +532,75 @@ export async function setSceneNumber(input: {
   await refresh(item.sessionId);
   return ok;
 }
+
+/**
+ * Take the desk's strips again, without disturbing the programme.
+ *
+ * A programme's channels are a SNAPSHOT — that is what lets a programme two
+ * years old still say what was on channel 6 after the desk has been re-patched
+ * twice. The cost of that is the thing Sailavan hit: "the sound desk info
+ * didn't update in the music programme view when I updated it." Correct by
+ * design, and useless while you are still setting the programme up.
+ *
+ * So this re-copies what DESCRIBES each strip — its label, what it carries, its
+ * cushion, its mic, whether it is a pair — matching on the channel NUMBER, and
+ * touches nothing else. It does not delete: a strip the programme added by hand
+ * stays, and every per-item row survives, because those hang off the session
+ * channel and re-creating one would take the whole open-channel plan with it.
+ *
+ * Not automatic, for the same reason the snapshot exists. Somebody asks for the
+ * desk as it is now; nothing reaches back into a programme on its own.
+ */
+export async function refreshFromDesk(input: {
+  sessionId: string;
+}): Promise<{ ok: true; updated: number; added: number } | { ok: false; error: string }> {
+  await requireCapability("editPrograms");
+
+  const parsed = z.object({ sessionId: Id }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Could not do that." };
+
+  const session = await prisma.session.findUnique({
+    where: { id: parsed.data.sessionId },
+    select: {
+      format: true,
+      desk: { select: { channels: { orderBy: { number: "asc" } } } },
+      channels: { select: { id: true, number: true } },
+    },
+  });
+  if (!session) return { ok: false, error: "That programme is gone." };
+  if (session.format !== "program") return { ok: false, error: "That is not a music programme." };
+  if (!session.desk) return { ok: false, error: "This programme is not on a desk yet." };
+
+  const mine = new Map(session.channels.map((c) => [c.number, c.id]));
+  const writes = [];
+  let updated = 0;
+  let added = 0;
+
+  for (const c of session.desk.channels) {
+    const number = String(c.number);
+    const existing = mine.get(number);
+    const fields = {
+      label: c.label,
+      kind: c.kind,
+      colour: c.colour,
+      mic: c.mic,
+      stereo: c.stereo,
+    };
+
+    if (existing) {
+      updated += 1;
+      writes.push(prisma.sessionChannel.update({ where: { id: existing }, data: fields }));
+    } else {
+      added += 1;
+      writes.push(
+        prisma.sessionChannel.create({
+          data: { sessionId: parsed.data.sessionId, number, ...fields },
+        }),
+      );
+    }
+  }
+
+  if (writes.length > 0) await prisma.$transaction(writes);
+  await refresh(parsed.data.sessionId);
+  return { ok: true, updated, added };
+}

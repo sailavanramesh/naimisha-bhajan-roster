@@ -17,6 +17,7 @@ import {
   updateChannel,
   applyDesk,
   setItemChannelWho,
+  refreshFromDesk,
 } from "./deskActions";
 
 export type ChannelRow = {
@@ -264,6 +265,33 @@ export function ChannelGrid({
             >
               Printable sheet ↗
             </Link>
+            {/*
+              A programme's strips are a SNAPSHOT, which is what lets an old
+              programme still say what was on channel 6 after the desk has been
+              re-patched. The cost is that tidying the desk does not reach a
+              programme already set up — correct, and unhelpful while you are
+              still preparing one. This asks for the desk as it is now.
+            */}
+            {canEdit && deskName ? (
+              <button
+                type="button"
+                disabled={pending}
+                className="text-sm text-on-ground-muted underline underline-offset-2 hover:text-on-ground"
+                onClick={() =>
+                  startTransition(async () => {
+                    const res = await refreshFromDesk({ sessionId });
+                    say(
+                      res,
+                      res.ok
+                        ? `Took ${res.updated} strip${res.updated === 1 ? "" : "s"} from ${deskName}${res.added > 0 ? `, and added ${res.added}` : ""}.`
+                        : "",
+                    );
+                  })
+                }
+              >
+                Update from the desk
+              </button>
+            ) : null}
           </div>
         </div>
 

@@ -12,6 +12,8 @@ export type DeskRow = {
   kind: "analog" | "digital";
   isDefault: boolean;
   usedBy: number;
+  /** How many inputs are mono before the rest can pair. Twelve on the MG20XU. */
+  monoInputs: number;
   channels: {
     id: string;
     number: number;
@@ -96,7 +98,13 @@ export function Desks({ desks, canEdit }: { desks: DeskRow[]; canEdit: boolean }
               {open === desk.id ? (
                 <ul className="mt-2 grid gap-1 border-t border-rule-surface pt-2">
                   {desk.channels.map((c) => (
-                    <ChannelRow key={c.id} channel={c} canEdit={canEdit} onMessage={setMessage} />
+                    <ChannelRow
+                    key={c.id}
+                    channel={c}
+                    monoInputs={desk.monoInputs}
+                    canEdit={canEdit}
+                    onMessage={setMessage}
+                  />
                   ))}
                 </ul>
               ) : null}
@@ -175,10 +183,12 @@ export function Desks({ desks, canEdit }: { desks: DeskRow[]; canEdit: boolean }
  */
 function ChannelRow({
   channel,
+  monoInputs,
   canEdit,
   onMessage,
 }: {
   channel: DeskRow["channels"][number];
+  monoInputs: number;
   canEdit: boolean;
   onMessage: (m: { ok: boolean; text: string } | null) => void;
 }) {
@@ -288,11 +298,20 @@ function ChannelRow({
         what makes the strip print as a pair. Whether a given programme USES it
         as a pair is a separate decision, taken on the programme.
       */}
-      <label className="flex items-center gap-1 text-[11px] text-on-surface-muted">
+      {/*
+        Offered only where the desk can actually do it. On the MG20XU the first
+        twelve inputs are mono and the last four pair up, so a tick box on
+        channel 1 was offering something the hardware does not have.
+      */}
+      <label
+        className={`flex items-center gap-1 text-[11px] text-on-surface-muted ${
+          channel.number > monoInputs ? "" : "invisible"
+        }`}
+      >
         <input
           type="checkbox"
           checked={stereo}
-          disabled={pending}
+          disabled={pending || channel.number <= monoInputs}
           aria-label={`Channel ${channel.number} is a stereo pair`}
           className="h-3.5 w-3.5"
           onChange={(e) => {

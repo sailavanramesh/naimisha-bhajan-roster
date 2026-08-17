@@ -41,7 +41,16 @@ export type Strip = {
  * bare "Channel 12", which is the number already printed above it.
  */
 export function stripName(who: string | null, label: string): string | null {
-  if (who) return who;
+  return who ?? deskLabel(label);
+}
+
+/**
+ * The desk's own name for a strip, or nothing when it does not say one.
+ *
+ * "Channel 12" is not a name — it is the number already printed above the tile,
+ * and repeating it fills the line while saying nothing.
+ */
+export function deskLabel(label: string): string | null {
   return /^channel\s*\d+(\/\d+)?$/i.test(label.trim()) ? null : label;
 }
 
@@ -75,12 +84,12 @@ export function DeskStrips({
         const swapped = swappedIds?.has(s.id) ?? false;
         // A cushion belongs to a mic, so only a vocal strip has one.
         const cushion = s.kind === "vocal" && s.colour ? micColourDot(s.colour) : null;
-        const name = stripName(s.who, s.label);
 
         const title = [
           `Channel ${stripNumber(s.number, s.stereo)}`,
           s.stereo ? "stereo pair" : null,
-          name,
+          deskLabel(s.label),
+          s.who,
           s.kind === "vocal" && s.colour ? `${micColourLabel(s.colour)} cushion` : null,
           s.mic,
           swapped ? "for this item only" : null,
@@ -127,12 +136,26 @@ export function DeskStrips({
                   : undefined
               }
             >
+              {/*
+                WHO, then WHAT THE STRIP IS FOR.
+
+                Sailavan: "we need to see what we have allocated for each channel
+                in the sound desk area as well as the allocated person or
+                instrument." They are two different facts and the desk needs
+                both — channel 3 is the third lead vocal mic on the desk, and
+                tonight Prasanna is on it.
+
+                The person is the bold line, because that is what changes and
+                what the desk is looking for. The strip's own name sits under it,
+                and only when it says something the person does not: a bare
+                "Channel 12" is the number already printed above.
+              */}
               <span className="block w-full truncate text-[12px] font-bold leading-tight">
-                {name ?? "—"}
+                {s.who ?? deskLabel(s.label) ?? "—"}
               </span>
-              {s.mic ? (
+              {[s.who ? deskLabel(s.label) : null, s.mic].filter(Boolean).length > 0 ? (
                 <span className="mt-0.5 block w-full truncate text-[9px] leading-none opacity-80">
-                  {s.mic}
+                  {[s.who ? deskLabel(s.label) : null, s.mic].filter(Boolean).join(" · ")}
                 </span>
               ) : null}
             </span>

@@ -880,6 +880,17 @@ model Desk {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  /// How many inputs are mono before the rest pair up.
+  ///
+  /// Twelve on the centre's MG20XU — Yamaha's "Mono[MIC/LINE]: 12;
+  /// Mono/Stereo[MIC/LINE]: 4" — so 13/14, 15/16, 17/18 and 19/20 are the only
+  /// strips that can be a pair. Sailavan, 2026-08-17: "from 13 onwards they are
+  /// all capable of being stereo, not before there."
+  ///
+  /// A property of the DESK because it is a fact about the hardware, and the
+  /// next desk will have a different one.
+  monoInputs Int @default(12)
+
   channels DeskChannel[]
   sessions Session[]
 }

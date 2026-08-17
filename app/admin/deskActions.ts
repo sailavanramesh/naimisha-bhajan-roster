@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireGrantedCapability } from "@/lib/auth";
 import { defaultStrips } from "@/lib/deskChannels";
 import { isChorusColour } from "@/lib/micCushion";
+import { melbourneTodayISO } from "@/lib/dates";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -78,6 +79,76 @@ export async function addDesk(input: {
   return ok;
 }
 
+
+/**
+ * Push a desk's strips out to the programmes that have not happened yet.
+ *
+ * The tension this settles: a programme's channels are a SNAPSHOT, so that a
+ * programme from two years ago still says what was on channel 6 after the desk
+ * has been re-patched twice. Sailavan, setting one up: "I need to be able to
+ * save sound desk settings and it to immediately reflect in the mics and
+ * channels area in a program."
+ *
+ * Both are right, about different programmes. A programme still ahead of us has
+ * no history to protect — its channels are a plan, and a plan should follow the
+ * desk. One that has already happened is a record, and nothing may rewrite it.
+ * So the date decides, and only the future moves.
+ *
+ * Only what DESCRIBES a strip travels: its label, what it carries, its cushion,
+ * its mic, whether it is a pair. Matched on the channel NUMBER. Nothing is
+ * deleted and nothing per-item is touched — a strip somebody added to one
+ * programme by hand stays, and the open-channel plan hangs off these rows, so
+ * re-creating one would take that plan with it.
+ */
+async function pushDeskToFutureProgrammes(deskId: string): Promise<void> {
+  const todayISO = melbourneTodayISO();
+
+  const [desk, sessions] = await Promise.all([
+    prisma.desk.findUnique({
+      where: { id: deskId },
+      select: { channels: { orderBy: { number: "asc" } } },
+    }),
+    prisma.session.findMany({
+      where: {
+        deskId,
+        format: "program",
+        date: { gte: new Date(`${todayISO}T00:00:00.000Z`) },
+      },
+      select: { id: true, channels: { select: { id: true, number: true } } },
+    }),
+  ]);
+  if (!desk || sessions.length === 0) return;
+
+  const writes = [];
+  for (const session of sessions) {
+    const mine = new Map(session.channels.map((c) => [c.number, c.id]));
+    for (const c of desk.channels) {
+      const fields = {
+        label: c.label,
+        kind: c.kind,
+        colour: c.colour,
+        mic: c.mic,
+        stereo: c.stereo,
+      };
+      const existing = mine.get(String(c.number));
+      writes.push(
+        existing
+          ? prisma.sessionChannel.update({ where: { id: existing }, data: fields })
+          : prisma.sessionChannel.create({
+              data: { sessionId: session.id, number: String(c.number), ...fields },
+            }),
+      );
+    }
+  }
+
+  if (writes.length > 0) await prisma.$transaction(writes);
+  for (const session of sessions) {
+    revalidatePath(`/program/${session.id}`);
+    revalidatePath(`/program/${session.id}/desk`);
+    revalidatePath(`/program/${session.id}/print`);
+  }
+}
+
 /**
  * One strip: what it is called, what it carries, its cushion, and its mic.
  *
@@ -113,23 +184,137 @@ export async function updateDeskChannel(input: {
     .safeParse(input);
   if (!parsed.success) return { ok: false, error: "Could not save that." };
 
-  await prisma.deskChannel.update({
+  const channel = await prisma.deskChannel.findUnique({
     where: { id: parsed.data.id },
-    data: {
-      label: parsed.data.label,
-      kind: parsed.data.kind,
-      // Undefined leaves the column alone; null clears it. The two callers are
-      // the label field and the colour dots, and neither should tread on the
-      // other's value by not mentioning it.
-      ...(parsed.data.colour === undefined
-        ? {}
-        : { colour: (parsed.data.colour as never) ?? null }),
-      ...(parsed.data.mic === undefined
-        ? {}
-        : { mic: parsed.data.mic?.trim() || null }),
-      ...(parsed.data.stereo === undefined ? {} : { stereo: parsed.data.stereo }),
+    select: {
+      id: true,
+      number: true,
+      stereo: true,
+      deskId: true,
+      desk: { select: { monoInputs: true } },
     },
   });
+  if (!channel) return { ok: false, error: "That channel is gone." };
+
+  /** Everything except the pairing, which the branches below decide. */
+  const fields = {
+    label: parsed.data.label,
+    kind: parsed.data.kind,
+    // Undefined leaves the column alone; null clears it. The callers are the
+    // label field, the colour dots and the mic box, and none should tread on
+    // another's value by not mentioning it.
+    ...(parsed.data.colour === undefined
+      ? {}
+      : { colour: (parsed.data.colour as never) ?? null }),
+    ...(parsed.data.mic === undefined ? {} : { mic: parsed.data.mic?.trim() || null }),
+  };
+
+  /*
+   * A STEREO STRIP IS ONE FADER OVER TWO INPUTS, so turning one on consumes the
+   * input above it. Ticking 19 and then 20 used to make two overlapping pairs —
+   * "19/20" and "20/21" — and there is no 21 on a twenty-input desk. Sailavan:
+   * "when I mark 19 and 20 as stereo, that means they are together."
+   */
+  const pairing = parsed.data.stereo === true && !channel.stereo;
+  const splitting = parsed.data.stereo === false && channel.stereo;
+
+  if (pairing) {
+    if (channel.number <= channel.desk.monoInputs) {
+      return {
+        ok: false,
+        error: `Channels 1 to ${channel.desk.monoInputs} are mono on this desk.`,
+      };
+    }
+
+    const sibling = await prisma.deskChannel.findFirst({
+      where: { deskId: channel.deskId, number: channel.number + 1 },
+      select: { id: true, label: true, colour: true, mic: true, kind: true },
+    });
+    if (!sibling) {
+      return {
+        ok: false,
+        error: `There is no channel ${channel.number + 1} to pair with ${channel.number}.`,
+      };
+    }
+
+    /*
+     * The pair swallows the strip above it, so refuse when that strip carries
+     * anything somebody put there. A named channel with a cushion on it is not
+     * scaffolding to be deleted on a tick.
+     */
+    const bare =
+      /^channel\s*\d+$/i.test(sibling.label.trim()) &&
+      sibling.colour === null &&
+      (sibling.mic ?? "").trim().length === 0 &&
+      sibling.kind === "spare";
+    if (!bare) {
+      return {
+        ok: false,
+        error: `Channel ${channel.number + 1} has its own label. Clear it first, then pair them.`,
+      };
+    }
+
+    await prisma.$transaction([
+      prisma.deskChannel.delete({ where: { id: sibling.id } }),
+      prisma.deskChannel.update({
+        where: { id: channel.id },
+        data: { ...fields, stereo: true },
+      }),
+    ]);
+    await pushDeskToFutureProgrammes(channel.deskId);
+    revalidatePath("/admin/desks");
+    return ok;
+  }
+
+  if (splitting) {
+    /*
+     * Splitting gives the second input its own strip back — but only if that
+     * input exists on the desk.
+     *
+     * Two guards, and the second one matters because of what the bug left
+     * behind: a twenty-input desk where 19 and 20 had each been ticked
+     * separately, so 20 claimed to be "20/21". Un-ticking that must not
+     * conjure a channel 21 out of the correction. So the desk's highest real
+     * input is read from its OTHER strips, and nothing is created past it.
+     */
+    const others = await prisma.deskChannel.findMany({
+      where: { deskId: channel.deskId, id: { not: channel.id } },
+      select: { number: true, stereo: true },
+    });
+    const highestInput = others.reduce((n, c) => Math.max(n, c.number + (c.stereo ? 1 : 0)), 0);
+
+    const taken =
+      channel.number + 1 > highestInput
+        ? 1
+        : await prisma.deskChannel.count({
+            where: { deskId: channel.deskId, number: channel.number + 1 },
+          });
+
+    await prisma.$transaction([
+      prisma.deskChannel.update({
+        where: { id: channel.id },
+        data: { ...fields, stereo: false },
+      }),
+      ...(taken === 0
+        ? [
+            prisma.deskChannel.create({
+              data: {
+                deskId: channel.deskId,
+                number: channel.number + 1,
+                label: `Channel ${channel.number + 1}`,
+                kind: "spare" as const,
+              },
+            }),
+          ]
+        : []),
+    ]);
+    await pushDeskToFutureProgrammes(channel.deskId);
+    revalidatePath("/admin/desks");
+    return ok;
+  }
+
+  await prisma.deskChannel.update({ where: { id: channel.id }, data: fields });
+  await pushDeskToFutureProgrammes(channel.deskId);
 
   revalidatePath("/admin/desks");
   return ok;

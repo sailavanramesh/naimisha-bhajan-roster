@@ -35,6 +35,7 @@ export default async function DesksPage() {
     kind: d.kind,
     isDefault: d.isDefault,
     usedBy: d._count.sessions,
+    monoInputs: d.monoInputs,
     channels: d.channels.map((c) => ({
       id: c.id,
       number: c.number,
