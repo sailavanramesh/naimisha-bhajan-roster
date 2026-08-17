@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { Button, Card, CardContent, Input } from "@/components/ui";
 import { CHORUS_COLOURS, micColourDot, type MicColourValue } from "@/lib/micCushion";
 import { occupantFor, shortName, stripNumber } from "@/lib/deskChannels";
@@ -105,7 +105,29 @@ export function ChannelGrid({
    */
   const [deskItemId, setDeskItemId] = useState<string | null>(null);
   const [deskStripId, setDeskStripId] = useState<string | null>(null);
+  const stripEditor = useRef<HTMLDivElement | null>(null);
   const [newNumber, setNewNumber] = useState("");
+
+  /*
+   * Bring the strip's editor into view when a strip is tapped.
+   *
+   * On a phone the twenty strips wrap to five or six rows, so the panel that
+   * answers the tap opens below the fold — and a tap that appears to do nothing
+   * is a tap people stop making. Sailavan asked for it to "scroll down a bit",
+   * which is exactly what `block: "nearest"` does: the least movement that puts
+   * the panel on screen, and no movement at all when it already is.
+   *
+   * Keyed on the selected strip, so it fires on a tap and not on every
+   * re-render — the panel re-renders on every write it makes.
+   */
+  useEffect(() => {
+    if (!deskStripId) return;
+    const el = stripEditor.current;
+    if (!el) return;
+
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ block: "nearest", behavior: reduce ? "auto" : "smooth" });
+  }, [deskStripId]);
 
   const numbers = songNumbers(items);
 
@@ -607,7 +629,10 @@ export function ChannelGrid({
             other gesture nobody will find that means "who".
           */}
           {deskStrip ? (
-            <div className="grid gap-1.5 rounded-[8px] border border-brass/50 bg-panel p-2">
+            <div
+              ref={stripEditor}
+              className="grid gap-1.5 rounded-[8px] border border-brass/50 bg-panel p-2"
+            >
               <p className="text-[11px] font-semibold">
                 Channel {stripNumber(deskStrip.number, deskStrip.stereo)}
                 <span className="ms-1.5 font-normal text-on-surface-muted">
