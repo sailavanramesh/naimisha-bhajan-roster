@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Button, Input } from "@/components/ui";
+import { toDevanagari } from "@/lib/toDevanagari";
 import {
   editVerse,
   fromDraft,
@@ -359,6 +360,59 @@ function PasteBox({
             ? `Read as ${draft.length} verse${draft.length === 1 ? "" : "s"}, ${lineCount} line${lineCount === 1 ? "" : "s"}. Check the columns before adding — anything can be edited here, and nothing is saved yet.`
             : `No script line to key on, so this went in as the ${layer}. ${draft.length} verse${draft.length === 1 ? "" : "s"}.`}
         </p>
+
+        {/*
+          Fill the script column from the transliteration, as a SUGGESTION.
+
+          Sailavan: "it would be cool if a song didn't have the script and only
+          transliteration if you could rewrite it in the appropriate language —
+          you can't make mistakes though as it should be clean." It cannot be
+          made clean automatically, and the honest answer is to be plain about
+          which lines need a reader rather than to pretend: Hindi drops inherent
+          vowels that Devanagari still writes, and half these files are spelled
+          by ear. So it proposes into this grid, where every cell is already
+          editable and nothing is saved yet, and marks the lines it is unsure of.
+        */}
+        {draft.some((v) => v.lines.some((l) => !l.script.trim() && l.roman.trim())) ? (
+          <div className="grid gap-1">
+            <Button
+              type="button"
+              className="h-8 justify-self-start text-xs"
+              disabled={pending}
+              onClick={() => {
+                let unsure = 0;
+                let filled = 0;
+                setDraft(
+                  draft.map((v) => ({
+                    ...v,
+                    lines: v.lines.map((l) => {
+                      if (l.script.trim() || !l.roman.trim()) return l;
+                      const guess = toDevanagari(l.roman);
+                      if (!guess.text.trim()) return l;
+                      filled += 1;
+                      if (!guess.confident) unsure += 1;
+                      return { ...l, script: guess.text };
+                    }),
+                  })),
+                );
+                onMessage({
+                  ok: true,
+                  text:
+                    filled === 0
+                      ? "Nothing to suggest."
+                      : `Suggested Devanagari for ${filled} line${filled === 1 ? "" : "s"}${unsure > 0 ? ` — ${unsure} written by ear, so read those closely` : ""}. Nothing is saved yet.`,
+                });
+              }}
+            >
+              Suggest the script from the transliteration
+            </Button>
+            <p className="text-[11px] text-on-surface-muted">
+              Devanagari only, and a suggestion rather than a conversion — a
+              romanisation does not record where Hindi dropped its inherent
+              vowels, so read every line before adding.
+            </p>
+          </div>
+        ) : null}
 
         <ol className="grid gap-3">
           {draft.map((verse, vi) => (

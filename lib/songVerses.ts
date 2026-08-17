@@ -364,10 +364,29 @@ export type PastedVerse = {
 
 type Line = { script: string; roman: string; meaning: string };
 
+/**
+ * Latin lines split into transliteration and the English that translates it.
+ *
+ * A line that reads as English attaches to the entry above it; anything else
+ * starts a new one. Used on its own for a document with no script at all, and
+ * inside a script run whose Latin lines do not divide evenly.
+ */
+function latinEntries(lines: string[]): Line[] {
+  const out: Line[] = [];
+  for (const line of lines) {
+    if (looksEnglish(line) && out.length > 0) {
+      const last = out[out.length - 1];
+      // A translation that wrapped is one meaning, not two.
+      last.meaning = last.meaning ? `${last.meaning} ${line}` : line;
+      continue;
+    }
+    out.push({ script: "", roman: line, meaning: "" });
+  }
+  return out;
+}
+
 /** Runs of script lines and the Latin lines that follow them, paired up. */
 function pairScriptRun(script: string[], latin: string[]): Line[] {
-  const empty = { script: "", roman: "", meaning: "" };
-
   /*
    * Twice as many Latin lines as script lines: transliteration and meaning,
    * alternating. The commonest shape in the documents.
@@ -383,112 +402,113 @@ function pairScriptRun(script: string[], latin: string[]): Line[] {
    * rather than taking the line immediately below each one.
    */
   if (latin.length === script.length) {
-    return script.map((s, i) => ({ ...empty, script: s, roman: latin[i] }));
+    return script.map((s, i) => ({ script: s, roman: latin[i], meaning: "" }));
   }
 
-  // Anything else: line them up as far as they go, and let the leftovers land
-  // in the last meaning rather than disappear.
-  return script.map((s, i) => {
-    const isLast = i === script.length - 1;
-    const roman = latin[i] ?? "";
-    const rest = isLast ? latin.slice(script.length).join(" ") : "";
-    return { script: s, roman, meaning: rest };
-  });
-}
-
-/** Latin-only text: transliteration, and the English lines that translate it. */
-function pairLatinOnly(lines: string[]): Line[] | null {
-  if (!lines.some(looksEnglish)) return null;
-
-  const out: Line[] = [];
-  for (const line of lines) {
-    if (looksEnglish(line) && out.length > 0) {
-      const last = out[out.length - 1];
-      // A translation that wrapped is one meaning, not two.
-      last.meaning = last.meaning ? `${last.meaning} ${line}` : line;
-      continue;
-    }
-    out.push({ script: "", roman: line, meaning: "" });
+  /*
+   * A single script line with several Latin ones under it: the first is its
+   * transliteration and the rest are all the meaning, however many lines the
+   * translation wrapped onto. There is no ambiguity to resolve here — there is
+   * only one line for them to belong to — so this does not go looking for
+   * English, which would mistake a translation with no common words in it
+   * ("Krishna's earrings sway,") for another transliteration.
+   */
+  if (script.length === 1) {
+    return [{ script: script[0], roman: latin[0] ?? "", meaning: latin.slice(1).join(" ") }];
   }
-  return out;
+
+  /*
+   * Otherwise the run is uneven — a stanza where somebody left a line
+   * untranslated, or slipped an extra transliteration in without its script.
+   * Read the Latin on its own terms and lay the two side by side, padding
+   * whichever runs out first. Nothing is dropped and nothing slides out of step.
+   */
+  const entries = latinEntries(latin);
+  const length = Math.max(script.length, entries.length);
+  return Array.from({ length }, (_, i) => ({
+    script: script[i] ?? "",
+    roman: entries[i]?.roman ?? "",
+    meaning: entries[i]?.meaning ?? "",
+  }));
 }
 
-/**
- * One paste, all three layers — for the way the documents are actually written.
- *
- * They are written four ways, all of them in the group's own files:
- *
- *   1. script / transliteration / meaning, line by line
- *   2. transliteration / meaning, line by line, with no script at all
- *   3. a run of script lines followed by the same run transliterated
- *   4. any of those under a heading — PALLAVI, CARAṆAM 1
- *
- * Pasting used to mean one layer at a time, picking out every second or third
- * line by hand. What makes it possible to do at once is that each layer is
- * recognisable on sight: a script line is not in Latin letters, and an English
- * line carries function words that a transliteration does not.
- *
- * Every line contributes exactly one entry to each layer, PADDING where a
- * translation is missing — which keeps the three the same length, which is the
- * whole condition `verseLayout` needs to zip them line by line rather than show
- * three blocks.
- *
- * It is a proposal. Everything it decides is laid out for review before a word
- * is written, so being wrong about a line is a thing somebody corrects rather
- * than a thing they have to discover later.
- *
- * Returns null only when there is nothing to go on — no script, and nothing that
- * reads as English — in which case the caller asks which single layer it is.
- */
+/** One stanza, split into layers — or null when there is nothing to go on. */
+function splitBlock(body: string): Line[] | null {
+  const lines = body
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+  if (lines.length === 0) return null;
+
+  if (!lines.some(isScriptLine)) {
+    // Latin only. Without any English there is nothing to divide it by.
+    return lines.some(looksEnglish) ? latinEntries(lines) : null;
+  }
+
+  const paired: Line[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const script: string[] = [];
+    while (i < lines.length && isScriptLine(lines[i])) script.push(lines[i++]);
+    const latin: string[] = [];
+    while (i < lines.length && !isScriptLine(lines[i])) latin.push(lines[i++]);
+
+    // Latin before any script line in this stanza: read it on its own terms.
+    paired.push(...(script.length === 0 ? latinEntries(latin) : pairScriptRun(script, latin)));
+  }
+  return paired;
+}
+
 export function splitPastedLayers(text: string): PastedVerse[] | null {
   const blocks = splitPastedVerses(text);
   if (blocks.length === 0) return null;
 
   const out: PastedVerse[] = [];
+  let anySplit = false;
 
   for (const block of blocks) {
+    const paired = splitBlock(block.body);
+
+    if (paired && paired.length > 0) {
+      anySplit = true;
+      out.push({
+        label: block.label,
+        script: paired.map((l) => l.script).join("\n"),
+        roman: paired.map((l) => l.roman).join("\n"),
+        meaning: paired.map((l) => l.meaning).join("\n"),
+      });
+      continue;
+    }
+
+    /*
+     * ONE STANZA NOBODY CAN DIVIDE MUST NOT COST THE WHOLE SONG.
+     *
+     * It used to: a Tamil song of seven stanzas ended with three lines of bare
+     * transliteration and no translation, so that block came back null, the
+     * whole parse returned null, and every line of every stanza went into the
+     * transliteration column together. Sailavan saw the good six thrown away for
+     * the sake of the seventh.
+     *
+     * So an undividable stanza is kept AS a stanza, its lines in the
+     * transliteration column where a transliteration most likely belongs, and
+     * the rest of the song keeps its layers. In a grid where every cell is
+     * editable that is one stanza to tidy rather than a document to redo.
+     */
     const lines = block.body
       .split("\n")
       .map((line) => line.trim())
       .filter((line) => line.length > 0);
     if (lines.length === 0) continue;
 
-    let paired: Line[] | null;
-
-    if (lines.some(isScriptLine)) {
-      paired = [];
-      let i = 0;
-      while (i < lines.length) {
-        // A run of script lines, then the Latin lines belonging to it.
-        const script: string[] = [];
-        while (i < lines.length && isScriptLine(lines[i])) script.push(lines[i++]);
-        const latin: string[] = [];
-        while (i < lines.length && !isScriptLine(lines[i])) latin.push(lines[i++]);
-
-        if (script.length === 0) {
-          // Latin before any script line — treat it on its own terms.
-          const only = pairLatinOnly(latin);
-          if (!only) return null;
-          paired.push(...only);
-          continue;
-        }
-        paired.push(...pairScriptRun(script, latin));
-      }
-    } else {
-      paired = pairLatinOnly(lines);
-    }
-
-    if (!paired || paired.length === 0) return null;
-
     out.push({
       label: block.label,
-      script: paired.map((l) => l.script).join("\n"),
-      roman: paired.map((l) => l.roman).join("\n"),
-      meaning: paired.map((l) => l.meaning).join("\n"),
+      script: "",
+      roman: lines.join("\n"),
+      meaning: "",
     });
   }
 
-  if (out.length === 0) return null;
+  if (out.length === 0 || !anySplit) return null;
 
   // A layer nobody wrote is absent, not a stack of empty lines.
   return out.map((v) => ({

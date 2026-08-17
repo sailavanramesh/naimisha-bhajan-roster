@@ -106,8 +106,15 @@ describe("splitPastedLayers", () => {
     expect(splitPastedLayers("")).toBeNull();
   });
 
-  it("gives up on a stray line before the script that reads as neither", () => {
-    expect(splitPastedLayers("Some preamble\nகுழலூதி\nKuzhaloothi")).toBeNull();
+  /*
+   * A stray line before the script no longer costs the rest. It lands in the
+   * transliteration column, where a bare Latin line most likely belongs, and
+   * the pair below it is still read as a pair.
+   */
+  it("keeps a stray line before the script without losing what follows", () => {
+    const v = splitPastedLayers("Some preamble\nகுழலூதி\nKuzhaloothi")!;
+    expect(v[0].script.split("\n")).toEqual(["", "குழலூதி"]);
+    expect(v[0].roman.split("\n")).toEqual(["Some preamble", "Kuzhaloothi"]);
   });
 });
 
@@ -368,5 +375,72 @@ describe("a verse whose last lines have no translation", () => {
     });
     expect(layout.lines).toHaveLength(4);
     expect(layout.blocks.map((b) => b.layer)).toEqual(["meaning"]);
+  });
+});
+
+describe("a song whose last stanzas cannot be divided", () => {
+  /*
+   * Gokulathai, as Sailavan pasted it: six stanzas of Tamil, transliteration and
+   * meaning, and then three of bare transliteration with no translation at all.
+   *
+   * That last kind has nothing to divide it by — no script, no English — and it
+   * used to return null for the WHOLE document, so every line of every stanza
+   * went into the transliteration column together and the six good ones were
+   * thrown away for the sake of the seventh.
+   */
+  const GOKULATHAI = `கோகுலத்தை கண்டதில்லை
+Gokulaththai kandadhillai
+I have never seen Gokulam,
+கண்ணனையும் பார்த்ததில்லை
+Kannanaiyum paarththadhillai
+nor have I seen Krishna.
+
+கங்கையும் யமுனையும் காவிரியும்
+Gangaiyum Yamunaiyum Kāviriyum
+The Ganga, Yamuna and Kaveri,
+
+En mana kovilil
+Pon mana Kannanai
+Sri Sai vadhanam neruvadhu`;
+
+  const verses = splitPastedLayers(GOKULATHAI);
+
+  it("reads the stanzas it can, rather than giving up on all of them", () => {
+    expect(verses).not.toBeNull();
+    expect(verses).toHaveLength(3);
+  });
+
+  it("splits the Tamil stanzas into their three layers", () => {
+    expect(verses![0].script.split("\n")).toEqual([
+      "கோகுலத்தை கண்டதில்லை",
+      "கண்ணனையும் பார்த்ததில்லை",
+    ]);
+    expect(verses![0].roman.split("\n")).toEqual([
+      "Gokulaththai kandadhillai",
+      "Kannanaiyum paarththadhillai",
+    ]);
+    expect(verses![0].meaning.split("\n")).toEqual([
+      "I have never seen Gokulam,",
+      "nor have I seen Krishna.",
+    ]);
+  });
+
+  /*
+   * The undividable one is kept AS a stanza, its lines in the transliteration
+   * column where a transliteration most likely belongs. In a grid where every
+   * cell is editable that is one stanza to tidy, not a document to redo.
+   */
+  it("keeps the undividable stanza whole, in the transliteration", () => {
+    expect(verses![2].script).toBe("");
+    expect(verses![2].meaning).toBe("");
+    expect(verses![2].roman.split("\n")).toEqual([
+      "En mana kovilil",
+      "Pon mana Kannanai",
+      "Sri Sai vadhanam neruvadhu",
+    ]);
+  });
+
+  it("still gives up when NOTHING in the document can be divided", () => {
+    expect(splitPastedLayers("En mana kovilil\nPon mana Kannanai")).toBeNull();
   });
 });
