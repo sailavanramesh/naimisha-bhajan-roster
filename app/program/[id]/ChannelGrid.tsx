@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Button, Card, CardContent, Input } from "@/components/ui";
 import { CHORUS_COLOURS, micColourDot, type MicColourValue } from "@/lib/micCushion";
-import { shortName, stripNumber } from "@/lib/deskChannels";
+import { occupantFor, shortName, stripNumber } from "@/lib/deskChannels";
 import { DeskStrips, stripName } from "./DeskStrips";
 import { songNumbers } from "@/lib/program";
 import {
@@ -95,9 +95,32 @@ export function ChannelGrid({
   const [swapsFor, setSwapsFor] = useState<string | null>(null);
   /** The channel list below the grid, opened when a heading is tapped. */
   const [channelsOpen, setChannelsOpen] = useState(false);
+  /*
+   * Which item the drawn desk is showing, and which strip on it is selected.
+   *
+   * The desk is per ITEM because that is the only level at which "who is on
+   * channel 3" has one answer — the same mic carries a singer on one song and a
+   * drum on the next. Defaults to the first item, which is where a programme is
+   * built from.
+   */
+  const [deskItemId, setDeskItemId] = useState<string | null>(null);
+  const [deskStripId, setDeskStripId] = useState<string | null>(null);
   const [newNumber, setNewNumber] = useState("");
 
   const numbers = songNumbers(items);
+
+  /*
+   * Resolved AFTER the early return below, so both are safe to assume present:
+   * this branch only renders when the programme has channels, and a programme
+   * with channels and no items shows an empty running order rather than getting
+   * here with nothing to point at.
+   */
+  const deskItem = items.find((i) => i.id === deskItemId) ?? items[0];
+  const deskOpen = new Set(deskItem?.open ?? []);
+  const deskSwapRow = deskItem?.swaps.find((sw) => sw.channelId === deskStripId) ?? null;
+  const deskSwaps = new Map((deskItem?.swaps ?? []).map((sw) => [sw.channelId, sw.who]));
+  const deskStrip = channels.find((c) => c.id === deskStripId) ?? null;
+
   const say = (res: { ok: boolean; error?: string }, good: string) =>
     setMessage(res.ok ? { ok: true, text: good } : { ok: false, text: res.error ?? "Failed." });
 
@@ -495,21 +518,68 @@ export function ChannelGrid({
         </div>
 
         {/*
-          THE DESK, DRAWN — and the way strips are named.
+        {/*
+          THE DESK, DRAWN — per ITEM, which is the only level it means anything at.
 
-          Sailavan asked whether assigning against a picture of the mixer would
-          be more intuitive than a grid of tick boxes. It is: the screen and the
-          hardware take the same shape, stereo pairs are visibly wider because
-          they are wider, and the cushion colour is the thing you match against
-          the cushion in somebody's hand. Tap a strip to say who is on it.
+          Sailavan: "the desk where you tap a strip should be at the item level,
+          as the person on a mic for a song might vary from song to song." Just
+          so. A programme-wide desk can only show the usual occupant, and the
+          question a sound person actually has is never "whose mic is channel 3
+          normally" — it is "for the thing about to start, which faders are up
+          and who is on them".
 
-          Exactly the same component the desk view uses on the night, so there
-          is one picture of this desk in the app rather than two that can drift.
+          So the desk shows ONE item at a time, lit by what is open for that
+          item, and tapping a strip opens both answers for that item together.
+          It is the same drawn desk the live view uses on the night, so what you
+          set up here is literally the picture you will be reading then.
+
+          The items × channels grid above stays: it is the whole programme at
+          once, which this deliberately is not, and it is what the printed sheet
+          mirrors.
         */}
-        <div className="grid gap-1.5">
+        <div className="grid gap-2 rounded-[10px] border border-rule-surface p-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-on-surface-muted">
+              The desk for
+            </span>
+            {/*
+              Tabs rather than a dropdown: the running order is short, and
+              stepping along it one item at a time is the actual task — a
+              dropdown would hide the neighbours you are comparing against.
+            */}
+            {items.map((it) => {
+              const on = it.id === deskItem.id;
+              return (
+                <button
+                  key={it.id}
+                  type="button"
+                  aria-pressed={on}
+                  onClick={() => {
+                    setDeskItemId(it.id);
+                    setDeskStripId(null);
+                  }}
+                  className={[
+                    "rounded-key border px-2 py-1 text-[11px]",
+                    on
+                      ? "border-brass-ink/70 bg-brass-ink text-ivory"
+                      : "border-rule-surface text-on-surface-muted hover:border-brass/50",
+                  ].join(" ")}
+                >
+                  <span className="font-mono">
+                    {it.kind === "narration" ? "read" : numbers.get(it.position)}
+                  </span>
+                  <span className="ms-1.5">
+                    {it.title || (it.kind === "narration" ? "Reading" : "Not chosen yet")}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+
           <p className="text-[11px] text-on-surface-muted">
-            The desk. Tap a strip to say who or what is on it.
+            {deskOpen.size} of {channels.length} open. Tap a strip to change it for this item.
           </p>
+
           <DeskStrips
             strips={channels.map((c) => ({
               id: c.id,
@@ -519,17 +589,108 @@ export function ChannelGrid({
               colour: c.colour,
               mic: c.mic,
               stereo: c.stereo,
-              who: c.who,
+              // What is true FOR THIS ITEM: the override where there is one,
+              // the channel's usual occupant otherwise.
+              who: occupantFor(c, { person: deskSwaps.get(c.id) ?? null }),
             }))}
-            onPick={
-              canEdit
-                ? (id) => {
-                    setEditing(id);
-                    setChannelsOpen(true);
-                  }
-                : undefined
-            }
+            openIds={deskOpen}
+            swappedIds={new Set(deskSwaps.keys())}
+            onPick={canEdit ? (id) => setDeskStripId(id === deskStripId ? null : id) : undefined}
           />
+
+          {/*
+            One strip, both facts.
+
+            A tap cannot set two things, and a strip carries two: is the fader up
+            for this item, and who is on it. So the tap selects, and the answer
+            to both appears here — rather than a tap that means "open" and some
+            other gesture nobody will find that means "who".
+          */}
+          {deskStrip ? (
+            <div className="grid gap-1.5 rounded-[8px] border border-brass/50 bg-panel p-2">
+              <p className="text-[11px] font-semibold">
+                Channel {stripNumber(deskStrip.number, deskStrip.stereo)}
+                <span className="ms-1.5 font-normal text-on-surface-muted">
+                  on {deskItem.title || (deskItem.kind === "narration" ? "Reading" : "this item")}
+                </span>
+              </p>
+
+              <label className="flex items-center gap-1.5 text-[11px]">
+                <input
+                  type="checkbox"
+                  checked={deskOpen.has(deskStrip.id)}
+                  disabled={!canEdit || pending}
+                  className="h-3.5 w-3.5"
+                  onChange={(e) =>
+                    startTransition(async () => {
+                      const res = await setChannelOpen({
+                        itemId: deskItem.id,
+                        channelId: deskStrip.id,
+                        open: e.target.checked,
+                      });
+                      if (!res.ok) say(res, "");
+                    })
+                  }
+                />
+                open for this item
+              </label>
+
+              <span className="flex flex-wrap items-center gap-1.5">
+                <span className="text-[11px] text-on-surface-muted">who</span>
+                <WhoSelect
+                  value={
+                    deskSwapRow?.singerId
+                      ? { kind: "singer", id: deskSwapRow.singerId }
+                      : deskSwapRow?.instrumentId
+                        ? { kind: "instrument", id: deskSwapRow.instrumentId }
+                        : { kind: "none" }
+                  }
+                  singers={singers}
+                  instruments={instruments}
+                  disabled={!canEdit || pending}
+                  emptyLabel={deskStrip.who ?? "usual"}
+                  label={`Who is on channel ${stripNumber(deskStrip.number, deskStrip.stereo)} for this item`}
+                  onPick={(picked) =>
+                    startTransition(async () => {
+                      const res = await setItemChannelWho({
+                        itemId: deskItem.id,
+                        channelId: deskStrip.id,
+                        singerId: picked.kind === "singer" ? picked.id : null,
+                        instrumentId: picked.kind === "instrument" ? picked.id : null,
+                        person: null,
+                      });
+                      say(res, "");
+                    })
+                  }
+                />
+                <Input
+                  key={`${deskItem.id}-${deskStrip.id}`}
+                  defaultValue={deskSwapRow?.person ?? ""}
+                  disabled={!canEdit || pending}
+                  aria-label="Or a name for this item"
+                  placeholder="or a name"
+                  className="h-7 w-28 text-[11px]"
+                  onBlur={(e) =>
+                    startTransition(async () => {
+                      const res = await setItemChannelWho({
+                        itemId: deskItem.id,
+                        channelId: deskStrip.id,
+                        person: e.target.value || null,
+                        singerId: null,
+                        instrumentId: null,
+                      });
+                      say(res, "");
+                    })
+                  }
+                />
+              </span>
+
+              <p className="text-[11px] text-on-surface-muted">
+                Leave &ldquo;who&rdquo; alone and the channel&rsquo;s own name stands. Set it in
+                the channel list below to change that for the whole programme.
+              </p>
+            </div>
+          ) : null}
         </div>
 
         {/* The channel list itself, below the grid where it is edited rarely. */}
