@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { Button } from "@/components/ui";
+import { base64UrlToBytes, sameApplicationServerKey } from "@/lib/pushKeys";
 import { saveSubscription, removeSubscription, sendTestNotification } from "./actions";
 
 type State = "checking" | "unsupported" | "needs-install" | "off" | "on" | "blocked";
@@ -14,13 +15,9 @@ type State = "checking" | "unsupported" | "needs-install" | "off" | "on" | "bloc
  * Uint8Array is typed over ArrayBufferLike, which includes SharedArrayBuffer.
  */
 function toKey(base64: string): ArrayBuffer {
-  const padded = (base64 + "=".repeat((4 - (base64.length % 4)) % 4))
-    .replace(/-/g, "+")
-    .replace(/_/g, "/");
-  const raw = atob(padded);
-  const bytes = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-  return bytes.buffer;
+  // slice() to get a plain ArrayBuffer rather than a view over a possibly
+  // shared one, which is what BufferSource insists on.
+  return base64UrlToBytes(base64).slice().buffer;
 }
 
 /**
@@ -71,9 +68,45 @@ export function NotificationSwitch({ vapidKey, signedIn }: { vapidKey: string; s
 
       const reg = await navigator.serviceWorker.getRegistration();
       const sub = await reg?.pushManager.getSubscription();
-      setState(sub ? "on" : "off");
+      if (!sub) return setState("off");
+
+      /*
+       * A subscription is not proof that anything can reach this device.
+       *
+       * It is made against ONE server public key, and if that pair has been
+       * rotated since, every send fails with VapidPkHashMismatch — a 400, so
+       * nothing prunes it and nothing retries it into working. The switch said
+       * "On for this device" and the device received nothing, permanently.
+       *
+       * Noticed here and repaired in place. Permission is already granted,
+       * since a subscription exists, so subscribing again needs nothing from
+       * the reader and there is no point telling them about it.
+       */
+      if (sameApplicationServerKey(sub.options.applicationServerKey, vapidKey)) {
+        return setState("on");
+      }
+
+      try {
+        await sub.unsubscribe();
+        const fresh = await reg!.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: toKey(vapidKey),
+        });
+        const json = fresh.toJSON() as { endpoint?: string; keys?: Record<string, string> };
+        const res = await saveSubscription({
+          endpoint: json.endpoint ?? "",
+          p256dh: json.keys?.p256dh ?? "",
+          auth: json.keys?.auth ?? "",
+          userAgent: navigator.userAgent,
+        });
+        setState(res.ok ? "on" : "off");
+      } catch {
+        // Left off rather than claiming on: a switch that lies is the whole
+        // problem being fixed here.
+        setState("off");
+      }
     })();
-  }, []);
+  }, [vapidKey]);
 
   const turnOn = () =>
     startTransition(async () => {
