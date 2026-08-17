@@ -553,11 +553,29 @@ export async function setSceneNumber(input: {
  */
 export async function refreshFromDesk(input: {
   sessionId: string;
+  /**
+   * Switch to a different desk at the same time.
+   *
+   * Sailavan wanted to keep several versions of one desk — a festival patch and
+   * an ordinary Thursday — and choose between them per programme. Switching is
+   * the same operation as refreshing, since both mean "take the strips from
+   * this desk", so it is one action rather than two that would have to agree.
+   */
+  deskId?: string;
 }): Promise<{ ok: true; updated: number; added: number } | { ok: false; error: string }> {
   await requireCapability("editPrograms");
 
-  const parsed = z.object({ sessionId: Id }).safeParse(input);
+  const parsed = z.object({ sessionId: Id, deskId: Id.optional() }).safeParse(input);
   if (!parsed.success) return { ok: false, error: "Could not do that." };
+
+  if (parsed.data.deskId) {
+    const exists = await prisma.desk.count({ where: { id: parsed.data.deskId } });
+    if (exists === 0) return { ok: false, error: "That desk is gone." };
+    await prisma.session.update({
+      where: { id: parsed.data.sessionId },
+      data: { deskId: parsed.data.deskId },
+    });
+  }
 
   const session = await prisma.session.findUnique({
     where: { id: parsed.data.sessionId },
@@ -603,4 +621,77 @@ export async function refreshFromDesk(input: {
   if (writes.length > 0) await prisma.$transaction(writes);
   await refresh(parsed.data.sessionId);
   return { ok: true, updated, added };
+}
+
+/**
+ * Carry the previous item's mic allocation into this one.
+ *
+ * Sailavan: "if the same channel is allocated for the next song can copy down
+ * the singer from the previous song, we can always override it." Most of a
+ * running order is the same people on the same mics — the set changes, the patch
+ * mostly does not — so filling twenty strips again for item 2 is re-entering
+ * something the programme already said one row above.
+ *
+ * Only the channels this item ALREADY has open are touched. Copying the previous
+ * item's open set as well would mean this decides which faders are up, which is
+ * a different decision and the one most worth making deliberately: a reading
+ * wants one mic open where the song before it wanted nine.
+ *
+ * And it never overwrites an answer somebody has given. A strip already carrying
+ * a name on this item is left exactly as it is, so running this twice, or after
+ * correcting one channel by hand, cannot undo the correction.
+ */
+export async function carryOverMics(input: {
+  itemId: string;
+}): Promise<{ ok: true; copied: number } | { ok: false; error: string }> {
+  await requireCapability("editPrograms");
+
+  const parsed = z.object({ itemId: Id }).safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Could not do that." };
+
+  const item = await prisma.programItem.findUnique({
+    where: { id: parsed.data.itemId },
+    select: {
+      sessionId: true,
+      position: true,
+      channels: { select: { channelId: true, open: true, singerId: true, person: true, instrumentId: true } },
+    },
+  });
+  if (!item) return { ok: false, error: "That item is gone." };
+
+  const previous = await prisma.programItem.findFirst({
+    where: { sessionId: item.sessionId, position: { lt: item.position } },
+    orderBy: { position: "desc" },
+    select: {
+      channels: {
+        where: { open: true },
+        select: { channelId: true, singerId: true, person: true, instrumentId: true },
+      },
+    },
+  });
+  if (!previous) return { ok: false, error: "There is nothing before this item." };
+
+  const before = new Map(previous.channels.map((c) => [c.channelId, c]));
+  const writes = [];
+
+  for (const mine of item.channels) {
+    if (!mine.open) continue;
+    // Already answered here — leave it alone.
+    if (mine.singerId || mine.person || mine.instrumentId) continue;
+
+    const was = before.get(mine.channelId);
+    if (!was) continue;
+    if (!was.singerId && !was.person && !was.instrumentId) continue;
+
+    writes.push(
+      prisma.programItemChannel.update({
+        where: { itemId_channelId: { itemId: parsed.data.itemId, channelId: mine.channelId } },
+        data: { singerId: was.singerId, person: was.person, instrumentId: was.instrumentId },
+      }),
+    );
+  }
+
+  if (writes.length > 0) await prisma.$transaction(writes);
+  await refresh(item.sessionId);
+  return { ok: true, copied: writes.length };
 }

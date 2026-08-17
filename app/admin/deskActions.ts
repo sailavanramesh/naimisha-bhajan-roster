@@ -340,3 +340,68 @@ export async function removeDesk(input: {
   revalidatePath("/admin/desks");
   return { ok: true, usedBy };
 }
+
+/**
+ * Copy a desk, strips and all.
+ *
+ * Sailavan: "this allows us to create different versions of the same sound desk
+ * if necessary and apply it to different programs." A festival is patched
+ * differently from a Thursday on the same hardware — more vocal mics, the
+ * keyboard on a pair, the tabla moved — and re-labelling twenty strips before
+ * and after is how a desk ends up wrong in the middle.
+ *
+ * A full copy rather than a layer over the original. The strips of a desk are
+ * already the thing a programme snapshots, so a second desk needs no new
+ * machinery anywhere — the picker, the snapshot, the propagation and the printed
+ * sheet all work on it exactly as they do on the first.
+ */
+export async function duplicateDesk(input: { id: string; name: string }): Promise<Result> {
+  await requireGrantedCapability("manageDesks");
+
+  const parsed = z
+    .object({ id: z.string().min(1), name: z.string().trim().min(1).max(60) })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Give the copy a name." };
+
+  const clash = await prisma.desk.findFirst({
+    where: { name: { equals: parsed.data.name, mode: "insensitive" } },
+    select: { name: true },
+  });
+  if (clash) return { ok: false, error: `"${clash.name}" is already there.` };
+
+  const source = await prisma.desk.findUnique({
+    where: { id: parsed.data.id },
+    include: { channels: { orderBy: { number: "asc" } } },
+  });
+  if (!source) return { ok: false, error: "That desk is gone." };
+
+  const copy = await prisma.desk.create({
+    data: {
+      name: parsed.data.name,
+      kind: source.kind,
+      monoInputs: source.monoInputs,
+      // Never the default. The copy is a variant, and the desk programmes reach
+      // for first should not change because somebody made one.
+      isDefault: false,
+    },
+    select: { id: true },
+  });
+
+  if (source.channels.length > 0) {
+    await prisma.deskChannel.createMany({
+      data: source.channels.map((c) => ({
+        deskId: copy.id,
+        number: c.number,
+        socket: c.socket,
+        label: c.label,
+        kind: c.kind,
+        colour: c.colour,
+        mic: c.mic,
+        stereo: c.stereo,
+      })),
+    });
+  }
+
+  revalidatePath("/admin/desks");
+  return ok;
+}

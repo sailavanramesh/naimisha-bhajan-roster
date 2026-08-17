@@ -4,7 +4,7 @@ import { useState, useTransition } from "react";
 import { Button, Input } from "@/components/ui";
 import { CHORUS_COLOURS, type MicColourValue } from "@/lib/micCushion";
 import { stripNumber } from "@/lib/deskChannels";
-import { addDesk, removeDesk, updateDeskChannel } from "./deskActions";
+import { addDesk, duplicateDesk, removeDesk, updateDeskChannel } from "./deskActions";
 
 export type DeskRow = {
   id: string;
@@ -71,6 +71,33 @@ export function Desks({ desks, canEdit }: { desks: DeskRow[]; canEdit: boolean }
                       : ""}
                   </span>
                 </button>
+                {canEdit ? (
+                  <Button
+                    type="button"
+                    className="h-8 text-xs"
+                    disabled={pending}
+                    onClick={() => {
+                      /*
+                        A copy is how a desk gets a second version — a festival
+                        patch beside an ordinary Thursday — which a programme
+                        then picks between. A full copy rather than a layer:
+                        the picker, the snapshot and the printed sheet all work
+                        on a second desk with no new machinery anywhere.
+                      */
+                      const name = prompt(
+                        `Name for the copy of "${desk.name}"`,
+                        `${desk.name} (festival)`,
+                      );
+                      if (!name?.trim()) return;
+                      startTransition(async () => {
+                        const res = await duplicateDesk({ id: desk.id, name });
+                        say(res, `Copied to "${name.trim()}".`);
+                      });
+                    }}
+                  >
+                    Duplicate
+                  </Button>
+                ) : null}
                 {canEdit ? (
                   <Button
                     type="button"
@@ -202,10 +229,32 @@ function ChannelRow({
   const [stereo, setStereo] = useState(channel.stereo);
   const [pending, startTransition] = useTransition();
 
-  const save = (patch: Parameters<typeof updateDeskChannel>[0]) =>
+  /*
+   * The row is held and saved on a button, not written on every keystroke and
+   * every dot. Sailavan asked for the button, and it earns itself here: a strip
+   * is four decisions — name, what it carries, cushion, mic — usually changed
+   * together, and pairing two channels DELETES the one above, which is not a
+   * thing to do on the way past a checkbox.
+   */
+  const dirty =
+    label !== channel.label ||
+    kind !== channel.kind ||
+    colour !== channel.colour ||
+    mic !== (channel.mic ?? "") ||
+    stereo !== channel.stereo;
+
+  const save = () =>
     startTransition(async () => {
-      const res = await updateDeskChannel(patch);
+      const res = await updateDeskChannel({
+        id: channel.id,
+        label,
+        kind,
+        colour,
+        mic,
+        stereo,
+      });
       if (!res.ok) onMessage({ ok: false, text: res.error });
+      else onMessage(null);
     });
 
   if (!canEdit) {
@@ -236,7 +285,6 @@ function ChannelRow({
         aria-label={`Label for channel ${channel.number}`}
         className="h-8 w-40"
         onChange={(e) => setLabel(e.target.value)}
-        onBlur={() => label !== channel.label && save({ id: channel.id, label, kind })}
       />
 
       <select
@@ -244,11 +292,7 @@ function ChannelRow({
         aria-label={`What channel ${channel.number} carries`}
         disabled={pending}
         className="h-8 rounded-key border border-rule-surface bg-field px-2 text-xs"
-        onChange={(e) => {
-          const next = e.target.value as (typeof KINDS)[number];
-          setKind(next);
-          save({ id: channel.id, label, kind: next });
-        }}
+        onChange={(e) => setKind(e.target.value as (typeof KINDS)[number])}
       >
         {KINDS.map((k) => (
           <option key={k} value={k}>
@@ -278,14 +322,12 @@ function ChannelRow({
                   on ? "scale-110 border-on-surface" : "border-rule-surface opacity-70"
                 } hover:opacity-100`}
                 style={{ background: c.dot }}
-                onClick={() => {
+                onClick={() =>
                   // A second tap on the colour it already is clears it, which
                   // is how every other cushion control in the app behaves —
                   // and "no cushion" is a real state: channel 4 is one.
-                  const next = on ? null : (c.value as MicColourValue);
-                  setColour(next);
-                  save({ id: channel.id, label, kind, colour: next });
-                }}
+                  setColour(on ? null : (c.value as MicColourValue))
+                }
               />
             );
           })}
@@ -314,10 +356,7 @@ function ChannelRow({
           disabled={pending || channel.number <= monoInputs}
           aria-label={`Channel ${channel.number} is a stereo pair`}
           className="h-3.5 w-3.5"
-          onChange={(e) => {
-            setStereo(e.target.checked);
-            save({ id: channel.id, label, kind, stereo: e.target.checked });
-          }}
+          onChange={(e) => setStereo(e.target.checked)}
         />
         stereo
       </label>
@@ -330,8 +369,17 @@ function ChannelRow({
         placeholder="mic"
         className="h-8 w-28"
         onChange={(e) => setMic(e.target.value)}
-        onBlur={() => mic !== (channel.mic ?? "") && save({ id: channel.id, label, kind, mic })}
       />
+
+      <Button
+        type="button"
+        variant={dirty ? "primary" : undefined}
+        className="h-8 text-xs"
+        disabled={pending || !dirty || label.trim().length === 0}
+        onClick={save}
+      >
+        {pending ? "Saving…" : dirty ? "Save" : "Saved"}
+      </Button>
     </li>
   );
 }

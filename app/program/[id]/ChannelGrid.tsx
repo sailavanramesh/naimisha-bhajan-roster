@@ -18,6 +18,7 @@ import {
   applyDesk,
   setItemChannelWho,
   refreshFromDesk,
+  carryOverMics,
 } from "./deskActions";
 
 export type ChannelRow = {
@@ -276,24 +277,51 @@ export function ChannelGrid({
               still preparing one. This asks for the desk as it is now.
             */}
             {canEdit && deskName ? (
-              <button
-                type="button"
-                disabled={pending}
-                className="text-sm text-on-ground-muted underline underline-offset-2 hover:text-on-ground"
-                onClick={() =>
-                  startTransition(async () => {
-                    const res = await refreshFromDesk({ sessionId });
-                    say(
-                      res,
-                      res.ok
-                        ? `Took ${res.updated} strip${res.updated === 1 ? "" : "s"} from ${deskName}${res.added > 0 ? `, and added ${res.added}` : ""}.`
-                        : "",
-                    );
-                  })
-                }
-              >
-                Update from the desk
-              </button>
+              <span className="flex flex-wrap items-center gap-1.5">
+                {/*
+                  Which desk this programme is on, changeable after the fact.
+                  Sailavan keeps versions of one desk — a festival patch and an
+                  ordinary Thursday — and picks between them per programme.
+                  Switching is the same operation as refreshing, so it is one
+                  control: choose a desk, take its strips.
+                */}
+                <select
+                  value={desks.find((d) => d.name === deskName)?.id ?? ""}
+                  aria-label="Which desk this programme is on"
+                  disabled={pending}
+                  className="h-7 rounded-key border border-rule-surface bg-field px-1 text-xs"
+                  onChange={(e) =>
+                    startTransition(async () => {
+                      const res = await refreshFromDesk({ sessionId, deskId: e.target.value });
+                      say(res, res.ok ? `Now on ${desks.find((d) => d.id === e.target.value)?.name}.` : "");
+                    })
+                  }
+                >
+                  {desks.map((d) => (
+                    <option key={d.id} value={d.id}>
+                      {d.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  disabled={pending}
+                  className="text-sm text-on-ground-muted underline underline-offset-2 hover:text-on-ground"
+                  onClick={() =>
+                    startTransition(async () => {
+                      const res = await refreshFromDesk({ sessionId });
+                      say(
+                        res,
+                        res.ok
+                          ? `Took ${res.updated} strip${res.updated === 1 ? "" : "s"} from ${deskName}${res.added > 0 ? `, and added ${res.added}` : ""}.`
+                          : "",
+                      );
+                    })
+                  }
+                >
+                  Update from the desk
+                </button>
+              </span>
             ) : null}
           </div>
         </div>
@@ -631,8 +659,39 @@ export function ChannelGrid({
             })}
           </div>
 
-          <p className="text-[11px] text-on-surface-muted">
-            {deskOpen.size} of {channels.length} open. Tap a strip to change it for this item.
+          <p className="flex flex-wrap items-center gap-2 text-[11px] text-on-surface-muted">
+            <span>
+              {deskOpen.size} of {channels.length} open. Tap a strip to change it for this item.
+            </span>
+            {/*
+              Most of a running order is the same people on the same mics — the
+              set changes, the patch mostly does not. This fills the open strips
+              that nobody has answered yet from the item before, and touches
+              neither the open set nor an answer already given, so it can be
+              pressed twice or after a correction without undoing anything.
+            */}
+            {canEdit && items[0]?.id !== deskItem.id ? (
+              <button
+                type="button"
+                disabled={pending}
+                className="underline underline-offset-2 hover:text-on-surface"
+                onClick={() =>
+                  startTransition(async () => {
+                    const res = await carryOverMics({ itemId: deskItem.id });
+                    say(
+                      res,
+                      res.ok
+                        ? res.copied === 0
+                          ? "Nothing to carry over — every open mic here already says who is on it."
+                          : `Carried over ${res.copied} mic${res.copied === 1 ? "" : "s"}.`
+                        : "",
+                    );
+                  })
+                }
+              >
+                carry over from the item before
+              </button>
+            ) : null}
           </p>
 
           <DeskStrips
