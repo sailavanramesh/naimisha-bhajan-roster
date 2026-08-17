@@ -250,6 +250,49 @@ export function DeskBoard({
             </header>
 
             {/*
+              THE RUNNING ORDER, ACROSS THE TOP.
+
+              Sailavan: "allow multiple songs to show up on the screen, allowing
+              them to highlight a certain song if they want and then go across to
+              words." One item at a time answers "what now"; it does not answer
+              "what is coming", which is the question between songs — and both
+              panes below follow whichever is picked, so highlighting a song and
+              going across to Words shows that song's words.
+
+              Tapping one MOVES THE ROOM, exactly as Next does. The item is
+              shared on purpose: the whole point of this screen is that the desk,
+              the stage and anybody watching are on the same one, and a second
+              private notion of "current" would undo that quietly.
+            */}
+            {items.length > 1 ? (
+              <div className="flex shrink-0 gap-1 overflow-x-auto px-4 pb-2">
+                {items.map((it) => {
+                  const here = it.position === item.position;
+                  return (
+                    <button
+                      key={it.position}
+                      type="button"
+                      aria-pressed={here}
+                      disabled={pending}
+                      onClick={() => go(it.position)}
+                      className={[
+                        "shrink-0 rounded-key border px-2 py-1 text-left text-xs",
+                        here
+                          ? "border-brass-ink/70 bg-brass-ink text-ivory"
+                          : "border-rule text-on-ground-muted hover:border-brass/50",
+                      ].join(" ")}
+                    >
+                      <span className="font-mono">
+                        {it.kind === "narration" ? "read" : it.songNumber}
+                      </span>
+                      <span className="ms-1.5 max-w-[10rem] truncate align-middle">{it.title}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
+
+            {/*
               DESK, OR WORDS.
 
               Sailavan: "there should be a desk view and a song view for each
