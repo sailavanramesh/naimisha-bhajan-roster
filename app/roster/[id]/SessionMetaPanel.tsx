@@ -41,6 +41,8 @@ export function SessionMetaPanel({
   const [error, setError] = useState<string | null>(null);
 
   const summary = describe(saved, categories);
+  /** What is SAVED, not what is being typed — the chip must not flicker mid-edit. */
+  const needsKind = !saved.categoryId;
 
   const save = () =>
     startTransition(async () => {
@@ -64,9 +66,29 @@ export function SessionMetaPanel({
     <details className="rounded-[12px] border border-rule-surface bg-panel">
       <summary className="flex cursor-pointer select-none items-baseline justify-between gap-3 px-4 py-3 text-sm font-semibold">
         <span>Session details</span>
-        <span className="truncate text-xs font-normal text-on-surface-muted">
-          {summary || "not recorded"}
-        </span>
+        {/*
+          A session with no KIND says so, here, and is not interrupted about it.
+
+          Sailavan built one on 18 August and it was nearly invisible on the
+          calendar — fixed there with a "?" mark. This is the other half: the
+          place you would go to fix it now says it needs fixing.
+
+          Deliberately not a dialog on the way out. This session is already
+          saved; nothing is lost by leaving. The app has one leave-dialog
+          already, for genuinely unsaved work, and it earns its interruption
+          because data would go. A second one that looks the same but means
+          "you forgot a label" is how people learn to click through both — and
+          the one that must not be dismissed is the other one.
+        */}
+        {needsKind ? (
+          <span className="shrink-0 rounded-key border border-brass/60 px-2 py-0.5 text-[11px] font-semibold text-brass-ink">
+            Kind not set
+          </span>
+        ) : (
+          <span className="truncate text-xs font-normal text-on-surface-muted">
+            {summary || "not recorded"}
+          </span>
+        )}
       </summary>
 
       <div className="grid gap-3 px-4 pb-4">

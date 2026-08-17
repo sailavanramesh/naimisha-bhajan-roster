@@ -205,6 +205,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
           label: c.label,
           kind: c.kind,
           colour: c.colour,
+          mic: c.mic,
           stereo: c.stereo,
           singerId: c.singerId,
           instrumentId: c.instrumentId,

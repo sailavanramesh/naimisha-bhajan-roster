@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { Button, Card, CardContent, Input } from "@/components/ui";
 import { CHORUS_COLOURS, micColourDot, type MicColourValue } from "@/lib/micCushion";
 import { shortName, stripNumber } from "@/lib/deskChannels";
+import { DeskStrips, stripName } from "./DeskStrips";
 import { songNumbers } from "@/lib/program";
 import {
   addChannel,
@@ -24,6 +25,8 @@ export type ChannelRow = {
   label: string;
   kind: "vocal" | "instrument" | "track" | "spare";
   colour: MicColourValue | null;
+  /** Which mic is on it — "Wired", "Pegasus", "WL1". Reference only. */
+  mic: string | null;
   /** Is this programme running the strip as a stereo pair? */
   stereo: boolean;
   singerId: string | null;
@@ -280,8 +283,10 @@ export function ChannelGrid({
                         />
                       ) : null}
                       <span className="font-mono text-xs">{stripNumber(c.number, c.stereo)}</span>
+                      {/* Never "C2" under the number 2 — `stripName` drops a
+                          bare "Channel N", which is the number already above. */}
                       <span className="block w-full truncate text-[9px] font-normal leading-none text-on-surface-muted">
-                        {shortName(c.who ?? c.label)}
+                        {shortName(stripName(c.who, c.label) ?? "")}
                       </span>
                     </span>
                     </button>
@@ -487,6 +492,44 @@ export function ChannelGrid({
               ])}
             </tbody>
           </table>
+        </div>
+
+        {/*
+          THE DESK, DRAWN — and the way strips are named.
+
+          Sailavan asked whether assigning against a picture of the mixer would
+          be more intuitive than a grid of tick boxes. It is: the screen and the
+          hardware take the same shape, stereo pairs are visibly wider because
+          they are wider, and the cushion colour is the thing you match against
+          the cushion in somebody's hand. Tap a strip to say who is on it.
+
+          Exactly the same component the desk view uses on the night, so there
+          is one picture of this desk in the app rather than two that can drift.
+        */}
+        <div className="grid gap-1.5">
+          <p className="text-[11px] text-on-surface-muted">
+            The desk. Tap a strip to say who or what is on it.
+          </p>
+          <DeskStrips
+            strips={channels.map((c) => ({
+              id: c.id,
+              number: c.number,
+              label: c.label,
+              kind: c.kind,
+              colour: c.colour,
+              mic: c.mic,
+              stereo: c.stereo,
+              who: c.who,
+            }))}
+            onPick={
+              canEdit
+                ? (id) => {
+                    setEditing(id);
+                    setChannelsOpen(true);
+                  }
+                : undefined
+            }
+          />
         </div>
 
         {/* The channel list itself, below the grid where it is edited rarely. */}

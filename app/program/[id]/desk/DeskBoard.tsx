@@ -5,7 +5,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransitio
 import { useSessionVersion } from "@/components/useSessionVersion";
 import { currentItemOf, occupantFor, stepItem, stripNumber } from "@/lib/deskChannels";
 import { hasMoreBelow } from "@/lib/liveBoard";
-import { micColourDot, micColourLabel, type MicColourValue } from "@/lib/micCushion";
+import { type MicColourValue } from "@/lib/micCushion";
+import { DeskStrips } from "../DeskStrips";
 import { setCurrentItem } from "../deskActions";
 
 export type DeskChannel = {
@@ -22,20 +23,6 @@ export type DeskChannel = {
   /** Who or what is usually on the strip. Null on a spare. */
   who: string | null;
 };
-
-/**
- * What to write in a channel tile.
- *
- * Whoever is on the strip, if anybody. Failing that the strip's own label —
- * "Lead vocal", "Tabla" — which still tells the desk what the fader is for.
- * But never a bare "Channel 12": that is the number already printed directly
- * above it, and repeating it fills the tile while saying nothing.
- */
-function boxName(who: string | null, label: string): string | null {
-  if (who) return who;
-  const plain = /^channel\s*\d+$/i.test(label.trim());
-  return plain ? null : label;
-}
 
 export type DeskItem = {
   position: number;
@@ -266,136 +253,19 @@ export function DeskBoard({
                 ) : (
                   <>
                     {/*
-                      A strip is a narrow tile, not a row.
-
-                      Sailavan wanted at least twelve channels across at once,
-                      and a twenty-channel desk read as a list of twenty full
-                      names is a scroll, not a glance. 64px is what fits twelve
-                      on a laptop and still holds three characters legibly; the
-                      same auto-fill drops to four or five across on a phone
-                      without a second layout to keep honest.
+                      The same drawn desk the programme page assigns against —
+                      one picture of the mixer, editable there and read-only
+                      here. See DeskStrips.
                     */}
-                    <ul className="grid grid-cols-[repeat(auto-fill,minmax(76px,1fr))] gap-1.5">
-                      {channels.map((c) => {
-                        const isOpen = openIds.has(c.id);
-                        const swapped = swaps.get(c.id) ?? null;
-                        const who = occupantFor(c, { person: swapped });
-                        /*
-                         * THE CUSHION IS THE COLOUR, and only on a vocal strip.
-                         *
-                         * The cushions are fixed to channels — 1 is blue, 2 is
-                         * grey — so the tile can be the cushion the person is
-                         * holding, and the desk matches screen to hand without
-                         * reading a word. An instrument strip has no cushion,
-                         * so colouring it would invent one.
-                         */
-                        const cushion =
-                          c.kind === "vocal" && c.colour ? micColourDot(c.colour) : null;
-
-                        const label = [
-                          `Channel ${stripNumber(c.number, c.stereo)}`,
-                          who,
-                          c.kind === "vocal" && c.colour
-                            ? `${micColourLabel(c.colour)} cushion`
-                            : null,
-                          c.mic,
-                          swapped ? "for this item only" : null,
-                        ]
-                          .filter(Boolean)
-                          .join(" · ");
-
-                        return (
-                          <li key={c.id}>
-                            <span
-                              title={`${label} — ${isOpen ? "open" : "closed"}`}
-                              className={[
-                                "flex h-full flex-col items-stretch overflow-hidden rounded-[8px] border",
-                                isOpen
-                                  ? "border-on-ground/25"
-                                  : "border-rule opacity-40 grayscale",
-                              ].join(" ")}
-                            >
-                              {/* The number on top, always legible: it is what
-                                  the fader is labelled and how the strip is
-                                  named out loud. */}
-                              <span
-                                aria-hidden
-                                className={[
-                                  "block border-b px-1 py-0.5 text-center font-mono text-[11px] font-bold leading-none",
-                                  isOpen
-                                    ? "border-on-ground/20 bg-surface/60 text-on-ground"
-                                    : "border-rule text-on-ground-muted",
-                                ].join(" ")}
-                              >
-                                {stripNumber(c.number, c.stereo)}
-                              </span>
-
-                              <span
-                                aria-hidden
-                                className={[
-                                  "flex min-h-[34px] flex-1 flex-col items-center justify-center px-0.5 py-1 text-center",
-                                  cushion
-                                    ? ""
-                                    : isOpen
-                                      ? "bg-brass/25"
-                                      : "bg-transparent",
-                                ].join(" ")}
-                                style={
-                                  cushion
-                                    ? {
-                                        // Full cushion colour when the fader is
-                                        // up; a wash of it when it is down, so a
-                                        // closed strip still says which cushion
-                                        // it is without competing for attention.
-                                        background: isOpen ? cushion : `${cushion}33`,
-                                        color: isOpen ? "#fff" : undefined,
-                                      }
-                                    : undefined
-                                }
-                              >
-                                {/*
-                                  THE NAME, not an abbreviation of it.
-
-                                  Three letters was enough to tell two strips
-                                  apart and not enough to be sure whose one was,
-                                  which at a desk is the only question. A tile
-                                  76px wide holds "Prasanna" outright, so it
-                                  shows the name and lets CSS cut the long ones;
-                                  `shortName` is the fallback for a name too
-                                  long to survive that, and the full text is in
-                                  the tooltip either way.
-
-                                  A strip nobody is on falls back to its own
-                                  label — but not to "Channel 12", which is the
-                                  number already printed above it.
-                                */}
-                                <span
-                                  className="block w-full truncate text-[12px] font-bold leading-tight"
-                                  title={who ?? c.label}
-                                >
-                                  {boxName(who, c.label) ?? "—"}
-                                </span>
-                                {c.mic ? (
-                                  <span className="mt-0.5 block w-full truncate text-[9px] leading-none opacity-80">
-                                    {c.mic}
-                                  </span>
-                                ) : null}
-                              </span>
-
-                              {/*
-                                Colour is never the only carrier. A dark hall
-                                and a colour-blind operator are both ordinary,
-                                so open/closed is also brightness, also
-                                greyscale, and also said in words here.
-                              */}
-                              <span className="sr-only">
-                                {`${label} — ${isOpen ? "open" : "closed"}`}
-                              </span>
-                            </span>
-                          </li>
-                        );
-                      })}
-                    </ul>
+                    <DeskStrips
+                      dense
+                      strips={channels.map((c) => ({
+                        ...c,
+                        who: occupantFor(c, { person: swaps.get(c.id) ?? null }),
+                      }))}
+                      openIds={openIds}
+                      swappedIds={new Set(swaps.keys())}
+                    />
 
                     {/*
                       The tiles are three letters wide, which is enough to find
