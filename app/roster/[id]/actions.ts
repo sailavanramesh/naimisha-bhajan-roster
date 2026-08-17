@@ -7,6 +7,7 @@ import { rosteredSingerIds, notifyRemovals } from "@/lib/notifyRemoval";
 import { recordSungAsKnown } from "@/lib/repertoireFromHistory";
 import { noteRosterChange } from "@/lib/rosterChange";
 import { announceRosterIfSettled } from "@/lib/announceRosters";
+import { notifyHarmoniumIfReady } from "@/lib/notifyHarmonium";
 import { requireCapability, can } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
@@ -308,6 +309,9 @@ export async function upsertSessionSingerRows(
   // Every save asks whether this roster has settled. Almost always no; when it
   // is yes, the group hears about it now rather than at the next hourly tick.
   await announceRosterIfSettled(sessionId);
+  // Same moment, different audience: the harmonium wants the bhajans and
+  // shrutis, and only once every row has both. See lib/notifyHarmonium.ts.
+  await notifyHarmoniumIfReady(sessionId);
   // Singing something is the strongest evidence there is that a person can
   // sing it, so a saved past session adds to their list.
   await recordSungAsKnown(sessionId);

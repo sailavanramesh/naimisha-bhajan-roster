@@ -418,6 +418,10 @@ model Session {
 
   category SessionCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
 
+  /// At most one — it is keyed by session. A list because Prisma cannot express
+  /// "one optional row on the other side of a one-to-one whose id IS the key".
+  harmoniumNotice HarmoniumNotice[]
+
   @@index([templateId])
   @@index([date])
   @@index([categoryId])
@@ -899,7 +903,7 @@ model DeskChannel {
   /// reason this is a property of the DESK. Whether such a strip is being used
   /// as a stereo pair or as one mono channel is a decision per programme, not
   /// per desk, so that lives on SessionChannel.
-  stereo Boolean @default(false)
+  stereo Boolean     @default(false)
   /// For a vocal strip whose mic wears a coloured cushion.
   ///
   /// The cushions are FIXED to channels and do not move: channel 1 is the blue
@@ -1302,6 +1306,29 @@ enum NoticeKind {
 /// produce four notifications. Recording what has been sent means a later
 /// addition notifies only the person newly added, and the quiet
 /// "roster is up" goes out once.
+/// What the harmonium players were last told about a session.
+///
+/// A ledger AND a snapshot, and it has to be both. The ledger half stops the
+/// summary going out twice; the snapshot half is what lets a later edit be
+/// described as "Sai Ram #2 is now at 3 Pancham / G" rather than "something
+/// changed", which is the difference between a useful notice and noise.
+///
+/// Not SessionNotice, which is unique on (session, singer, kind) and therefore
+/// records a thing happening ONCE. Changes happen repeatedly and are about the
+/// session rather than about each recipient, so they need their own row.
+model HarmoniumNotice {
+  sessionId String @id
+
+  /// The bhajans and shrutis exactly as last sent, as HarmoniumLine[].
+  /// Compared against the session on every later save.
+  lines Json
+
+  sentAt    DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+}
+
 model SessionNotice {
   id String @id @default(cuid())
 

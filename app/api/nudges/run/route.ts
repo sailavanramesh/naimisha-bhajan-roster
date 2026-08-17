@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { runNudges } from "@/lib/nudgeRun";
 import { announceSettledRosters } from "@/lib/announceRosters";
 import { syncSungRepertoire } from "@/lib/repertoireFromHistory";
+import { notifyHarmoniumForSessions } from "@/lib/notifyHarmonium";
 
 export const dynamic = "force-dynamic";
 
@@ -13,11 +14,14 @@ export const dynamic = "force-dynamic";
  * and the app decides what is due. Daylight saving then costs nothing, and a
  * cron tick that arrives late or twice is harmless.
  *
- * Three jobs. `runNudges` chases people who have not filled their row in on
+ * Four jobs. `runNudges` chases people who have not filled their row in on
  * the day. `announceSettledRosters` tells the group about a roster once it has
  * stopped changing — it used to be sent from the save and announced "1 singer
  * rostered" while the coordinator was still adding the other two.
- * `syncSungRepertoire` puts what was actually sung onto the singers' lists.
+ * `notifyHarmoniumForSessions` tells the harmonium players once every row of a
+ * future session has both a bhajan and a shruti, and about any change after
+ * that. `syncSungRepertoire` puts what was actually sung onto the singers'
+ * lists.
  *
  * The third one has to be here rather than at save time. Rosters are written
  * days ahead, when nothing has been sung yet, and a session nobody edits
@@ -44,12 +48,13 @@ export async function POST(req: NextRequest) {
     const daysParam = Number(new URL(req.url).searchParams.get("days"));
     const days = Number.isFinite(daysParam) && daysParam > 0 ? Math.min(daysParam, 10_000) : 21;
 
-    const [nudges, announcements, sung] = await Promise.all([
+    const [nudges, announcements, harmonium, sung] = await Promise.all([
       runNudges(),
       announceSettledRosters(),
+      notifyHarmoniumForSessions(),
       syncSungRepertoire(days),
     ]);
-    return NextResponse.json({ ok: true, ...nudges, ...announcements, sung });
+    return NextResponse.json({ ok: true, ...nudges, ...announcements, harmonium, sung });
   } catch (e) {
     console.error("runNudges failed", e);
     return NextResponse.json({ ok: false, error: "failed" }, { status: 500 });
