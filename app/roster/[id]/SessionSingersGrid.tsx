@@ -23,6 +23,7 @@ import {
 import { stepWithinSeries } from "@/lib/pitch";
 import { tablaWithOverride } from "@/lib/tabla";
 import { ragaScale } from "@/lib/ragaScales";
+import { ROSTER_COLUMNS, rosterTableMinWidth } from "@/lib/rosterGrid";
 
 type SingerLite = { id: string; name: string; gender: string | null };
 
@@ -1276,12 +1277,25 @@ export function SessionSingersGrid(props: {
           with 102px. Fixed layout honours the header widths and gives the
           leftover to the bhajan, which is the column that can use it.
         */}
-        <table className="stacked-table w-full min-w-[720px] table-fixed text-[13px]">
+        <table
+          className="stacked-table w-full table-fixed text-[13px]"
+          /*
+            The floor is DERIVED from the column widths, not written beside
+            them. Hand-written, the two drifted: the columns came to 760px
+            against a 720px minimum, so the bhajan — the column that takes
+            whatever is left — was allotted minus forty pixels, collapsed to
+            zero and painted over the pitch column. See lib/rosterGrid.ts.
+          */
+          style={{ minWidth: rosterTableMinWidth(props.canEdit) }}
+        >
           <thead className="bg-panel">
             <tr className="border-b border-rule-surface">
               {/* Widths are real now that the table is fixed. Everything the
                   bhajan does not need is spent here, and it gets the rest. */}
-              <th className="sticky left-0 z-20 w-[190px] border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm">
+              <th
+                className="sticky left-0 z-20 border-r bg-panel px-3 py-2 text-left font-semibold shadow-sm"
+                style={{ width: ROSTER_COLUMNS.singer }}
+              >
                 Singer
               </th>
               {/*
@@ -1302,18 +1316,36 @@ export function SessionSingersGrid(props: {
                 guess. One frozen column — the singer, which is what a row is
                 read by — is the whole of what this table needs.
               */}
+              {/* No width, deliberately: this is the column that takes whatever the
+                  others leave, and lib/rosterGrid.ts guarantees that is never
+                  less than BHAJAN_MIN_WIDTH. */}
               <th className="border-r bg-panel px-3 py-2 text-left font-semibold">Bhajan</th>
-              <th className="w-[168px] px-2 py-1.5 text-left font-semibold">Pitch</th>
+              <th className="px-2 py-1.5 text-left font-semibold" style={{ width: ROSTER_COLUMNS.pitch }}>
+                Pitch
+              </th>
               {/* Wider than it was: the column now stacks a name and its row of
                   cushion dots per person, not one of each. */}
-              <th className="w-[158px] px-2 py-1.5 text-left font-semibold">Chorus mics</th>
-              <th className="w-[108px] whitespace-nowrap px-2 py-1.5 text-left font-semibold">
+              <th className="px-2 py-1.5 text-left font-semibold" style={{ width: ROSTER_COLUMNS.chorus }}>
+                Chorus mics
+              </th>
+              <th
+                className="whitespace-nowrap px-2 py-1.5 text-left font-semibold"
+                style={{ width: ROSTER_COLUMNS.recommended }}
+              >
                 Recommended
               </th>
-              <th className="w-[52px] whitespace-nowrap px-2 py-1.5 text-left font-semibold">
+              <th
+                className="whitespace-nowrap px-2 py-1.5 text-left font-semibold"
+                style={{ width: ROSTER_COLUMNS.tabla }}
+              >
                 Tabla
               </th>
-              {props.canEdit ? <th className="w-[84px] px-2 py-1.5 text-right font-semibold" /> : null}
+              {props.canEdit ? (
+                <th
+                  className="px-2 py-1.5 text-right font-semibold"
+                  style={{ width: ROSTER_COLUMNS.actions }}
+                />
+              ) : null}
             </tr>
           </thead>
 
