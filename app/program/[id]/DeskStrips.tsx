@@ -64,6 +64,22 @@ export function DeskStrips({
    * meanings, so `flagLabel` says which one the tooltip should read.
    */
   swappedIds,
+  /**
+   * Strips carrying the LEAD, on a bhajan night.
+   *
+   * With a lead and two chorus singers, three strips light up in their cushion
+   * colours and nothing says which of them is singing the bhajan — Sailavan,
+   * 2026-08-18. So the lead's number bar fills and says the word.
+   *
+   * A WORD, and a fill rather than a tint, because this component already holds
+   * the rule a few lines down: colour is never the only carrier, since a dark
+   * hall and a colour-blind operator are both ordinary. And deliberately not
+   * brass, which on these strips already means open, "this one now" and a
+   * clash; a fourth meaning would empty the other three.
+   *
+   * Empty on a programme, which has performers rather than a lead.
+   */
+  leadIds,
   flagLabel = "for this item only",
   onPick,
   dense = false,
@@ -71,6 +87,7 @@ export function DeskStrips({
   strips: Strip[];
   openIds?: ReadonlySet<string>;
   swappedIds?: ReadonlySet<string>;
+  leadIds?: ReadonlySet<string>;
   flagLabel?: string;
   onPick?: (id: string) => void;
   dense?: boolean;
@@ -88,6 +105,7 @@ export function DeskStrips({
       {strips.map((s) => {
         const open = live ? openIds!.has(s.id) : true;
         const swapped = swappedIds?.has(s.id) ?? false;
+        const lead = leadIds?.has(s.id) ?? false;
         // A cushion belongs to a mic, so only a vocal strip has one.
         const cushion = s.kind === "vocal" && s.colour ? micColourDot(s.colour) : null;
 
@@ -98,6 +116,7 @@ export function DeskStrips({
           s.who,
           s.kind === "vocal" && s.colour ? `${micColourLabel(s.colour)} cushion` : null,
           s.mic,
+          lead ? "lead" : null,
           swapped ? flagLabel : null,
           live ? (open ? "open" : "closed") : null,
         ]
@@ -111,12 +130,19 @@ export function DeskStrips({
             <span
               aria-hidden
               className={`block border-b px-1 py-0.5 text-center font-mono text-[11px] font-bold leading-none ${
-                open
-                  ? "border-on-ground/20 bg-surface/60 text-on-ground"
-                  : "border-rule text-on-ground-muted"
+                lead
+                  ? "border-on-ground bg-on-ground text-ground"
+                  : open
+                    ? "border-on-ground/20 bg-surface/60 text-on-ground"
+                    : "border-rule text-on-ground-muted"
               }`}
             >
               {stripNumber(s.number, s.stereo)}
+              {lead ? (
+                // Not "LEAD": the app writes its labels in its own voice — the
+                // running order says "read", the desk says "now".
+                <span className="ms-1 font-sans font-semibold tracking-wide">· lead</span>
+              ) : null}
             </span>
 
             <span

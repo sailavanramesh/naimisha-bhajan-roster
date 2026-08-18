@@ -232,3 +232,74 @@ describe("planLiveDeskForSlots", () => {
     expect(plans[0].plan.strips).toHaveLength(DESK.length);
   });
 });
+
+/*
+ * Which strip is the LEAD's — with a lead and two chorus singers, three strips
+ * light up in their cushion colours and the picture alone cannot say which of
+ * them is singing the bhajan.
+ */
+describe("planLiveDeskForSlots — the lead's strip", () => {
+  const slot = (position: number, title: string, lead: CushionPerson | null, chorus: CushionPerson[] = []) => ({
+    position, title, lead, chorus,
+  });
+
+  it("names the strip the lead landed on, and only that one", () => {
+    const plans = planLiveDeskForSlots({
+      strips: DESK,
+      slots: [
+        slot(1, "One", person("s1", "Sailavan", "grey"), [
+          person("s2", "Sriraag", "green"),
+          person("s3", "Triveni", "pink"),
+        ]),
+      ],
+    });
+
+    expect([...plans[0].leadStripIds]).toEqual(["c2"]);
+    // All three are up; only one of them is the lead's.
+    expect([...plans[0].openIds].sort()).toEqual(["c2", "c3", "c6"]);
+  });
+
+  it("has no lead strip when the desk cannot place the lead's cushion", () => {
+    const plans = planLiveDeskForSlots({
+      strips: DESK,
+      slots: [slot(1, "One", person("s1", "Sailavan", "maroon"), [person("s2", "Sriraag", "green")])],
+    });
+    expect([...plans[0].leadStripIds]).toEqual([]);
+    expect(plans[0].plan.unplaced.map((p) => p.name)).toEqual(["Sailavan"]);
+  });
+
+  it("has no lead strip for a bhajan with nobody singing it, or no cushion yet", () => {
+    const plans = planLiveDeskForSlots({
+      strips: DESK,
+      slots: [slot(1, "One", null), slot(2, "Two", person("s1", "Sailavan", null))],
+    });
+    expect([...plans[0].leadStripIds]).toEqual([]);
+    expect([...plans[1].leadStripIds]).toEqual([]);
+  });
+
+  /*
+   * Both facts are true of one strip and both are worth saying: it is the
+   * lead's, AND two people are on that cushion.
+   */
+  it("still names the lead's strip when it is also a clash", () => {
+    const plans = planLiveDeskForSlots({
+      strips: DESK,
+      slots: [slot(1, "One", person("s1", "Sailavan", "grey"), [person("s2", "Sriraag", "grey")])],
+    });
+    const grey = plans[0].plan.strips.find((a) => a.strip.number === "2")!;
+    expect(grey.clash).toBe(true);
+    expect([...plans[0].leadStripIds]).toEqual(["c2"]);
+  });
+
+  it("marks the lead per bhajan, following the singer down the running order", () => {
+    const plans = planLiveDeskForSlots({
+      strips: DESK,
+      slots: [
+        slot(1, "One", person("s1", "Sailavan", "grey"), [person("s2", "Sriraag", "green")]),
+        slot(2, "Two", person("s2", "Sriraag", "green"), [person("s1", "Sailavan", "grey")]),
+      ],
+    });
+    expect([...plans[0].leadStripIds]).toEqual(["c2"]);
+    expect([...plans[1].leadStripIds]).toEqual(["c3"]);
+  });
+});
