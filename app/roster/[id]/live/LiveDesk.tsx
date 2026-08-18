@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { DeskStrips, stripName } from "@/app/program/[id]/DeskStrips";
 import {
@@ -83,6 +84,23 @@ export function LiveDesk({
           rather than an ordinary Thursday. Only for editors and the two sound
           jobs; the action checks the same rule again server-side.
         */}
+        <span className="flex flex-wrap items-center gap-3">
+        {/*
+          Editing the desk itself — its strips, and which cushion is on which
+          channel — as opposed to which desk this session is on. Shown to the
+          same people, because the two sets are the same: editPrograms or one of
+          the sound roles on one side, `manageDesks` by role or grant on the
+          other. /admin/desks enforces its own rule regardless.
+        */}
+        {canSetUpDesk ? (
+          <Link
+            href="/admin/desks"
+            className="text-xs text-on-ground-muted underline underline-offset-2 hover:text-on-ground"
+          >
+            Set up the desk →
+          </Link>
+        ) : null}
+
         {canSetUpDesk && desks.length > 0 ? (
           <select
             value={deskId ?? ""}
@@ -105,6 +123,7 @@ export function LiveDesk({
             ))}
           </select>
         ) : null}
+        </span>
       </div>
 
       {error ? (

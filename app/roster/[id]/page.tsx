@@ -7,7 +7,7 @@ import { SessionSingersGrid } from "./SessionSingersGrid";
 import { getPitchSuggestions } from "@/lib/pitchSuggestions";
 import { computeRecommendedPitch } from "@/lib/computeRecommendedPitch";
 import { deleteInstrumentRow, updateSessionNotes } from "./actions";
-import { getRole, can, getSignedInSinger } from "@/lib/auth";
+import { getRole, can, getSignedInSinger, canWithGrantsFor } from "@/lib/auth";
 import { planTablas } from "@/lib/tablaPlan";
 import { TablaPanel } from "./TablaPanel";
 import { CopyRowsPanel } from "./CopyRowsPanel";
@@ -98,6 +98,16 @@ export default async function RosterSessionPage({
   const role = await getRole();
   const canEdit = can(role, "editSlotBhajan");
   const canAssign = can(role, "assignSingers");
+  /*
+   * May this person set the desk up — its strips, and which cushion is on
+   * which channel?
+   *
+   * The DESTINATION'S own rule, not a near-enough one: /admin/desks is gated on
+   * `manageDesks` with grants, so asking the same question here means the link
+   * can never lead somebody to a refusal. Editors and owners hold it by role;
+   * a sound engineer or mic coordinator holds it by their singer row.
+   */
+  const canManageDesk = await canWithGrantsFor("manageDesks");
   // Any signed-in user, editor or member: this is live sound-desk state.
   const canSetMicCushion = can(role, "setMicCushion");
 
@@ -540,6 +550,20 @@ export default async function RosterSessionPage({
               <Link href={`/roster/${sessionId}/print`} className={PILL}>
                 Print
               </Link>
+
+              {/*
+                THE WAY INTO THE DESK FROM THE BHAJAN SIDE.
+
+                It only existed on a programme, so a sound engineer who is not
+                an editor had no route to the desk at all on an ordinary
+                Thursday — /admin/desks is not in their nav, and nothing else
+                pointed at it. Sailavan asked for it here, and only for them.
+              */}
+              {canManageDesk ? (
+                <Link href="/admin/desks" className={PILL} title="The desks, their strips and cushions">
+                  Sound desk
+                </Link>
+              ) : null}
 
               <Link
                 href={`/roster/${sessionId}/live`}
