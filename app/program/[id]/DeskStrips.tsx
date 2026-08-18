@@ -130,19 +130,12 @@ export function DeskStrips({
             <span
               aria-hidden
               className={`block border-b px-1 py-0.5 text-center font-mono text-[11px] font-bold leading-none ${
-                lead
-                  ? "border-on-ground bg-on-ground text-ground"
-                  : open
-                    ? "border-on-ground/20 bg-surface/60 text-on-ground"
-                    : "border-rule text-on-ground-muted"
+                open
+                  ? "border-on-ground/20 bg-surface/60 text-on-ground"
+                  : "border-rule text-on-ground-muted"
               }`}
             >
               {stripNumber(s.number, s.stereo)}
-              {lead ? (
-                // Not "LEAD": the app writes its labels in its own voice — the
-                // running order says "read", the desk says "now".
-                <span className="ms-1 font-sans font-semibold tracking-wide">· lead</span>
-              ) : null}
             </span>
 
             <span
@@ -185,9 +178,36 @@ export function DeskStrips({
               <span className="block w-full truncate text-[12px] font-bold leading-tight">
                 {s.who ?? deskLabel(s.label) ?? "—"}
               </span>
-              {[s.who ? deskLabel(s.label) : null, s.mic].filter(Boolean).length > 0 ? (
-                <span className="mt-0.5 block w-full truncate text-[9px] leading-none opacity-80">
-                  {[s.who ? deskLabel(s.label) : null, s.mic].filter(Boolean).join(" · ")}
+              {/*
+                WHO LEADS, on the line built for qualifying the person.
+
+                Its rule is that it only says something the name does not, and
+                for the lead "lead" beats "Lead vocal 5" — which channel this is
+                is printed above, and with three strips lit in three cushion
+                colours the one thing the picture cannot say is which of them is
+                singing the bhajan.
+
+                First attempt filled the number bar and read "5 · lead".
+                Sailavan: "the black fill for the lead looks a bit weird … the
+                2 - lead just doesn't look like it fits the mould." Both fair —
+                the fill was the only pure dark thing in a warm palette, and a
+                mono number beside a sans word is two ideas in one 11px bar.
+                Here it is one idea on a line that already existed.
+
+                Solid and letter-spaced rather than muted, so it lifts off the
+                cushion colour it sits on; still the same size, so no strip
+                grows a line or changes height.
+              */}
+              {(lead ? ["lead", s.mic] : [s.who ? deskLabel(s.label) : null, s.mic]).filter(Boolean)
+                .length > 0 ? (
+                <span
+                  className={`mt-0.5 block w-full truncate text-[9px] leading-none ${
+                    lead ? "font-semibold tracking-wide" : "opacity-80"
+                  }`}
+                >
+                  {(lead ? ["lead", s.mic] : [s.who ? deskLabel(s.label) : null, s.mic])
+                    .filter(Boolean)
+                    .join(" · ")}
                 </span>
               ) : null}
             </span>
