@@ -3,6 +3,9 @@
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui";
 import { updateSessionMeta } from "./metaActions";
+import { TimeZoneSelect } from "@/components/TimeZoneSelect";
+import { CENTRE_TIME_ZONE } from "@/lib/timezones";
+import { SessionTime } from "@/components/SessionTime";
 
 export type SessionMeta = {
   categoryId: string | null;
@@ -10,6 +13,8 @@ export type SessionMeta = {
   location: string | null;
   /** "HH:MM" or null. */
   startsAt: string | null;
+  /** Whose clock `startsAt` is on. An IANA zone. See Session.timeZone. */
+  timeZone: string;
   /** "YYYY-MM-DD". The day this session is on, and can be moved to. */
   date: string;
 };
@@ -43,6 +48,7 @@ export function SessionMetaPanel({
   const [error, setError] = useState<string | null>(null);
 
   const summary = describe(saved, categories);
+  const hasSummary = summary.length > 0;
   /** What is SAVED, not what is being typed — the chip must not flicker mid-edit. */
   const needsKind = !saved.categoryId;
 
@@ -55,6 +61,7 @@ export function SessionMetaPanel({
         topic: value.topic ?? "",
         location: value.location ?? "",
         startsAt: value.startsAt ?? "",
+        timeZone: value.timeZone || CENTRE_TIME_ZONE,
         // Was missed when the date became editable, and the whole form stopped
         // saving: the action requires it, so every submit failed validation with
         // a bare "Required" that named no field and pointed at nothing on screen.
@@ -65,7 +72,11 @@ export function SessionMetaPanel({
     });
 
   if (!canEdit) {
-    return summary ? <p className="text-xs text-on-surface-muted">{summary}</p> : null;
+    return hasSummary ? (
+      <p className="text-xs text-on-surface-muted">
+        <Joined parts={summary} />
+      </p>
+    ) : null;
   }
 
   return (
@@ -92,7 +103,7 @@ export function SessionMetaPanel({
           </span>
         ) : (
           <span className="truncate text-xs font-normal text-on-surface-muted">
-            {summary || "not recorded"}
+            {hasSummary ? <Joined parts={summary} /> : "not recorded"}
           </span>
         )}
       </summary>
@@ -143,6 +154,20 @@ export function SessionMetaPanel({
             />
           </label>
 
+          {/*
+            Next to the time, not somewhere else on the form. The two are one
+            fact — "7pm" is not a time until you say whose clock it is on — and
+            splitting them is how a session ends up on the right hour in the
+            wrong city.
+          */}
+          <label className="grid gap-1 text-[11px] text-on-surface-muted">
+            Time zone
+            <TimeZoneSelect
+              value={value.timeZone || CENTRE_TIME_ZONE}
+              onChange={(zone) => setValue((v) => ({ ...v, timeZone: zone }))}
+            />
+          </label>
+
           <label className="grid min-w-[10rem] flex-1 gap-1 text-[11px] text-on-surface-muted">
             Where
             <input
@@ -187,21 +212,45 @@ export function SessionMetaPanel({
 }
 
 /** "Routine Thursday · 7pm · the centre · Guru Purnima", skipping what is absent. */
-function describe(meta: SessionMeta, categories: { id: string; name: string }[]): string {
-  const parts = [
+/**
+ * The one-line version of all this, for the collapsed header.
+ *
+ * Returns PARTS rather than a joined string, because one of them is no longer
+ * text: the start time is a `SessionTime`, which adds the reader's own time
+ * after mount when their clock differs from the venue's. The header deliberately
+ * does not carry the time — "that belongs to whoever is planning, and the
+ * details panel carries it" — so this line is where a member reading from
+ * another timezone finds out when the session actually is for them.
+ */
+function describe(
+  meta: SessionMeta,
+  categories: { id: string; name: string }[],
+): React.ReactNode[] {
+  return [
     categories.find((c) => c.id === meta.categoryId)?.name,
-    meta.startsAt ? clock(meta.startsAt) : null,
+    meta.startsAt ? (
+      <SessionTime
+        key="time"
+        dateISO={meta.date}
+        startsAt={meta.startsAt}
+        timeZone={meta.timeZone || CENTRE_TIME_ZONE}
+      />
+    ) : null,
     meta.location,
     meta.topic,
   ].filter(Boolean);
-  return parts.join(" · ");
 }
 
-/** "19:00" → "7:00pm". The group does not read 24-hour time. */
-export function clock(hhmm: string): string {
-  const [h, m] = hhmm.split(":").map(Number);
-  if (Number.isNaN(h) || Number.isNaN(m)) return hhmm;
-  const suffix = h < 12 ? "am" : "pm";
-  const hour = h % 12 === 0 ? 12 : h % 12;
-  return m === 0 ? `${hour}${suffix}` : `${hour}:${String(m).padStart(2, "0")}${suffix}`;
+/** The parts of the summary, separated the way the rest of the app separates. */
+function Joined({ parts }: { parts: React.ReactNode[] }) {
+  return (
+    <>
+      {parts.map((part, i) => (
+        <span key={i}>
+          {i > 0 ? " · " : null}
+          {part}
+        </span>
+      ))}
+    </>
+  );
 }

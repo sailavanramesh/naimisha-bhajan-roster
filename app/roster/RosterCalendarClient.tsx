@@ -7,6 +7,7 @@ import { SessionRows } from "@/components/SessionRows";
 import { Button, Input } from "@/components/ui";
 import { fetchMonthInfo, createSessionForDate } from "./calendarActions";
 import { sortByStart, sessionLabel, hasSeveral, USUAL_START } from "@/lib/sessionsOfDay";
+import { deviceTodayISO } from "@/lib/dates";
 import {
   dayMarks,
   dayKindLabel,
@@ -38,6 +39,15 @@ type DaySession = {
  */
 type DayInfo = { sessions: DaySession[] };
 
+/**
+ * A UTC-anchored Date back to its `YYYY-MM-DD`.
+ *
+ * Correct for every Date in this file, because they are all built with
+ * `Date.UTC` and carry a calendar date rather than a moment. NOT correct for
+ * `new Date()`, which is a moment: that is how the Today button came to select
+ * Tuesday on a Wednesday morning in Melbourne, since the server and the phone
+ * were both still on Tuesday in UTC. Ask `deviceTodayISO` for today instead.
+ */
 function toISODate(d: Date) {
   return d.toISOString().slice(0, 10);
 }
@@ -73,6 +83,16 @@ export default function RosterCalendarClient(props: {
   canEdit: boolean;
   initialMonth: string;
   initialSelected: string;
+  /**
+   * Did `initialSelected` come from the url, or is it just "today"?
+   *
+   * The difference decides whether this component may move off it. A day in the
+   * url is a deliberate choice — somebody linked to it, or navigated there —
+   * and must survive. A defaulted today is the server's best guess made in
+   * Melbourne, because the server cannot know where the reader is, and the
+   * reader's own device can improve on it.
+   */
+  selectedFromUrl: boolean;
   initialDayInfo: Record<string, DayInfo>;
   /**
    * Every kind of session, without its picture — a few rows, a few hundred
@@ -82,7 +102,7 @@ export default function RosterCalendarClient(props: {
    */
   kinds: KindLite[];
 }) {
-  const { canEdit, initialMonth, initialSelected, initialDayInfo } = props;
+  const { canEdit, initialMonth, initialSelected, selectedFromUrl, initialDayInfo } = props;
   const kindsById = useMemo(
     () => new Map(props.kinds.map((k) => [k.id, k])),
     [props.kinds],
@@ -110,6 +130,29 @@ export default function RosterCalendarClient(props: {
       setDayInfo((prev) => ({ ...prev, ...data.dayInfo }));
     });
   }
+
+  /*
+   * Land on the reader's own today, once, on arrival.
+   *
+   * The server rendered Melbourne's date, which is the right guess to make
+   * without knowing where the reader is and is what everybody at the centre
+   * sees. A member reading this from another timezone can be on a different
+   * day, though, and their device knows which — so if the two disagree, theirs
+   * wins.
+   *
+   * Only when the day was NOT asked for by url: a linked day is a decision
+   * somebody made and is not ours to overrule. Only on mount, so it never
+   * fights a later choice. In Melbourne the two agree and nothing happens.
+   */
+  useEffect(() => {
+    if (selectedFromUrl) return;
+    const deviceToday = deviceTodayISO();
+    if (deviceToday === initialSelected) return;
+    setSelected(deviceToday);
+    setJumpDate(deviceToday);
+    setCurrentMonth(monthKey(monthStartUTC(fromISODate(deviceToday))));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     ensureMonthLoaded(currentMonth);
@@ -210,7 +253,9 @@ export default function RosterCalendarClient(props: {
   }
 
   function goToday() {
-    const today = toISODate(new Date());
+    // The DEVICE's today, not UTC's and not the server's — somebody pressing
+    // this means the day they are living in.
+    const today = deviceTodayISO();
     const dt = fromISODate(today);
     setSelected(today);
     setJumpDate(today);
@@ -243,6 +288,9 @@ export default function RosterCalendarClient(props: {
     year: "numeric",
     month: "long",
     day: "numeric",
+    // `fromISODate` anchors to UTC midnight, so read it back in UTC. Without
+    // this the label names the previous day for any reader west of UTC.
+    timeZone: "UTC",
   });
   const selectedSessions = sortByStart(selectedInfo?.sessions ?? []);
   const selectedHasSession = selectedSessions.length > 0;
@@ -252,7 +300,13 @@ export default function RosterCalendarClient(props: {
     <div className="grid gap-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div className="text-sm font-semibold">
-          {monthDate.toLocaleDateString("en-AU", { month: "long", year: "numeric" })}
+          {/* UTC, like every other label here: `monthDate` is the 1st at UTC
+              midnight, which reads as the month BEFORE west of UTC. */}
+          {monthDate.toLocaleDateString("en-AU", {
+            month: "long",
+            year: "numeric",
+            timeZone: "UTC",
+          })}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Button type="button" onClick={() => navMonth(-1)} disabled={isPending}>Prev</Button>

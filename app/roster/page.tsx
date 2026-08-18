@@ -2,7 +2,8 @@ import Link from "next/link";
 import { SessionRows, Marked } from "@/components/SessionRows";
 import { DateField } from "@/components/DateField";
 import { matches, excerpt } from "@/lib/highlight";
-import { timeLabel, USUAL_START } from "@/lib/sessionsOfDay";
+import { USUAL_START } from "@/lib/sessionsOfDay";
+import { SessionTime } from "@/components/SessionTime";
 import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { startSessionOnDate } from "./viewActions";
@@ -34,13 +35,6 @@ function rowMatches(
 }
 function toISODateUTC(d: Date) {
   return d.toISOString().slice(0, 10);
-}
-
-function toISODateLocal(d: Date) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
 }
 
 function parseISODate(s?: string | null): Date | null {
@@ -117,8 +111,17 @@ export default async function RosterPage({
   const view = resolveRosterView(sp.view, savedView === "list" ? "list" : savedView === "calendar" ? "calendar" : null);
   const q = (sp.q ?? "").trim();
 
-  const todayUTC = new Date();
-  const selected = parseISODate(sp.d) ?? parseISODate(toISODateUTC(todayUTC))!;
+  /*
+   * The default day is MELBOURNE's today, not UTC's.
+   *
+   * This was `new Date()` read through `toISODateUTC`, and Azure runs UTC — so
+   * from midnight until 10am Melbourne the calendar opened on yesterday, and
+   * "Today" agreed with it. Melbourne is the right guess for a server that
+   * cannot know where the reader is; a reader somewhere else gets corrected on
+   * their own device, which is why `selectedFromUrl` goes down with it.
+   */
+  const selected = parseISODate(sp.d) ?? parseISODate(melbourneTodayISO())!;
+  const selectedFromUrl = parseISODate(sp.d) !== null;
   const month = parseMonth(sp.m) ?? new Date(Date.UTC(selected.getUTCFullYear(), selected.getUTCMonth(), 1, 0, 0, 0));
   const monthStart = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth(), 1, 0, 0, 0));
   const monthEndExclusive = new Date(Date.UTC(month.getUTCFullYear(), month.getUTCMonth() + 1, 1, 0, 0, 0));
@@ -202,11 +205,18 @@ export default async function RosterPage({
       })),
     };
 
-    const utcKey = toISODateUTC(s.date);
-    const localKey = toISODateLocal(s.date);
-
-    (dayInfo[utcKey] ??= { sessions: [] }).sessions.push(value);
-    if (localKey !== utcKey) dayInfo[localKey] ??= dayInfo[utcKey];
+    /*
+     * Keyed by the UTC day, and ONLY by it.
+     *
+     * There used to be a second key built from the local getters, aliasing each day to
+     * whatever day the SERVER's zone made of it, as insurance against the two
+     * disagreeing. On Azure they never do — it runs UTC — so the alias has
+     * always been a no-op in production; anywhere else it quietly filed every
+     * session on a second, wrong day as well as the right one. The calendar
+     * reads and writes UTC-anchored day keys throughout, so the one key is the
+     * whole answer.
+     */
+    (dayInfo[toISODateUTC(s.date)] ??= { sessions: [] }).sessions.push(value);
   }
 
   let listSessions:
@@ -215,6 +225,7 @@ export default async function RosterPage({
         date: Date;
         notes: string | null;
         startsAt: string | null;
+        timeZone: string;
         category: { name: string; image: string | null } | null;
         slots: {
           singer: { name: string } | null;
@@ -346,6 +357,7 @@ export default async function RosterPage({
               canEdit={canEdit}
               initialMonth={monthKey(monthStart)}
               initialSelected={toISODateUTC(selected)}
+              selectedFromUrl={selectedFromUrl}
               initialDayInfo={dayInfo}
               kinds={kinds}
             />
@@ -497,9 +509,12 @@ export default async function RosterPage({
                           </span>
                         ) : null}
                         {s.startsAt && s.startsAt !== USUAL_START ? (
-                          <span className="font-mono text-[11px] text-on-surface-muted">
-                            {timeLabel(s.startsAt)}
-                          </span>
+                          <SessionTime
+                            className="font-mono text-[11px] text-on-surface-muted"
+                            dateISO={toISODateUTC(s.date)}
+                            startsAt={s.startsAt}
+                            timeZone={s.timeZone}
+                          />
                         ) : null}
                       </span>
                       <span className="shrink-0 text-[11px] text-on-surface-muted">

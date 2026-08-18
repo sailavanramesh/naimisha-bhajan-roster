@@ -79,6 +79,7 @@ export default async function SessionDetailsPage({
         id: true,
         date: true,
         startsAt: true,
+        timeZone: true,
         topic: true,
         location: true,
         categoryId: true,
@@ -109,6 +110,7 @@ export default async function SessionDetailsPage({
       // instant to shift.
       weekday: WEEKDAYS[s.date.getUTCDay()],
       startsAt: s.startsAt,
+      timeZone: s.timeZone,
       categoryId: s.categoryId,
       categoryName: s.category?.name ?? null,
       topic: s.topic,

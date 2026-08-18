@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireCapability, getSignedInSinger } from "@/lib/auth";
 import { NOT_ARCHIVED } from "@/lib/archive";
+import { CENTRE_TIME_ZONE, isValidTimeZone } from "@/lib/timezones";
 
 const Input = z.object({
   sessionId: z.string().min(1),
@@ -20,6 +21,18 @@ const Input = z.object({
    * the roster with the mistake.
    */
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use a date like 2026-08-18."),
+  /**
+   * Whose clock `startsAt` is on. An IANA zone name; "" means leave it at the
+   * centre's own.
+   *
+   * Checked against `Intl` rather than against a list of our own. The shortlist
+   * in the picker is three entries and the full list is four hundred, and a
+   * copy of the second one kept here to validate against would be a copy of the
+   * IANA database that goes stale without anybody noticing.
+   */
+  timeZone: z
+    .string()
+    .refine((z) => z === "" || isValidTimeZone(z), "That is not a timezone."),
 });
 
 /**
@@ -57,7 +70,7 @@ export async function updateSessionMeta(
       error: field ? `${field}: ${issue.message}` : (issue?.message ?? "Could not save."),
     };
   }
-  const { sessionId, categoryId, topic, location, startsAt, date } = parsed.data;
+  const { sessionId, categoryId, topic, location, startsAt, date, timeZone } = parsed.data;
 
   if (categoryId) {
     const exists = await prisma.sessionCategory.count({ where: { id: categoryId } });
@@ -81,6 +94,7 @@ export async function updateSessionMeta(
       location: location.trim() || null,
       startsAt: startsAt || null,
       date: when,
+      timeZone: timeZone || CENTRE_TIME_ZONE,
     },
   });
 
@@ -157,6 +171,11 @@ const BulkInput = z.object({
   startsAt: z.string().regex(/^$|^([01]\d|2[0-3]):[0-5]\d$/).nullish(),
   topic: z.string().max(200).nullish(),
   location: z.string().max(120).nullish(),
+  /** An IANA zone. "" is not meaningful here — see the write below. */
+  timeZone: z
+    .string()
+    .refine((z) => z === "" || isValidTimeZone(z), "That is not a timezone.")
+    .nullish(),
 });
 
 /**
@@ -178,6 +197,7 @@ export async function bulkUpdateSessionMeta(input: {
   startsAt?: string | null;
   topic?: string | null;
   location?: string | null;
+  timeZone?: string | null;
 }): Promise<{ ok: true; updated: number; fields: string[] } | { ok: false; error: string }> {
   await requireCapability("editSessionNotes");
 
@@ -209,6 +229,16 @@ export async function bulkUpdateSessionMeta(input: {
   if (v.location !== undefined && v.location !== null) {
     data.location = v.location.trim() || null;
     fields.push("location");
+  }
+  /*
+   * The one field here that cannot be cleared. Every other one has a sensible
+   * empty state — a session with no topic is just a session — but a start time
+   * with no zone is the thing this whole column exists to stop, so an empty
+   * choice means "the centre's own" rather than "none".
+   */
+  if (v.timeZone) {
+    data.timeZone = v.timeZone;
+    fields.push("time zone");
   }
 
   if (fields.length === 0) return { ok: false, error: "Nothing to change — fill in a field first." };

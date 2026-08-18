@@ -6,12 +6,15 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import { bulkUpdateSessionMeta, bulkDeleteSessions } from "@/app/roster/[id]/metaActions";
 import { timeLabel } from "@/lib/sessionsOfDay";
+import { TimeZoneSelect } from "@/components/TimeZoneSelect";
+import { CENTRE_TIME_ZONE, sameZone, zoneLabel } from "@/lib/timezones";
 
 export type BulkSession = {
   id: string;
   dateISO: string;
   weekday: string;
   startsAt: string | null;
+  timeZone: string;
   categoryId: string | null;
   categoryName: string | null;
   topic: string | null;
@@ -44,6 +47,14 @@ export function BulkMetaPanel({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [categoryId, setCategoryId] = useState<string>("");
   const [startsAt, setStartsAt] = useState<string>("");
+  /*
+   * "" means leave alone, like every other field here — NOT "Melbourne". A bulk
+   * edit that quietly stamped the centre's zone onto whatever was selected
+   * would undo a Chennai session every time somebody used this panel to fix a
+   * topic, which is the sort of damage a bulk tool must not do by default.
+   */
+  const [timeZone, setTimeZone] = useState<string>("");
+  const [touchTimeZone, setTouchTimeZone] = useState(false);
   const [topic, setTopic] = useState<string>("");
   const [touchTopic, setTouchTopic] = useState(false);
   const [location, setLocation] = useState<string>("");
@@ -82,6 +93,7 @@ export function BulkMetaPanel({
         // Absent means leave alone; "" means clear.
         ...(categoryId === "" ? {} : { categoryId: categoryId === "__clear__" ? "" : categoryId }),
         ...(startsAt === "" ? {} : { startsAt }),
+        ...(touchTimeZone ? { timeZone: timeZone || CENTRE_TIME_ZONE } : {}),
         ...(touchTopic ? { topic } : {}),
         ...(touchLocation ? { location } : {}),
       });
@@ -156,6 +168,26 @@ export function BulkMetaPanel({
               value={startsAt}
               onChange={(e) => setStartsAt(e.target.value)}
               className="h-9 rounded-[10px] border border-rule-surface bg-field px-2 text-sm text-on-surface"
+            />
+          </label>
+
+          {/* Opt-in, like "also set where": every session already has a zone,
+              so there is no empty state to mean "leave it". The checkbox is
+              what says so. */}
+          <label className="grid gap-1 text-[11px] text-on-surface-muted">
+            <span className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={touchTimeZone}
+                onChange={(e) => setTouchTimeZone(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              Also set time zone
+            </span>
+            <TimeZoneSelect
+              value={timeZone || CENTRE_TIME_ZONE}
+              onChange={setTimeZone}
+              disabled={!touchTimeZone}
             />
           </label>
 
@@ -314,6 +346,9 @@ export function BulkMetaPanel({
                 </span>
                 <span className="hidden font-mono text-xs text-on-surface-muted sm:block">
                   {timeLabel(s.startsAt) || "—"}
+                  {s.startsAt && !sameZone(s.timeZone, CENTRE_TIME_ZONE) ? (
+                    <span className="ms-1 text-on-surface-muted">{zoneLabel(s.timeZone)}</span>
+                  ) : null}
                 </span>
                 <span className="hidden truncate text-xs text-on-surface-muted sm:block">
                   {[s.location, s.topic].filter(Boolean).join(" · ")}

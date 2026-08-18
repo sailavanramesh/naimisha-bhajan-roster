@@ -7,7 +7,7 @@ import { NoAccess } from "@/components/RequireRole";
 import { Card, CardContent } from "@/components/ui";
 import { SessionMetaPanel } from "@/app/roster/[id]/SessionMetaPanel";
 import { DeleteSessionButton } from "@/app/roster/[id]/DeleteSessionButton";
-import { timeLabel } from "@/lib/sessionsOfDay";
+import { SessionTime } from "@/components/SessionTime";
 import { ProgramEditor } from "./ProgramEditor";
 import { ChannelGrid } from "./ChannelGrid";
 import { occupantFor, sharedName, sortChannels } from "@/lib/deskChannels";
@@ -222,7 +222,16 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
           </h1>
           <p className="mt-0.5 text-sm text-on-ground-muted">
             {heading}
-            {session.startsAt ? ` · ${timeLabel(session.startsAt)}` : ""}
+            {session.startsAt ? (
+              <>
+                {" · "}
+                <SessionTime
+                  dateISO={session.date.toISOString().slice(0, 10)}
+                  startsAt={session.startsAt}
+                  timeZone={session.timeZone}
+                />
+              </>
+            ) : null}
           </p>
         </div>
         <Link
@@ -247,6 +256,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
               // The column is @db.Date, so the ISO day is the whole value.
               date: session.date.toISOString().slice(0, 10),
               startsAt: session.startsAt,
+              timeZone: session.timeZone,
             }}
           />
         </CardContent>

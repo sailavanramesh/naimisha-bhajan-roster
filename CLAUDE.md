@@ -195,6 +195,39 @@ Derived from 188 real sessions. **Confirmed with Sailavan 2026-08-09** — see
 - **No `any`.** No `@ts-expect-error` without a comment explaining the cause.
 - **Dates are session dates, not timestamps.** Store as `@db.Date`, handle in
   `Australia/Melbourne`. Do not let UTC shift a session onto the wrong day.
+
+### Time and timezones
+
+Three separate things, and keeping them separate is what stops the whole class
+of "it says Tuesday but it is Wednesday" bugs:
+
+| Thing | What it is | Rule |
+|---|---|---|
+| `Session.date` | A **calendar date** at the venue. `@db.Date`, arrives as UTC midnight. | Format it with `timeZone: "UTC"`. Never with the reader's zone — that is what puts a Thursday session on Wednesday for anyone west of UTC. |
+| `Session.startsAt` | A **wall-clock time**, `"HH:MM"`. Not an instant. | Never store it as a `DateTime`. |
+| `Session.timeZone` | **Whose clock** `startsAt` is on. IANA name, defaults to `Australia/Melbourne`. | The only thing that turns the two above into a moment. |
+
+- All the arithmetic lives in `lib/timezones.ts`. Use `sessionInstant()` to get a
+  real moment; never add a fixed offset — Melbourne is +10 for half the year and
+  +11 for the other half.
+- Compare zones with `sameZone()`, never with `===`. ICU disagrees with itself
+  about whether `Asia/Kolkata` or `Asia/Calcutta` is canonical, and the two
+  spellings are unequal while meaning the same thing.
+- Decide whether to show a conversion with `sameClock()`, which compares
+  offsets. Sydney and Melbourne are different zones that always agree; a Sydney
+  member must not be shown "7pm · 7pm your time".
+- **Venue time leads, always.** `components/SessionTime.tsx` renders the venue's
+  time and *adds* the reader's own after mount. Never replace one with the
+  other: the group says "7pm" and means the hall's clock.
+- Anything derived from the reader's zone must be added in an effect, not
+  rendered on the server, or hydration fails.
+- **"Today" is the reader's today** (`deviceTodayISO`), not UTC's and not the
+  server's. The server renders `melbourneTodayISO()` as its best guess and the
+  client corrects it on mount when the device disagrees.
+- Two places deliberately stay in venue time: the **calendar** (its day panel
+  labels are disambiguators between sessions on one day, and both shift
+  equally) and **notifications** (they are text sent to a subscriber, with no
+  reader present to convert for).
 - Never commit `.env`. `.env.save` is currently tracked in git — remove it and
   rotate anything it contained.
 

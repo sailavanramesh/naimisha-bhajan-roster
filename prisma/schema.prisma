@@ -347,11 +347,30 @@ model Session {
   /// to findUnique by date now takes the first by start time.
   date DateTime @db.Date
 
-  /// Roughly when it starts, "HH:MM" in Melbourne. Null means the usual
-  /// evening. Stored as a string rather than a DateTime because it is a time
-  /// of day, not an instant — a DateTime would carry a date and a zone with it
-  /// and invite exactly the UTC-shifts-the-day bug the date column avoids.
+  /// Roughly when it starts, "HH:MM" on the clock at `timeZone`. Null means the
+  /// usual evening. Stored as a string rather than a DateTime because it is a
+  /// time of day, not an instant — a DateTime would carry a date and a zone
+  /// with it and invite exactly the UTC-shifts-the-day bug the date column
+  /// avoids.
   startsAt String?
+
+  /// Whose clock `startsAt` is on. An IANA zone name, e.g. "Australia/Melbourne".
+  ///
+  /// A wall-clock time is only a moment once you say whose wall it is on. Until
+  /// this column existed "19:00" could be read by somebody in the room and by
+  /// nobody else, because there was nothing to convert it FROM. Now there is:
+  /// see lib/timezones.ts, which does the arithmetic through the IANA database
+  /// so daylight saving is tracked rather than assumed.
+  ///
+  /// NOT NULL with a default, rather than nullable. Every session the centre has
+  /// ever held was in Melbourne, so "Australia/Melbourne" is the true value for
+  /// all of them; a null would mean "nobody knows", which is not the case for a
+  /// single existing row. The migration's default backfills them all in place.
+  ///
+  /// Sailavan, 2026-08-19, on the shortlist this is picked from: Melbourne,
+  /// Sydney, and Chennai / Tiruvannamalai / Hyderabad — "the rest of the cities
+  /// only if asked for".
+  timeZone String @default("Australia/Melbourne")
 
   /// What kind of session — "Routine Thursday", "Festival". A table rather
   /// than an enum because the centre owns the vocabulary and will change it

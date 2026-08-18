@@ -4,7 +4,7 @@ import { getRole, can } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
 import { Card, CardContent } from "@/components/ui";
 import { runningOrderLabel } from "@/lib/program";
-import { timeLabel } from "@/lib/sessionsOfDay";
+import { SessionTime } from "@/components/SessionTime";
 import { melbourneTodayISO } from "@/lib/dates";
 import { NOT_ARCHIVED } from "@/lib/archive";
 
@@ -31,6 +31,7 @@ export default async function ProgramsPage() {
       id: true,
       date: true,
       startsAt: true,
+      timeZone: true,
       topic: true,
       location: true,
       category: { select: { name: true, image: true } },
@@ -106,6 +107,7 @@ function ProgramRow({
     id: string;
     date: Date;
     startsAt: string | null;
+    timeZone: string;
     topic: string | null;
     location: string | null;
     category: { name: string; image: string | null } | null;
@@ -142,7 +144,16 @@ function ProgramRow({
         </span>
         <span className="block truncate text-sm text-on-surface-muted">
           {when}
-          {program.startsAt ? ` · ${timeLabel(program.startsAt)}` : ""}
+          {program.startsAt ? (
+            <>
+              {" · "}
+              <SessionTime
+                dateISO={isoOf(program.date)}
+                startsAt={program.startsAt}
+                timeZone={program.timeZone}
+              />
+            </>
+          ) : null}
           {program.location ? ` · ${program.location}` : ""}
         </span>
       </span>

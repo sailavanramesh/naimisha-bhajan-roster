@@ -400,11 +400,22 @@ export default async function RosterSessionPage({
    */
   const backToRosterHref = `/roster?m=${rosterMonth}&d=${rosterDay}`;
 
-  const dateLabel = new Date(session.date).toLocaleDateString(undefined, {
+  /*
+   * "en-AU" and UTC, not the runtime's guesses at either.
+   *
+   * `session.date` is a `@db.Date`, which arrives as midnight UTC. Formatting
+   * that in the reader's own zone is what puts a Thursday session on Wednesday
+   * for anybody west of UTC — the date is a calendar date, so it has to be read
+   * back on the calendar it was written on. The locale is pinned for the same
+   * reason every other date in the app pins it: `undefined` asks each engine
+   * for its own, and they disagree.
+   */
+  const dateLabel = new Date(session.date).toLocaleDateString("en-AU", {
     weekday: "long",
     year: "numeric",
     month: "long",
     day: "numeric",
+    timeZone: "UTC",
   });
 
   return (
@@ -632,6 +643,7 @@ export default async function RosterSessionPage({
               // The column is @db.Date, so the ISO day is the whole value.
               date: session.date.toISOString().slice(0, 10),
               startsAt: session.startsAt,
+              timeZone: session.timeZone,
             }}
           />
 

@@ -29,7 +29,14 @@ export default async function InstrumentsPage() {
             {sessions.map((s) => (
               <div key={s.id} className="rounded-[12px] border border-rule-surface bg-panel p-3">
                 <div className="text-sm font-medium">
-                  {new Date(s.date).toLocaleDateString(undefined, { weekday: "short", year: "numeric", month: "short", day: "numeric" })}
+                  {/* UTC: a session date is a calendar date, not an instant. */}
+                  {new Date(s.date).toLocaleDateString("en-AU", {
+                    weekday: "short",
+                    year: "numeric",
+                    month: "short",
+                    day: "numeric",
+                    timeZone: "UTC",
+                  })}
                 </div>
                 <div className="mt-2 grid gap-1 md:grid-cols-2">
                   {s.instruments.length === 0 ? (
