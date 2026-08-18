@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { CHORUS_COLOURS, type ChorusMic, type MicColourValue } from "@/lib/micCushion";
 import {
   addChorusSinger,
+  copyChorusDown,
   removeChorusSinger,
   setChorusCushion,
   type ChorusResult,
@@ -30,29 +31,64 @@ import {
  * honest reading of the screen was that a chorus mic was unsaved work you could
  * lose by leaving — which is why it now confirms each write where it happened.
  *
- * Two permissions, because they are two different acts. WHO choruses is an
- * allocation (`assignSingers`); the CUSHION is live desk state that anybody
- * signed in may set (`setMicCushion`). A person may well be able to do one and
- * not the other, so each control is enabled on its own.
+ * ONE permission, `setMicCushion`, which is everybody signed in. It was two —
+ * adding and removing needed `assignSingers` on the reasoning that WHO choruses
+ * is an allocation. Sailavan, 2026-08-18: "chorus mic selection and entry should
+ * be open to all users (with the copy down features too)." A chorus mic is not
+ * a rostered part; it is who has picked up the third mic tonight, and the
+ * person who knows that is standing at the desk, not editing the roster.
  */
 
 export function ChorusCell({
   slotId,
   singers,
   mics: fromServer,
-  canAssign,
-  canSetCushion,
+  canEdit,
+  canCopyDown = false,
+  onCopied,
 }: {
   slotId: string | null;
   singers: { id: string; name: string }[];
   mics: ChorusMic[];
-  canAssign: boolean;
-  canSetCushion: boolean;
+  /** May work the chorus mics at all: add, remove, colour, copy down. */
+  canEdit: boolean;
+  /** Is there a bhajan below this one to copy onto? Not shown on the last row. */
+  canCopyDown?: boolean;
+  /**
+   * The server's word on every slot the copy touched, this one included.
+   *
+   * Handed up rather than left to a page refresh: each cell owns its own list
+   * once it has seeded (see below), so the only honest way to move another
+   * cell is to give the grid fresh server data and let it re-seed that cell.
+   */
+  onCopied?: (mics: Record<string, ChorusMic[]>) => void;
 }) {
   const [mics, setMics] = useState<ChorusMic[]>(fromServer);
   const [pending, startTransition] = useTransition();
   const [status, setStatus] = useState<"idle" | "saved" | "failed">("idle");
+  /*
+   * What the copy down did, in words — and it GOES AWAY, like the tick.
+   *
+   * It did not, at first. Sailavan copied, then deleted every chorus mic, and
+   * "Copied to 1 bhajan. Left 1 that already had mics." was still sitting under
+   * an empty cell describing a session that no longer existed. The rule was
+   * already written four lines below for the tick — "short enough not to sit
+   * there claiming the last thing you did" — and this broke it.
+   *
+   * Longer than the tick because it is a sentence rather than a mark, and
+   * cleared outright by the next write in this cell: once somebody adds or
+   * removes a mic here, what the copy did is no longer what the screen shows.
+   */
+  const [copied, setCopied] = useState<string | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Drop the copy-down sentence, on a timer or because something moved. */
+  function clearCopied() {
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = null;
+    setCopied(null);
+  }
 
   /*
    * `mics` SEEDS from the prop and then owns itself. Do not add an effect that
@@ -80,6 +116,7 @@ export function ChorusCell({
   useEffect(() => {
     return () => {
       if (savedTimer.current) clearTimeout(savedTimer.current);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
     };
   }, []);
 
@@ -87,6 +124,8 @@ export function ChorusCell({
   function apply(run: () => Promise<ChorusResult>) {
     startTransition(async () => {
       setStatus("idle");
+      // Whatever the copy said is about to stop being true of this cell.
+      clearCopied();
       const res = await run();
       if (!res.ok) {
         setStatus("failed");
@@ -118,7 +157,7 @@ export function ChorusCell({
             <span className="min-w-0 flex-1 truncate text-[12px]" title={mic.name}>
               {mic.name}
             </span>
-            {canAssign ? (
+            {canEdit ? (
               <button
                 type="button"
                 disabled={pending}
@@ -147,13 +186,13 @@ export function ChorusCell({
                 <button
                   key={c.value}
                   type="button"
-                  disabled={!canSetCushion || pending}
+                  disabled={!canEdit || pending}
                   aria-pressed={on}
                   aria-label={`${c.label} chorus cushion for ${mic.name}`}
                   title={`${c.label} chorus cushion for ${mic.name}`}
                   className={`h-4 w-4 rounded-full border transition-transform ${
                     on ? "scale-110 border-on-surface" : "border-rule-surface opacity-70"
-                  } ${canSetCushion ? "hover:opacity-100" : "cursor-default"}`}
+                  } ${canEdit ? "hover:opacity-100" : "cursor-default"}`}
                   style={{ background: c.dot }}
                   onClick={() =>
                     // Tapping the colour it already is clears it, which is how
@@ -173,7 +212,7 @@ export function ChorusCell({
         </div>
       ))}
 
-      {canAssign ? (
+      {canEdit ? (
         /*
           Stays a select rather than becoming a multi-select list box. The
           people already on are shown above with their cushions, which a
@@ -206,12 +245,47 @@ export function ChorusCell({
       ) : null}
 
       {/*
+        COPY DOWN — the chorus is usually the same people all evening.
+
+        Only offered where it can do something: somebody may allocate, there is
+        a chorus here to copy, and there is a bhajan below to copy onto. It
+        fills the empty ones and leaves any that have already been answered, so
+        there is no confirm step and nothing to undo — and it says which it did,
+        because "all of them already had mics" is a correct press that otherwise
+        looks like a broken button.
+      */}
+      {canEdit && canCopyDown && mics.length > 0 ? (
+        <button
+          type="button"
+          disabled={pending || !slotId}
+          title="Put these chorus mics and cushions on the bhajans below that have none"
+          className="self-start text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface disabled:opacity-50"
+          onClick={() =>
+            startTransition(async () => {
+              if (!slotId) return;
+              clearCopied();
+              const res = await copyChorusDown({ slotId });
+              setCopied(res.ok ? res.message : res.error);
+              // Same reasoning as the tick, with longer on the clock: a
+              // sentence takes longer to read than a mark does.
+              copyTimer.current = setTimeout(() => setCopied(null), 8000);
+              if (res.ok) onCopied?.(res.mics);
+            })
+          }
+        >
+          ↴ copy down
+        </button>
+      ) : null}
+
+      {/*
         Said here, in the cell, not on the toolbar: this is the only place that
         can tell you the write has already happened.
       */}
       <span aria-live="polite" className="min-h-[13px] text-[11px] leading-none">
         {pending ? (
           <span className="text-on-surface-muted">Saving…</span>
+        ) : copied ? (
+          <span className="text-on-surface-muted">{copied}</span>
         ) : status === "saved" ? (
           <span className="text-on-surface-muted">Saved ✓</span>
         ) : status === "failed" ? (
