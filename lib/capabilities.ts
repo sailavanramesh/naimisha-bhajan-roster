@@ -42,6 +42,8 @@ export type Capability =
   | "editPrograms" // build a music program: its running order, performers, crew
   | "editSongWords" // lyrics and meanings in the song catalogue
   | "manageDesks" // the desks, their strips, and which cushion is on which channel
+  | "editGuide" // owner only: the wording of /guide, the page everybody reads
+  | "manageArchive" // owner only: restore an archived session, or finally delete one
   | "viewAllPages";
 
 const EDITOR_CAPABILITIES: Capability[] = [
@@ -67,9 +69,22 @@ const EDITOR_CAPABILITIES: Capability[] = [
 ];
 
 const MATRIX: Record<Role, ReadonlySet<Capability>> = {
-  // An owner is an editor plus the notification rules. Spelled out from the
-  // same list so the two can never drift apart.
-  owner: new Set<Capability>([...EDITOR_CAPABILITIES, "manageNotificationRules"]),
+  // An owner is an editor plus the notification rules and the guide. Spelled
+  // out from the same list so the two can never drift apart.
+  //
+  // `editGuide` sits here rather than with the editors for the same reason
+  // `manageNotificationRules` does: it is not a bigger version of editing a
+  // roster, it is changing what the app SAYS to everybody. One voice, one
+  // person keeping it.
+  owner: new Set<Capability>([
+    ...EDITOR_CAPABILITIES,
+    "manageNotificationRules",
+    "editGuide",
+    // An editor archives a session; only an owner decides it is really gone.
+    // The whole point of the archive is that the person who made the mistake is
+    // not the person who makes it permanent.
+    "manageArchive",
+  ]),
   editor: new Set<Capability>(EDITOR_CAPABILITIES),
   member: new Set<Capability>([
     // Sailavan: "only be able to edit the bhajan column, can't change the
@@ -104,12 +119,22 @@ export function can(role: Role, capability: Capability): boolean {
  */
 export type Grants = {
   canEditWords?: boolean;
-  canRunSound?: boolean;
+  /*
+   * The two sound jobs, held by the PERSON.
+   *
+   * One vaguer grant called `canRunSound` until 2026-08-18, when the jobs moved
+   * off SessionCrew and onto the singer. Both unlock the same capability, and
+   * they are two fields rather than one because the app also has to SAY which
+   * job somebody holds — on the desk, and in the banner on the live view.
+   */
+  soundEngineer?: boolean;
+  micCoordinator?: boolean;
 };
 
 const GRANTED: Record<keyof Grants, Capability> = {
   canEditWords: "editSongWords",
-  canRunSound: "manageDesks",
+  soundEngineer: "manageDesks",
+  micCoordinator: "manageDesks",
 };
 
 export function canWithGrants(

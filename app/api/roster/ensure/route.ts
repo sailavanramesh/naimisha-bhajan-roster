@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { getRole, can } from "@/lib/auth";
 import { defaultSessionOf, USUAL_START } from "@/lib/sessionsOfDay";
+import { NOT_ARCHIVED } from "@/lib/archive";
 
 export const runtime = "nodejs";
 
@@ -50,7 +51,7 @@ export async function POST(req: NextRequest) {
   if (!another && format === "bhajans") {
     // `format` is selected so defaultSessionOf can step around music programs.
     const onThatDay = await prisma.session.findMany({
-      where: { date: dt },
+      where: { ...NOT_ARCHIVED, date: dt },
       select: { id: true, startsAt: true, format: true },
     });
     const existing = defaultSessionOf(onThatDay);

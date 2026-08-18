@@ -13,6 +13,7 @@ import { notifyHarmoniumIfReady } from "@/lib/notifyHarmonium";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { NOT_ARCHIVED } from "@/lib/archive";
 
 const Apply = z.object({
   sessionId: z.string().min(1),
@@ -306,7 +307,7 @@ export async function goToSessionForDate(formData: FormData): Promise<void> {
   // start earliest — a 9am festival session must not capture the jump, and
   // `format` keeps a music program from capturing it either.
   const onThatDay = await prisma.session.findMany({
-    where: { date: day },
+    where: { ...NOT_ARCHIVED, date: day },
     select: { id: true, startsAt: true, format: true },
   });
   const session =

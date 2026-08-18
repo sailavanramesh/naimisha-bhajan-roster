@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   jobBanner,
+  jobsOf,
   jobHref,
   resolveSessionView,
   sessionHref,
@@ -72,8 +73,8 @@ describe("labels", () => {
   });
 
   it("says why the screen is different", () => {
-    expect(jobBanner("soundEngineer")).toBe("You are on sound for this session.");
-    expect(jobBanner("micCoordinator")).toBe("You are on mics for this session.");
+    expect(jobBanner("soundEngineer")).toBe("You are on sound.");
+    expect(jobBanner("micCoordinator")).toBe("You are on mics.");
   });
 });
 
@@ -86,5 +87,35 @@ describe("runsSound", () => {
 
   it("is false for somebody with no job on the night", () => {
     expect(runsSound([])).toBe(false);
+  });
+});
+
+/*
+ * The jobs come off the singer row now, not off a per-session crew table. The
+ * order matters: sound engineer first is what makes it win in
+ * resolveSessionView when somebody holds both.
+ */
+describe("jobsOf", () => {
+  it("reads both jobs off the person, sound engineer first", () => {
+    expect(jobsOf({ soundEngineer: true, micCoordinator: true })).toEqual([
+      "soundEngineer",
+      "micCoordinator",
+    ]);
+    expect(jobsOf({ soundEngineer: false, micCoordinator: true })).toEqual(["micCoordinator"]);
+    expect(jobsOf({ soundEngineer: true, micCoordinator: false })).toEqual(["soundEngineer"]);
+  });
+
+  it("gives nothing for somebody with no job, and for nobody at all", () => {
+    expect(jobsOf({ soundEngineer: false, micCoordinator: false })).toEqual([]);
+    expect(jobsOf({})).toEqual([]);
+    expect(jobsOf(null)).toEqual([]);
+    expect(jobsOf(undefined)).toEqual([]);
+  });
+
+  it("feeds resolveSessionView straight through", () => {
+    const me = { soundEngineer: false, micCoordinator: true };
+    expect(
+      resolveSessionView({ sessionId: "s1", format: "bhajans", jobs: jobsOf(me) }),
+    ).toEqual({ href: "/roster/s1/live", forJob: "micCoordinator" });
   });
 });

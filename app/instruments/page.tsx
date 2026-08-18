@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 
 import { getRole, can } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
+import { NOT_ARCHIVED } from "@/lib/archive";
 
 export const dynamic = "force-dynamic";
 export default async function InstrumentsPage() {
@@ -10,6 +11,7 @@ export default async function InstrumentsPage() {
   if (!can(role, "viewAllPages")) return <NoAccess what="The instruments page" role={role} />;
 
   const sessions = await prisma.session.findMany({
+    where: { ...NOT_ARCHIVED },
     orderBy: { date: "desc" },
     take: 120,
     include: { instruments: true },

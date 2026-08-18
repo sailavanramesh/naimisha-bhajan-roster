@@ -12,21 +12,30 @@ import { deleteSession } from "./metaActions";
  * roster, and a destructive control sitting in the eyeline all evening is one
  * that eventually gets pressed.
  *
- * The server refuses anything holding a confirmed pitch, so the confirm step
- * guards against a mis-click rather than against data loss. It still says what
- * will go, because "3 rows" is the difference between an empty mistake and
- * somebody's plan for Thursday.
+ * IT ARCHIVES. Since 2026-08-18 this takes the session out of every view and
+ * every history but keeps the row, and only an owner can finish the job from
+ * /admin/archive. So the confirm step guards against a mis-click rather than
+ * against data loss — nothing here is final.
+ *
+ * It still says what will go, because "3 rows" is the difference between an
+ * empty mistake and somebody's plan for Thursday, and it says so louder when
+ * confirmed pitches are involved: those come out of the history for as long as
+ * the session is archived, which is the one consequence that is not obvious
+ * from the words "removed from the list".
  */
 export function DeleteSessionButton({
   sessionId,
   dateLabel,
   rows,
+  pitches = 0,
   kind = "session",
   backTo = "/roster",
 }: {
   sessionId: string;
   dateLabel: string;
   rows: number;
+  /** Confirmed pitches on it — what somebody actually sang. Worth naming. */
+  pitches?: number;
   /**
    * What is being deleted, in the words on screen. A music program is a Session
    * underneath and deletes through the same action, but nobody at the centre
@@ -64,7 +73,7 @@ export function DeleteSessionButton({
           }}
           className="justify-self-start text-xs text-on-surface-muted underline underline-offset-2 hover:text-warn"
         >
-          Delete this {kind}
+          Remove this {kind}
         </button>
         {error ? (
           <p role="alert" className="rounded-[10px] border border-warn/40 bg-warn/[0.08] px-3 py-2 text-xs">
@@ -78,7 +87,7 @@ export function DeleteSessionButton({
   return (
     <div className="grid gap-2 rounded-[10px] border border-warn/40 bg-warn/[0.08] px-3 py-2">
       <p className="text-xs">
-        Delete <strong>{dateLabel}</strong>
+        Remove <strong>{dateLabel}</strong>
         {rows > 0 ? (
           <>
             {" "}
@@ -90,8 +99,15 @@ export function DeleteSessionButton({
         ) : (
           " (nothing is rostered on it)"
         )}
-        ? This cannot be undone.
+        ? It goes out of every list and every history, and stays in the archive where an
+        owner can put it back.
       </p>
+      {pitches > 0 ? (
+        <p className="text-xs font-semibold">
+          {pitches} confirmed pitch{pitches === 1 ? "" : "es"} on it — what those singers
+          actually sang — will not count towards anybody&rsquo;s history until it is restored.
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
@@ -99,7 +115,7 @@ export function DeleteSessionButton({
           disabled={pending}
           className="h-8 rounded-[8px] border border-warn/60 bg-warn/15 px-3 text-xs font-semibold hover:bg-warn/25"
         >
-          {pending ? "Deleting…" : "Yes, delete it"}
+          {pending ? "Removing…" : "Yes, remove it"}
         </button>
         <button
           type="button"

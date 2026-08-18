@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { pushToSingers, pushConfigured } from "@/lib/push";
 import { publishedNotification, shouldNotifyForSession } from "@/lib/notify";
 import { melbourneTodayISO } from "@/lib/dates";
+import { NOT_ARCHIVED } from "./archive";
 
 /**
  * lib/announceRosters.ts — "the roster for Thursday is up", once it actually is.
@@ -135,6 +136,7 @@ export async function announceSettledRosters(now: Date = new Date()): Promise<An
     const todayISO = melbourneTodayISO(now);
     const sessions = await prisma.session.findMany({
       where: {
+        ...NOT_ARCHIVED,
         date: { gte: new Date(`${todayISO}T00:00:00.000Z`) },
         // Bhajan sessions only. `slots: some` already excludes programs, which
         // have none — this says so on purpose rather than by consequence, so

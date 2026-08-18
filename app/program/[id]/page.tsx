@@ -1,15 +1,14 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
-import { getRole, can, getSignedInSinger } from "@/lib/auth";
-import { runsSound, type SessionJob } from "@/lib/sessionView";
+import { getRole, can, getSignedInSinger, type Role } from "@/lib/auth";
+import { jobsOf, runsSound } from "@/lib/sessionView";
 import { NoAccess } from "@/components/RequireRole";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
+import { Card, CardContent } from "@/components/ui";
 import { SessionMetaPanel } from "@/app/roster/[id]/SessionMetaPanel";
 import { DeleteSessionButton } from "@/app/roster/[id]/DeleteSessionButton";
 import { timeLabel } from "@/lib/sessionsOfDay";
 import { ProgramEditor } from "./ProgramEditor";
-import { ProgramCrew } from "./ProgramCrew";
 import { ChannelGrid } from "./ChannelGrid";
 import { occupantFor, sharedName, sortChannels } from "@/lib/deskChannels";
 
@@ -36,7 +35,6 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
     where: { id },
     include: {
       category: { select: { id: true, name: true } },
-      crew: { include: { singer: { select: { id: true, name: true } } } },
       desk: { select: { id: true, name: true } },
       channels: {
         include: {
@@ -103,6 +101,14 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
   // and neither can strand somebody on the wrong editor.
   if (session.format !== "program") redirect(`/roster/${session.id}`);
 
+  /*
+   * Removed, and therefore not here — including for whoever still has the link
+   * open in a tab. Nothing else leads here any more; this is the one door left,
+   * and it says where the programme went rather than showing it as if nothing
+   * had happened.
+   */
+  if (session.archivedAt) return <Removed kind="programme" role={role} />;
+
   const canEdit = can(role, "editPrograms");
 
   /*
@@ -110,24 +116,15 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
    * strips again, and the channel list.
    *
    * Sailavan: those "shouldn't be available to anyone but editors and people
-   * marked as sound engineers or mic coordinators", allocated under "Who is
-   * running it". So it is a job on one night, not a standing grant: the person
-   * who agreed to run this programme's sound may set up this programme's
-   * channels, and that says nothing about next week's.
+   * marked as sound engineers or mic coordinators". Both are now roles on the
+   * PERSON, set in /admin, so this asks one question instead of the two it used
+   * to — a per-night crew row and a standing grant that always agreed with it.
    *
-   * Distinct from `canRunSound`, which is the standing grant to edit the DESK
-   * itself in /admin — the centre's hardware, the same next week. Two questions,
-   * two answers; see lib/sessionView.ts runsSound.
-   *
-   * Read from the crew already loaded above rather than re-queried, and only for
-   * somebody the app can name: a shared access link is not a person, so it
-   * cannot hold a job.
+   * Only for somebody the app can name: a shared access link is not a person,
+   * so it cannot hold a job.
    */
   const me = await getSignedInSinger();
-  const myJobs = me
-    ? session.crew.filter((c) => c.singer.id === me.id).map((c) => c.job as SessionJob)
-    : [];
-  const canSetUpDesk = canEdit || runsSound(myJobs);
+  const canSetUpDesk = canEdit || runsSound(jobsOf(me));
 
   const [singers, instruments, categories, places, desks] = await Promise.all([
     prisma.singer.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
@@ -335,27 +332,12 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
         canSetUpDesk={canSetUpDesk}
       />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Who is running it</CardTitle>
-          <p className="mt-1 text-sm text-on-surface-muted">
-            Somebody on a job here lands on the screen for that job when they open the
-            session, instead of hunting for it.
-          </p>
-        </CardHeader>
-        <CardContent>
-          <ProgramCrew
-            sessionId={session.id}
-            singers={singers}
-            crew={session.crew.map((c) => ({
-              singerId: c.singerId,
-              singerName: c.singer.name,
-              job: c.job,
-            }))}
-            canEdit={canEdit}
-          />
-        </CardContent>
-      </Card>
+      {/*
+        "Who is running it" used to sit here — two pickers naming the sound
+        engineer and the mic coordinator for this one programme. Gone entirely
+        as of 2026-08-18: both are roles on the person now, set once in /admin,
+        so there was nothing left for a per-programme card to say.
+      */}
 
       {canEdit ? (
         <DeleteSessionButton
@@ -366,6 +348,35 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
           backTo="/program"
         />
       ) : null}
+    </div>
+  );
+}
+
+
+/**
+ * What is left where an archived session used to be.
+ *
+ * Deliberately not a 404: the person reading this pressed a link that worked
+ * yesterday, and "not found" would send them looking for a bug. An owner is
+ * told where to go about it; everybody else is told who to ask.
+ */
+function Removed({ kind, role }: { kind: "programme" | "session"; role: Role }) {
+  return (
+    <div className="rounded-[14px] border border-card-edge bg-surface p-6">
+      <h1 className="font-display text-2xl font-semibold">This {kind} was removed</h1>
+      <p className="mt-2 max-w-prose text-sm text-on-surface-muted">
+        It is in the archive rather than gone — nothing on it has been touched, and putting it
+        back restores it exactly as it was.
+      </p>
+      <p className="mt-2 text-sm text-on-surface-muted">
+        {can(role, "manageArchive") ? (
+          <Link href="/admin/archive" className="underline underline-offset-2">
+            Review the archive →
+          </Link>
+        ) : (
+          "Ask the coordinator if it should come back."
+        )}
+      </p>
     </div>
   );
 }

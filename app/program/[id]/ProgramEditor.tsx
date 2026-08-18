@@ -232,10 +232,18 @@ function ItemCard({
             aria-expanded={isOpen}
             className="min-w-0 flex-1 text-left"
           >
-            <span className="block truncate font-display text-lg font-semibold">
-              {heading}
+            {/*
+              THE KEY NEVER TRUNCATES. The title does.
+
+              Both used to sit inside one `truncate` span, so a long title ate
+              the note — Sailavan: "can't see key if the song title too big",
+              and the key is the one thing on this line somebody is scanning for.
+              Its own flex child, `shrink-0`, so the ellipsis lands in the title.
+            */}
+            <span className="flex min-w-0 items-baseline gap-2 font-display text-lg font-semibold">
+              <span className="min-w-0 truncate">{heading}</span>
               {draft.pitchNote ? (
-                <span className="ml-2 font-mono text-sm font-normal text-on-surface-muted">
+                <span className="shrink-0 font-mono text-sm font-normal text-on-surface-muted">
                   {draft.pitchNote}
                 </span>
               ) : null}

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle, SectionTitle, Figure, Badge } from "@/components/ui";
 import { summariseLoad } from "@/lib/fairness";
+import { NOT_ARCHIVED, LIVE_SESSION } from "@/lib/archive";
 
 export const dynamic = "force-dynamic";
 
@@ -17,21 +18,21 @@ export default async function Page() {
       const [upcoming, masterCount, sessionCount, singers, recentSlots, sungCount] =
         await Promise.all([
           prisma.session.findMany({
-            where: { date: { gte: today, lte: in60 } },
+            where: { ...NOT_ARCHIVED, date: { gte: today, lte: in60 } },
             orderBy: { date: "asc" },
             take: 5,
             include: { slots: { include: { singer: true, bhajan: true }, orderBy: { position: "asc" } } },
           }),
           prisma.bhajan.count(),
-          prisma.session.count(),
+          prisma.session.count({ where: NOT_ARCHIVED }),
           // Rosterable singers only: this feeds the load summary and the
           // Singers count, both of which are statements about who sings.
           prisma.singer.findMany({ where: { gender: { not: null } }, orderBy: { name: "asc" } }),
           prisma.sessionSlot.findMany({
-            where: { session: { date: { gte: since } } },
+            where: { session: { ...LIVE_SESSION, date: { gte: since } } },
             select: { singerId: true },
           }),
-          prisma.sessionSlot.count({ where: { bhajanId: { not: null } } }),
+          prisma.sessionSlot.count({ where: { bhajanId: { not: null }, session: LIVE_SESSION } }),
         ]);
 
       return { upcoming, masterCount, sessionCount, singers, recentSlots, sungCount };

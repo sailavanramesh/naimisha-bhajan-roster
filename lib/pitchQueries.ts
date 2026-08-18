@@ -11,6 +11,7 @@ import type { SungRow } from '@/lib/singerProfile';
 import { buildAllProfiles, buildSingerProfile, type SingerProfile } from '@/lib/singerProfile';
 import { historyCutoff } from '@/lib/dates';
 import { hasBeenSung, melbourneNowLocal } from '@/lib/sungCutoff';
+import { LIVE_SESSION } from "./archive";
 
 /*
  * Offsets are learned from what has been SUNG. A confirmed pitch on a session
@@ -22,7 +23,14 @@ import { hasBeenSung, melbourneNowLocal } from '@/lib/sungCutoff';
  * the session's own start time is available; keeping the date filter in SQL
  * means we never drag the whole future roster back to compare it.
  */
-const SUNG_SESSION = () => ({ date: { lte: historyCutoff() } });
+/*
+ * An archived session is out of the history too.
+ *
+ * Not merely a view: a pitch profile computed over sessions somebody has
+ * deleted would keep predicting from a night the group has decided did not
+ * happen. Restoring the session brings its rows back with it.
+ */
+const SUNG_SESSION = () => ({ ...LIVE_SESSION, date: { lte: historyCutoff() } });
 
 type PitchLabelRow = {
   label: string;
@@ -211,7 +219,7 @@ export type ScheduledRow = {
  */
 export async function getScheduledRowsForBhajan(bhajanId: string): Promise<ScheduledRow[]> {
   const slots = await prisma.sessionSlot.findMany({
-    where: { bhajanId, session: { date: { gte: historyCutoff() }, format: 'bhajans' } },
+    where: { bhajanId, session: { ...LIVE_SESSION, date: { gte: historyCutoff() }, format: 'bhajans' } },
     select: {
       confirmedPitch: true,
       singer: { select: { name: true } },

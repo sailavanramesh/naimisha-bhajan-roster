@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { NOT_ARCHIVED } from "@/lib/archive";
 
 export const runtime = "nodejs";
 
@@ -71,7 +72,7 @@ export async function GET(req: NextRequest) {
   const monthEndExclusive = new Date(Date.UTC(parsed.y, parsed.mo + 1, 1, 0, 0, 0));
 
   const sessions = await prisma.session.findMany({
-    where: { date: { gte: monthStart, lt: monthEndExclusive } },
+    where: { ...NOT_ARCHIVED, date: { gte: monthStart, lt: monthEndExclusive } },
     select: {
       id: true,
       date: true,

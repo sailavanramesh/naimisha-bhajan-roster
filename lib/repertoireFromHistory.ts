@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/db";
 import { RepertoireKind } from "@prisma/client";
 import { hasBeenSung, melbourneNowLocal } from "@/lib/sungCutoff";
+import { NOT_ARCHIVED } from "./archive";
 
 /**
  * lib/repertoireFromHistory.ts — singing something puts it on your list.
@@ -148,7 +149,7 @@ export async function syncSungRepertoire(
   const nowLocal = melbourneNowLocal(now);
 
   const sessions = await prisma.session.findMany({
-    where: { date: { gte: from }, slots: { some: { singerId: { not: null }, bhajanId: { not: null } } } },
+    where: { ...NOT_ARCHIVED, date: { gte: from }, slots: { some: { singerId: { not: null }, bhajanId: { not: null } } } },
     select: { id: true, date: true, startsAt: true },
     orderBy: { date: "asc" },
   });

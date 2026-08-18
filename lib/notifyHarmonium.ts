@@ -9,6 +9,7 @@ import {
   harmoniumReadyNotification,
   type HarmoniumLine,
 } from "@/lib/harmoniumNotice";
+import { NOT_ARCHIVED } from "./archive";
 
 /**
  * lib/notifyHarmonium.ts — telling the harmonium players, and only when useful.
@@ -178,6 +179,7 @@ export async function notifyHarmoniumForSessions(now: Date = new Date()): Promis
   const todayISO = melbourneTodayISO(now);
   const sessions = await prisma.session.findMany({
     where: {
+      ...NOT_ARCHIVED,
       format: "bhajans",
       date: { gte: new Date(`${todayISO}T00:00:00.000Z`) },
     },

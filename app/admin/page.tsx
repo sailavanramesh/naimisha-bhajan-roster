@@ -267,24 +267,45 @@ export default async function AdminPage({
                 edits words
               </label>
               {/*
-                The second grant, and the same argument. The sound engineer and
-                the mic coordinator have to keep the desk and its cushion
-                allocation right; making them an editor to do it would hand them
-                the whole roster.
+                THE TWO SOUND JOBS — and this is now the only place they are set.
+
+                They used to be allocated per session, under "Who is running it"
+                on every programme, which meant re-entering the same three
+                people every week. Sailavan: "if we add the roles of mic
+                coordinator and sound engineer at the admin level we can remove
+                who is running it from all views."
+
+                Both unlock the desk and its cushion allocation without making
+                somebody an editor, which would hand them the whole roster. Both
+                also decide where that person lands when they open a session.
               */}
               <label
                 className="flex items-center gap-1.5 text-[11px] text-on-surface-muted"
-                title="May edit the desks, their strips and which cushion is on which channel"
+                title="Runs the desk. May edit the desks, their strips and which cushion is on which channel, and lands on the desk view when they open a session"
               >
                 <input
-                  key={`sound-${s.canRunSound}`}
+                  key={`sound-${s.soundEngineer}`}
                   type="checkbox"
-                  name="canRunSound"
-                  defaultChecked={s.canRunSound}
+                  name="soundEngineer"
+                  defaultChecked={s.soundEngineer}
                   disabled={!canEdit}
                   className="h-4 w-4"
                 />
-                runs sound
+                sound engineer
+              </label>
+              <label
+                className="flex items-center gap-1.5 text-[11px] text-on-surface-muted"
+                title="Runs the mics. Same access to the desks and the cushion allocation"
+              >
+                <input
+                  key={`mics-${s.micCoordinator}`}
+                  type="checkbox"
+                  name="micCoordinator"
+                  defaultChecked={s.micCoordinator}
+                  disabled={!canEdit}
+                  className="h-4 w-4"
+                />
+                mic coordinator
               </label>
               <div className="flex items-center gap-2">
                 {canEdit ? (
@@ -424,8 +445,8 @@ export default async function AdminPage({
           <p className="mt-1 text-sm text-on-surface-muted">
             The desks, their strips, and which cushion is on which channel. On a page of their
             own because the people who keep them right are the sound engineer and the mic
-            coordinator, and they are not editors — tick &ldquo;runs sound&rdquo; against
-            somebody above to let them in.
+            coordinator, and they are not editors — tick one of those two against somebody
+            above to let them in.
           </p>
         </CardHeader>
         <CardContent>
@@ -436,6 +457,26 @@ export default async function AdminPage({
       </Card>
 
 
+
+      {/* ---- The archive ---- */}
+      {can(role, "manageArchive") ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Archive</CardTitle>
+            <p className="mt-1 text-sm text-on-surface-muted">
+              Sessions and programmes an editor has removed. They are out of every list and
+              every history and nothing on them has been touched, so putting one back restores
+              it exactly as it was. Owner only, on purpose: the person who removed something is
+              not the person who decides it is really gone.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <Link href="/admin/archive" className="text-sm underline underline-offset-2">
+              Archive →
+            </Link>
+          </CardContent>
+        </Card>
+      ) : null}
 
       {/* ---- Instrument eligibility ---- */}
       <Card>

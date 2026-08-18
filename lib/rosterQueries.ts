@@ -10,6 +10,7 @@ import { saOf } from '@/lib/pitch';
 import { buildAllProfiles } from '@/lib/singerProfile';
 import { getAllSungRows } from '@/lib/pitchQueries';
 import type { SingerContext, SlotContext } from '@/lib/rosterScoring';
+import { LIVE_SESSION } from "./archive";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -26,7 +27,7 @@ export async function getSingerContexts(sessionDate: Date): Promise<SingerContex
       select: { singerId: true, bhajanId: true },
     }),
     prisma.sessionSlot.findMany({
-      where: { singerId: { not: null } },
+      where: { singerId: { not: null }, session: LIVE_SESSION },
       select: { singerId: true, bhajanId: true, session: { select: { date: true } } },
     }),
     prisma.singerAvailability.findMany({ where: { date: sessionDate } }),

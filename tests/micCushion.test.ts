@@ -22,8 +22,22 @@ const polled = (
 ): PolledCushion => ({ singerId, colour, updatedAt });
 
 describe("mic colour values", () => {
-  it("offers exactly the four cushions on the desk", () => {
-    expect(MIC_COLOURS.map((c) => c.value)).toEqual(["blue", "grey", "orange", "pink"]);
+  /*
+   * The list is the cushions the centre physically owns — four until black,
+   * yellow and maroon were added on 2026-08-18. Asserted in order, because the
+   * four originals staying first is the part that matters: they are what
+   * everybody's thumb already knows where to find.
+   */
+  it("offers exactly the cushions on the desk, originals first", () => {
+    expect(MIC_COLOURS.map((c) => c.value)).toEqual([
+      "blue",
+      "grey",
+      "orange",
+      "pink",
+      "black",
+      "yellow",
+      "maroon",
+    ]);
   });
 
   it("accepts only real colours", () => {
@@ -120,6 +134,9 @@ describe("nextColour", () => {
     expect(nextColour("blue")).toBe("grey");
     expect(nextColour("grey")).toBe("orange");
     expect(nextColour("orange")).toBe("pink");
-    expect(nextColour("pink")).toBe(null);
+    expect(nextColour("pink")).toBe("black");
+    expect(nextColour("black")).toBe("yellow");
+    expect(nextColour("yellow")).toBe("maroon");
+    expect(nextColour("maroon")).toBe(null);
   });
 });

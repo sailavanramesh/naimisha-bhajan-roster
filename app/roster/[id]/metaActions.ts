@@ -3,7 +3,8 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
-import { requireCapability } from "@/lib/auth";
+import { requireCapability, getSignedInSinger } from "@/lib/auth";
+import { NOT_ARCHIVED } from "@/lib/archive";
 
 const Input = z.object({
   sessionId: z.string().min(1),
@@ -92,25 +93,32 @@ export async function updateSessionMeta(
 }
 
 /**
- * Delete a session.
+ * Delete a session — which now ARCHIVES it.
  *
  * There was no way to do this at all until 2026-08-12, which showed: 17
  * sessions existed with nothing on them, two of them on the same day. Tapping
  * a day creates a session, so mis-taps accumulate, and until now the only
  * cure was the database.
  *
- * REFUSES A SESSION THAT HOLDS A CONFIRMED PITCH. That is the one piece of
- * genuinely irreplaceable data in this app — what somebody actually sang, at
- * what shruti — and it exists nowhere else. The same rule already governs
- * removing a single row from the assign panel, so this is consistent rather
- * than new.
+ * ARCHIVED, NOT DELETED, since 2026-08-18. Sailavan: a deleted session "should
+ * be removed from all views but kept as an archived session or program that the
+ * Owner can review and either restore or permanently delete, to have as a
+ * fallback in case some accidental mistakes have been made." The row stays, out
+ * of sight of every list and every history — see lib/archive.ts — and only an
+ * owner finishes the job, from /admin/archive.
  *
- * Everything else cascades: slots without pitches, instruments, notices,
- * per-session notification rules. Those are all plans or bookkeeping.
+ * IT NO LONGER REFUSES A SESSION WITH A CONFIRMED PITCH. It used to, because a
+ * delete lost what somebody actually sang and that exists nowhere else. This is
+ * reversible, so refusing would be protecting data that is not at risk — but
+ * archiving does take those rows out of the history while it lasts, so the count
+ * comes back to the caller and the button says so before it is pressed. The
+ * refusal moved to where it belongs: permanent deletion, in archiveActions.ts.
  */
 export async function deleteSession(
   sessionId: string,
-): Promise<{ ok: true; date: string } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; date: string; pitches: number } | { ok: false; error: string }
+> {
   await requireCapability("buildSessions");
   if (!sessionId) return { ok: false, error: "Nothing to delete." };
 
@@ -118,27 +126,28 @@ export async function deleteSession(
     where: { id: sessionId },
     select: {
       date: true,
-      slots: { select: { confirmedPitch: true, singer: { select: { name: true } } } },
+      archivedAt: true,
+      slots: { select: { confirmedPitch: true } },
     },
   });
   if (!session) return { ok: false, error: "That session is already gone." };
+  if (session.archivedAt) return { ok: false, error: "That session is already archived." };
 
-  const withPitch = session.slots.filter((s) => s.confirmedPitch);
-  if (withPitch.length > 0) {
-    const names = [...new Set(withPitch.map((s) => s.singer?.name).filter(Boolean))];
-    return {
-      ok: false,
-      error:
-        `This session has ${withPitch.length} confirmed pitch${withPitch.length === 1 ? "" : "es"} on it` +
-        `${names.length ? ` (${names.join(", ")})` : ""} — that is a record of what was actually sung, ` +
-        `and it exists nowhere else. Clear those rows first if you really mean to lose it.`,
-    };
-  }
+  const me = await getSignedInSinger();
 
-  await prisma.session.delete({ where: { id: sessionId } });
+  await prisma.session.update({
+    where: { id: sessionId },
+    data: { archivedAt: new Date(), archivedBy: me?.name ?? null },
+  });
 
   revalidatePath("/roster");
-  return { ok: true, date: session.date.toISOString().slice(0, 10) };
+  revalidatePath("/program");
+  revalidatePath("/admin/archive");
+  return {
+    ok: true,
+    date: session.date.toISOString().slice(0, 10),
+    pitches: session.slots.filter((s) => s.confirmedPitch).length,
+  };
 }
 
 const BulkInput = z.object({
@@ -233,7 +242,7 @@ export async function bulkDeleteSessions(
   if (sessionIds.length > 500) return { ok: false, error: "Too many at once." };
 
   const sessions = await prisma.session.findMany({
-    where: { id: { in: sessionIds } },
+    where: { ...NOT_ARCHIVED, id: { in: sessionIds } },
     select: {
       id: true,
       date: true,
@@ -357,7 +366,7 @@ export async function removeSessionCategory(
   await requireCapability("manageAllocations");
   if (!id) return { ok: false, error: "Nothing to remove." };
 
-  const freed = await prisma.session.count({ where: { categoryId: id } });
+  const freed = await prisma.session.count({ where: { ...NOT_ARCHIVED, categoryId: id } });
   await prisma.sessionCategory.delete({ where: { id } });
 
   revalidatePath("/admin");

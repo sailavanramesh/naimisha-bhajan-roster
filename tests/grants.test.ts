@@ -10,6 +10,37 @@ describe("canWithGrants", () => {
     expect(canWithGrants("member", "buildSessions", { canEditWords: true })).toBe(false);
   });
 
+  /*
+   * The two sound jobs. Both unlock the same capability and nothing else — the
+   * desk and its cushion allocation, without the roster that being an editor
+   * would carry with it.
+   */
+  it("lets either sound job manage the desks, and nothing else", () => {
+    for (const job of ["soundEngineer", "micCoordinator"] as const) {
+      expect(canWithGrants("member", "manageDesks", { [job]: true })).toBe(true);
+      expect(canWithGrants("member", "assignSingers", { [job]: true })).toBe(false);
+      expect(canWithGrants("member", "editPrograms", { [job]: true })).toBe(false);
+      expect(canWithGrants("member", "editSongWords", { [job]: true })).toBe(false);
+    }
+  });
+
+  it("does not let the words grant reach the desks, or the other way round", () => {
+    expect(canWithGrants("member", "manageDesks", { canEditWords: true })).toBe(false);
+    expect(canWithGrants("member", "editSongWords", { soundEngineer: true })).toBe(false);
+  });
+
+  it("keeps the guide and the archive to the owner, grant or no grant", () => {
+    expect(can("owner", "editGuide")).toBe(true);
+    expect(can("editor", "editGuide")).toBe(false);
+    // An editor archives; only an owner restores or finally deletes.
+    expect(can("owner", "manageArchive")).toBe(true);
+    expect(can("editor", "manageArchive")).toBe(false);
+    expect(can("editor", "buildSessions")).toBe(true);
+    expect(
+      canWithGrants("editor", "editGuide", { soundEngineer: true, canEditWords: true }),
+    ).toBe(false);
+  });
+
   it("leaves a member without the grant exactly where they were", () => {
     expect(canWithGrants("member", "editSongWords", { canEditWords: false })).toBe(false);
     expect(canWithGrants("member", "editSongWords", null)).toBe(false);
@@ -68,5 +99,8 @@ const CAPABILITIES: Capability[] = [
   "manageNotificationRules",
   "editPrograms",
   "editSongWords",
+  "manageDesks",
+  "editGuide",
+  "manageArchive",
   "viewAllPages",
 ];

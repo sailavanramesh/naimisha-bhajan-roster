@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { NOT_ARCHIVED } from "@/lib/archive";
 
 function parseMonth(month: string) {
   // month = "YYYY-MM"
@@ -47,6 +48,7 @@ export async function GET(req: Request) {
 
   const sessions = await prisma.session.findMany({
     where: {
+      ...NOT_ARCHIVED,
       date: { gte: range.start, lt: range.end },
     },
     select: {

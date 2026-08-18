@@ -106,6 +106,37 @@ export function layerLines(text?: string | null): string[] {
 }
 
 /**
+ * The line a song is known by — its opening line.
+ *
+ * The catalogue list used to show "tradition · language" under each title, and
+ * neither is filled in for the centre's own songs, so every row read as a bare
+ * em dash. Sailavan: "it is meaningless … can we have something more meaningful
+ * and useful showing there". The opening line is what a singer actually
+ * recognises a song by, and it is the one thing every catalogued song has.
+ *
+ * Transliteration first, because that is what most people sing from; the script
+ * where there is no transliteration yet. Cut on a word boundary, because a line
+ * chopped mid-word reads as a bug rather than as a line that goes on.
+ */
+export function openingLine(
+  verse: { roman?: string | null; script?: string | null } | null | undefined,
+  { max = 80 }: { max?: number } = {},
+): string | null {
+  if (!verse) return null;
+
+  const first = [verse.roman, verse.script]
+    .map((layer) => layerLines(layer).find((l) => l.trim().length > 0)?.trim())
+    .find((line) => line && line.length > 0);
+
+  if (!first) return null;
+  if (first.length <= max) return first;
+
+  const cut = first.slice(0, max);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > max / 2 ? cut.slice(0, space) : cut).trimEnd()}…`;
+}
+
+/**
  * A layer's lines WITH its blanks, for lining the layers up against each other.
  *
  * `layerLines` strips blank lines off both ends, which is right for reading a

@@ -7,6 +7,8 @@ import { useMicCushions, cushionTint } from "@/components/MicCushions";
 import { useSessionVersion } from "@/components/useSessionVersion";
 import { hasMoreBelow, isRowSeen, movedRows } from "@/lib/liveBoard";
 import { MIC_COLOURS, micColourDot, micColourLabel, type ChorusMic } from "@/lib/micCushion";
+import type { LiveStrip } from "@/lib/liveDesk";
+import { LiveDesk } from "./LiveDesk";
 
 export type LiveSlot = {
   position: number;
@@ -129,6 +131,7 @@ export function LiveBoard({
   categoryName,
   categoryImage,
   slots,
+  desk,
 }: {
   sessionId: string;
   heading: string;
@@ -137,8 +140,32 @@ export function LiveBoard({
   categoryName?: string | null;
   categoryImage?: string | null;
   slots: LiveSlot[];
+  /**
+   * The desk this session is mixed on, for the mic view. Null when the centre
+   * has no desks described yet, in which case the toggle is not offered at all.
+   */
+  desk: {
+    id: string | null;
+    name: string | null;
+    strips: LiveStrip[];
+    choices: { id: string; name: string }[];
+    /** Which bhajan the room is on. Shared across devices, so it polls in. */
+    currentPosition: number | null;
+    canSetUp: boolean;
+  } | null;
 }) {
   const cushions = useMicCushions(sessionId);
+
+  /*
+   * The board, or the desk.
+   *
+   * Sailavan asked for the mic view to be "viewable to all, but not as obvious
+   * as in the programs, just a button to toggle". So it is one press from the
+   * rail and nothing else changes — same overlay, same exit, same live cushions
+   * underneath both. State rather than a route because the two views are the
+   * same screen looked at two ways, and a sound person flips between them.
+   */
+  const [view, setView] = useState<"board" | "desk">("board");
   /*
    * The rest of the board, kept current too.
    *
@@ -477,6 +504,32 @@ export function LiveBoard({
           <span aria-hidden>×</span>
         </Link>
 
+        {/*
+          The mic view, one press away.
+
+          Deliberately the plainest control on the screen: a small round button
+          in the rail beside the exit, no label, no colour. Almost nobody on
+          this screen wants the desk — they want the bhajan and the shruti — but
+          the one person who does wants it without leaving the live view.
+        */}
+        {desk ? (
+          <button
+            type="button"
+            aria-pressed={view === "desk"}
+            aria-label={view === "desk" ? "Back to the bhajans" : "Show the mics and channels"}
+            title={view === "desk" ? "Back to the bhajans" : "Mics and channels"}
+            onClick={() => setView(view === "desk" ? "board" : "desk")}
+            className={[
+              "mt-2 inline-flex h-7 w-7 items-center justify-center rounded-full border text-[13px] leading-none",
+              view === "desk"
+                ? "border-brass/70 bg-brass/20 text-brass"
+                : "border-rule bg-surface text-on-surface-muted hover:border-brass/50 hover:text-on-surface",
+            ].join(" ")}
+          >
+            <span aria-hidden>{view === "desk" ? "♪" : "🎛"}</span>
+          </button>
+        ) : null}
+
         {/* vertical-rl + rotate-180 reads bottom-to-top, which keeps the date
             upright from the left edge rather than upside down. */}
         <div className="flex min-h-0 flex-1 items-center py-3">
@@ -516,11 +569,70 @@ export function LiveBoard({
         )}
       </aside>
 
+      {/*
+        THE DESK, when it is asked for.
+
+        In place of the bhajan list rather than beside it: the two want the same
+        screen, and a sound person switching to the desk has stopped reading the
+        running order for a moment. The cushions underneath are the same live
+        map either way, so a dot tapped on the board moves a name on the desk
+        without a reload.
+      */}
+      {view === "desk" && desk ? (
+        <div className="min-w-0 flex-1 overflow-auto">
+          <LiveDesk
+            sessionId={sessionId}
+            deskId={desk.id}
+            deskName={desk.name}
+            desks={desk.choices}
+            strips={desk.strips}
+            currentPosition={desk.currentPosition}
+            /*
+             * One entry per BHAJAN, because that is the level at which the
+             * answer changes: the lead is per bhajan, and a chorus cushion
+             * belongs to the bhajan rather than to the night.
+             *
+             * The lead's cushion comes from the LIVE map, so a dot tapped on
+             * the board moves a name on the desk without a reload. The chorus
+             * cushions come with the slot — they are already per bhajan and do
+             * not poll.
+             */
+            slots={slots.map((s) => ({
+              position: s.position,
+              title: s.bhajanTitle,
+              lead: s.singerId
+                ? {
+                    singerId: s.singerId,
+                    name: s.singerName,
+                    cushion: cushions.get(s.singerId)?.colour ?? null,
+                  }
+                : null,
+              chorus: s.chorus.map((c) => ({
+                singerId: c.singerId,
+                name: c.name,
+                cushion: c.cushion,
+              })),
+            }))}
+            canSetUpDesk={desk.canSetUp}
+          />
+        </div>
+      ) : null}
+
       {/* scroll-smooth in CSS rather than behavior:"smooth" in the scrollBy
           call, so the global prefers-reduced-motion rule can turn it off. */}
+      {/*
+        `hidden` as a CLASS, not the attribute: the element carries `flex`, and
+        `.flex { display: flex }` beats the user agent's `[hidden]`, so the
+        attribute alone left the list on screen underneath the desk.
+
+        Kept MOUNTED rather than unmounted, so switching to the desk and back
+        returns to the same place in a long Sunday list instead of the top.
+      */}
       <div
         ref={scroller}
-        className="flex min-w-0 flex-1 scroll-smooth flex-col overflow-auto px-3 py-3 sm:px-5 sm:py-4"
+        className={`min-w-0 flex-1 scroll-smooth flex-col overflow-auto px-3 py-3 sm:px-5 sm:py-4 ${
+          view === "desk" ? "hidden" : "flex"
+        }`}
       >
         <ol
           className={
@@ -777,7 +889,7 @@ export function LiveBoard({
         changed row is no use at all if the row is under the bottom edge, and
         the arrow is the only thing on screen that can say "down there".
       */}
-      {more ? (
+      {more && view === "board" ? (
         <button
           type="button"
           onClick={() => {

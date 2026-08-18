@@ -6,6 +6,7 @@ import { Card, CardContent } from "@/components/ui";
 import { runningOrderLabel } from "@/lib/program";
 import { timeLabel } from "@/lib/sessionsOfDay";
 import { melbourneTodayISO } from "@/lib/dates";
+import { NOT_ARCHIVED } from "@/lib/archive";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export default async function ProgramsPage() {
   }
 
   const programs = await prisma.session.findMany({
-    where: { format: "program" },
+    where: { ...NOT_ARCHIVED, format: "program" },
     orderBy: [{ date: "desc" }, { startsAt: "desc" }],
     select: {
       id: true,

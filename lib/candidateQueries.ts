@@ -10,6 +10,7 @@
 import { prisma } from '@/lib/db';
 import { RepertoireKind } from '@prisma/client';
 import type { Candidate } from '@/lib/sessionBuilder';
+import { LIVE_SESSION } from "./archive";
 
 /** Sentinel meaning "this field is blank in the masterlist". */
 export const UNSPECIFIED = 'unspecified';
@@ -110,7 +111,7 @@ export async function getCandidatePool(
     }),
     prisma.sessionSlot.groupBy({
       by: ['bhajanId'],
-      where: { bhajanId: { not: null } },
+      where: { bhajanId: { not: null }, session: LIVE_SESSION },
       _count: { _all: true },
       _max: { sessionId: true },
     }),
@@ -127,7 +128,7 @@ export async function getCandidatePool(
   const lastSung = new Map<string, Date>();
   const sungCount = new Map<string, number>();
   const slots = await prisma.sessionSlot.findMany({
-    where: { bhajanId: { not: null } },
+    where: { bhajanId: { not: null }, session: LIVE_SESSION },
     select: { bhajanId: true, session: { select: { date: true } } },
   });
   for (const s of slots) {
@@ -228,7 +229,7 @@ export async function getSingersForBhajans(
 
   const [sung, repertoire] = await Promise.all([
     prisma.sessionSlot.findMany({
-      where: { bhajanId: { in: [...bhajanIds] }, singerId: { not: null } },
+      where: { bhajanId: { in: [...bhajanIds] }, singerId: { not: null }, session: LIVE_SESSION },
       select: {
         bhajanId: true,
         session: { select: { date: true } },

@@ -33,7 +33,6 @@ export default async function ProgramPrintPage({ params }: { params: Promise<{ i
       channels: {
         include: { singer: { select: { name: true } }, instrument: { select: { name: true } } },
       },
-      crew: { include: { singer: { select: { name: true } } } },
       programItems: {
         orderBy: { position: "asc" },
         include: {
@@ -66,9 +65,21 @@ export default async function ProgramPrintPage({ params }: { params: Promise<{ i
     timeZone: "UTC",
   }).format(session.date);
 
-  const sound = session.crew
-    .filter((c) => c.job === "soundEngineer")
-    .map((c) => c.singer.name)
+  /*
+   * Who is on sound, for the folder on the night.
+   *
+   * The centre's sound engineers, read off the singer rows — the job moved from
+   * the session to the person on 2026-08-18, so this is no longer a fact about
+   * this programme and is queried rather than included.
+   */
+  const sound = (
+    await prisma.singer.findMany({
+      where: { soundEngineer: true },
+      orderBy: { name: "asc" },
+      select: { name: true },
+    })
+  )
+    .map((s) => s.name)
     .join(", ");
 
   return (

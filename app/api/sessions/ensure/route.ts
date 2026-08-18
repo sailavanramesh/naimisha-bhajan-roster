@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRole, can } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { NOT_ARCHIVED } from "@/lib/archive";
 
 function parseISODate(s: string): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
@@ -39,7 +40,7 @@ export async function POST(req: Request) {
 
     // Find existing session for that day (UTC day bucket)
     const existing = await prisma.session.findFirst({
-      where: { date: { gte: start, lt: endExclusive } },
+      where: { ...NOT_ARCHIVED, date: { gte: start, lt: endExclusive } },
       select: { id: true },
     });
 

@@ -2,6 +2,7 @@ import { RepertoireKind } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { historyCutoff } from "@/lib/dates";
 import { hasBeenSung, melbourneNowLocal } from "@/lib/sungCutoff";
+import { LIVE_SESSION } from "./archive";
 
 /**
  * lib/repertoireGuard.ts — the one question every "add to a list" must ask.
@@ -91,7 +92,7 @@ export async function contradiction(
   if (!bhajan || kind === RepertoireKind.known) return null;
 
   const rows = await prisma.sessionSlot.findMany({
-    where: { singerId, bhajanId: bhajan.id, session: { date: { lte: historyCutoff() } } },
+    where: { singerId, bhajanId: bhajan.id, session: { ...LIVE_SESSION, date: { lte: historyCutoff() } } },
     orderBy: { session: { date: "desc" } },
     select: { confirmedPitch: true, session: { select: { date: true, startsAt: true } } },
   });
