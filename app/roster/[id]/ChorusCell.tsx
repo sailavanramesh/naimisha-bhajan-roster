@@ -66,9 +66,29 @@ export function ChorusCell({
   const [mics, setMics] = useState<ChorusMic[]>(fromServer);
   const [pending, startTransition] = useTransition();
   const [status, setStatus] = useState<"idle" | "saved" | "failed">("idle");
-  /** What the copy down did, in words. Outlives the "Saved ✓" tick. */
+  /*
+   * What the copy down did, in words — and it GOES AWAY, like the tick.
+   *
+   * It did not, at first. Sailavan copied, then deleted every chorus mic, and
+   * "Copied to 1 bhajan. Left 1 that already had mics." was still sitting under
+   * an empty cell describing a session that no longer existed. The rule was
+   * already written four lines below for the tick — "short enough not to sit
+   * there claiming the last thing you did" — and this broke it.
+   *
+   * Longer than the tick because it is a sentence rather than a mark, and
+   * cleared outright by the next write in this cell: once somebody adds or
+   * removes a mic here, what the copy did is no longer what the screen shows.
+   */
   const [copied, setCopied] = useState<string | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /** Drop the copy-down sentence, on a timer or because something moved. */
+  function clearCopied() {
+    if (copyTimer.current) clearTimeout(copyTimer.current);
+    copyTimer.current = null;
+    setCopied(null);
+  }
 
   /*
    * `mics` SEEDS from the prop and then owns itself. Do not add an effect that
@@ -96,6 +116,7 @@ export function ChorusCell({
   useEffect(() => {
     return () => {
       if (savedTimer.current) clearTimeout(savedTimer.current);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
     };
   }, []);
 
@@ -103,6 +124,8 @@ export function ChorusCell({
   function apply(run: () => Promise<ChorusResult>) {
     startTransition(async () => {
       setStatus("idle");
+      // Whatever the copy said is about to stop being true of this cell.
+      clearCopied();
       const res = await run();
       if (!res.ok) {
         setStatus("failed");
@@ -240,14 +263,13 @@ export function ChorusCell({
           onClick={() =>
             startTransition(async () => {
               if (!slotId) return;
-              setCopied(null);
+              clearCopied();
               const res = await copyChorusDown({ slotId });
-              if (!res.ok) {
-                setCopied(res.error);
-                return;
-              }
-              setCopied(res.message);
-              onCopied?.(res.mics);
+              setCopied(res.ok ? res.message : res.error);
+              // Same reasoning as the tick, with longer on the clock: a
+              // sentence takes longer to read than a mark does.
+              copyTimer.current = setTimeout(() => setCopied(null), 8000);
+              if (res.ok) onCopied?.(res.mics);
             })
           }
         >
