@@ -318,9 +318,23 @@ export default async function RosterSessionPage({
     ),
   );
 
-  const allSingers = canAssign
-    ? await prisma.singer.findMany({ where: { gender: { not: null } }, orderBy: { name: "asc" } })
-    : [];
+  /*
+   * The names the grid can offer, for two different controls with two
+   * different permissions.
+   *
+   * It fed only the row's Singer select, which is an allocation, so it was
+   * loaded only for somebody who may assign — and a member got an empty list.
+   * That was invisible until the chorus mics opened to everybody: the chorus
+   * picker reads the same list, so a member saw the column and no way to add
+   * anybody to it.
+   *
+   * Loading it for them is safe. The Singer select and the Delete button are
+   * each gated on `canAssign` in the grid itself, not on this being non-empty.
+   */
+  const allSingers =
+    canAssign || can(role, "setMicCushion")
+      ? await prisma.singer.findMany({ where: { gender: { not: null } }, orderBy: { name: "asc" } })
+      : [];
 
   const initialRows = session.slots.map((x) => ({
     id: x.id,

@@ -622,6 +622,32 @@ export function SessionSingersGrid(props: {
    * must not do.
    */
   type PitchHint = { pitch: string; source: string; times: number; lastOn: string | null };
+  /*
+   * WHAT THE COPY DOWN CHANGED, and how the other cells come to know.
+   *
+   * A ChorusCell seeds its list from its prop once and then owns it — there is
+   * deliberately no effect re-adopting the prop, because one was there and it
+   * wiped every edit. So a write that changes OTHER rows cannot reach them by
+   * changing props; the cell would ignore it.
+   *
+   * The copy returns the server's list for every slot it touched, this one
+   * included. Those go in here, and the slot's version is bumped so only THOSE
+   * cells remount and re-seed. A cell the copy did not touch keeps whatever its
+   * user has been doing to it, which is the whole reason the versions are per
+   * slot rather than one counter for the column.
+   */
+  const [chorusFresh, setChorusFresh] = useState<Record<string, ChorusMic[]>>({});
+  const [chorusVersion, setChorusVersion] = useState<Record<string, number>>({});
+
+  const takeChorusCopy = (mics: Record<string, ChorusMic[]>) => {
+    setChorusFresh((prev) => ({ ...prev, ...mics }));
+    setChorusVersion((prev) => {
+      const next = { ...prev };
+      for (const slotId of Object.keys(mics)) next[slotId] = (next[slotId] ?? 0) + 1;
+      return next;
+    });
+  };
+
   const [pitchHint, setPitchHint] = useState<Record<string, PitchHint | null>>({});
 
   useEffect(() => {
@@ -1350,7 +1376,7 @@ export function SessionSingersGrid(props: {
           </thead>
 
           <tbody>
-            {rows.map((r) => {
+            {rows.map((r, i) => {
               const pu = pitchUI[r._localId] || { q: r.confirmedPitch ?? "", open: false };
               const pitchOptions = filteredPitchOptions(r._localId);
 
@@ -1703,11 +1729,17 @@ export function SessionSingersGrid(props: {
                   {/* Chorus mics — written by the cell itself, not by the save. */}
                   <td data-label="Chorus mics" className="px-2 py-1.5 align-top">
                     <ChorusCell
+                      key={`chorus-${r.id ?? r._localId}-${(r.id && chorusVersion[r.id]) || 0}`}
                       slotId={r.id ?? null}
                       singers={props.singers}
-                      mics={r.chorus ?? []}
-                      canAssign={props.canAssign}
-                      canSetCushion={props.canSetMicCushion}
+                      mics={(r.id ? chorusFresh[r.id] : undefined) ?? r.chorus ?? []}
+                      /* Everybody signed in, not just an editor: a chorus mic
+                         is desk state, not a rostered part. See ChorusCell. */
+                      canEdit={props.canSetMicCushion}
+                      /* Nothing to copy onto from the last bhajan, and an
+                         unsaved row has no slot for the server to copy from. */
+                      canCopyDown={Boolean(r.id) && i < rows.length - 1}
+                      onCopied={takeChorusCopy}
                     />
                   </td>
 

@@ -58,7 +58,7 @@ export const DEFAULT_GUIDE: DefaultGuideSection[] = [
 - **Calendar or list** — whichever you prefer. Set it once on your own page and it stays that way.
 - **Recommended** is what the masterlist says for a Gents or Ladies voice. **Confirmed** is what the singer is actually singing it at. They differ more often than not, and the confirmed one is the one that matters.
 - The small brass chip under a pitch is a suggestion — either what you have sung that bhajan at before, or a shruti saved on your list. Tap it to take it. Nothing is ever filled in for you behind your back.
-- **Chorus mics** sit beside each bhajan: who is on the chorus and which coloured cushion they have.
+- **Chorus mics** sit beside each bhajan: who is on the chorus and which coloured cushion they have. Anybody signed in can set these — it is who has picked up a mic tonight, not a rostered part. Set the first bhajan, then press **copy down** to put the same people and cushions on the bhajans below that have none; anything already answered is left alone.
 
 > Anybody signed in can correct _which bhajan_ is in a slot. Adding, removing and reordering slots, and changing who is singing, is a coordinator's job.`,
   },

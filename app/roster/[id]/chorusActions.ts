@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCapability } from "@/lib/auth";
 import { isChorusColour, type ChorusMic, type MicColourValue } from "@/lib/micCushion";
+import { describeChorusCopy, planChorusCopy } from "@/lib/chorusCopy";
 import { revalidatePath } from "next/cache";
 
 /**
@@ -15,12 +16,19 @@ import { revalidatePath } from "next/cache";
  * (see SessionSlotChorus). Order is `position`, assigned on the way in, so every
  * device shows the mics in the same order.
  *
- * Three writes with two different gates, which is the point of splitting them:
+ * EVERY write here is open to any signed-in person — `setMicCushion`.
  *
- *   - WHO choruses is an allocation, like the singer in the row, so adding and
- *     removing need `assignSingers`.
- *   - The CUSHION COLOUR is live desk state, like the existing mic cushions, so
- *     any signed-in person may set it during a session.
+ * Adding and removing used to need `assignSingers`, on the reasoning that WHO
+ * choruses is an allocation like the singer in the row. Sailavan, 2026-08-18:
+ * "chorus mic selection and entry should be open to all users (with the copy
+ * down features too)." He is right, and the split was the mistake: a chorus mic
+ * is not a rostered part. Nobody is being put on the programme, no history is
+ * being written, and the person who knows who has picked up the third mic is
+ * whoever is standing at the desk — who is usually not a coordinator.
+ *
+ * It is the same call already recorded for MicCushion in the schema: live
+ * sound-desk state, not the historical record, so it sits outside the
+ * editor-only allocation rules.
  *
  * None of them touches `confirmedPitch`, and none goes through the roster
  * grid's optimistic-concurrency guard: a cushion tap must never make a
@@ -67,12 +75,12 @@ async function micsOf(slotId: string): Promise<ChorusMic[]> {
   }));
 }
 
-/** Put somebody on a chorus mic for this bhajan. An allocation. */
+/** Put somebody on a chorus mic for this bhajan. Live desk state — see above. */
 export async function addChorusSinger(input: {
   slotId: string;
   singerId: string;
 }): Promise<ChorusResult> {
-  await requireCapability("assignSingers");
+  await requireCapability("setMicCushion");
 
   const parsed = SlotSinger.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Could not set that." };
@@ -108,7 +116,7 @@ export async function removeChorusSinger(input: {
   slotId: string;
   singerId: string;
 }): Promise<ChorusResult> {
-  await requireCapability("assignSingers");
+  await requireCapability("setMicCushion");
 
   const parsed = SlotSinger.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Could not set that." };
@@ -172,4 +180,91 @@ export async function setChorusCushion(input: {
 
   revalidatePath(`/roster/${sessionId}`);
   return { ok: true, mics: await micsOf(slotId) };
+}
+
+/**
+ * Put this bhajan's chorus mics onto every bhajan below that has none.
+ *
+ * The chorus is usually the same two or three people all evening, each on the
+ * cushion they picked up at the start, so setting it per bhajan is the same
+ * handful of taps repeated down the column. Sailavan asked for a copy down.
+ *
+ * ONLY FILLS EMPTY ONES — see lib/chorusCopy.ts, where that decision lives as a
+ * pure function. A bhajan somebody has already answered is left exactly as it
+ * is and counted as skipped, which is what lets this be a single press with no
+ * confirm and no undo: there is nothing to undo.
+ *
+ * Open to anybody signed in, like every other write in this file. It is the
+ * same act as setting the mics by hand, done once instead of six times.
+ *
+ * Returns the full list for every slot it touched, so the grid can show the
+ * result without a reload — the same "server settles it" contract as the three
+ * writes above, widened to several slots.
+ */
+export async function copyChorusDown(input: { slotId: string }): Promise<
+  | { ok: true; message: string; mics: Record<string, ChorusMic[]> }
+  | { ok: false; error: string }
+> {
+  await requireCapability("setMicCushion");
+
+  const parsed = Slot.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Could not copy that." };
+  const { slotId } = parsed.data;
+
+  const from = await prisma.sessionSlot.findUnique({
+    where: { id: slotId },
+    select: {
+      sessionId: true,
+      position: true,
+      chorus: {
+        select: { singerId: true, cushion: true, position: true },
+        orderBy: [{ position: "asc" }, { createdAt: "asc" }],
+      },
+    },
+  });
+  if (!from) return { ok: false, error: "That row is gone." };
+  if (from.chorus.length === 0) {
+    return { ok: false, error: "Put somebody on a chorus mic here first." };
+  }
+
+  const siblings = await prisma.sessionSlot.findMany({
+    where: { sessionId: from.sessionId },
+    select: { id: true, position: true, _count: { select: { chorus: true } } },
+  });
+
+  const plan = planChorusCopy({
+    fromPosition: from.position,
+    targets: siblings.map((s) => ({
+      slotId: s.id,
+      position: s.position,
+      micCount: s._count.chorus,
+    })),
+  });
+
+  if (plan.fill.length > 0) {
+    /*
+     * One statement, and `skipDuplicates` rather than a check-then-write. Two
+     * people can be at this column at once — one at the desk, one on the
+     * roster — and a mic added between the plan and the write is a row that is
+     * already there, not a failure.
+     */
+    await prisma.sessionSlotChorus.createMany({
+      data: plan.fill.flatMap((targetId) =>
+        from.chorus.map((mic) => ({
+          slotId: targetId,
+          singerId: mic.singerId,
+          cushion: mic.cushion,
+          position: mic.position,
+        })),
+      ),
+      skipDuplicates: true,
+    });
+  }
+
+  revalidatePath(`/roster/${from.sessionId}`);
+
+  const mics: Record<string, ChorusMic[]> = {};
+  for (const targetId of plan.fill) mics[targetId] = await micsOf(targetId);
+
+  return { ok: true, message: describeChorusCopy(plan), mics };
 }
