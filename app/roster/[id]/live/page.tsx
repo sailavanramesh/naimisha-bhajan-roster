@@ -139,7 +139,8 @@ export default async function LiveSessionPage({
    * re-checks the same rule, because hiding a control is not a permission.
    */
   const me = await getSignedInSinger();
-  const canSetUpDesk = can(role, "editPrograms") || runsSound(jobsOf(me));
+  const runsTheSound = runsSound(jobsOf(me));
+  const canSetUpDesk = can(role, "editPrograms") || runsTheSound;
 
   const deskChoices = desk
     ? await prisma.desk.findMany({
@@ -189,6 +190,16 @@ export default async function LiveSessionPage({
       categoryName={session.category?.name ?? null}
       categoryImage={session.category?.image ?? null}
       slots={slots}
+      /*
+       * Sailavan: "open the live board on that user should go straight into the
+       * desk view rather than the bhajan live view". Just so — somebody down as
+       * sound engineer or mic coordinator came to run the desk, and the toggle
+       * is one press away for the times they want the bhajans.
+       *
+       * Deliberately NOT editors. An editor opening a session is far more
+       * likely to be checking the running order than standing at the desk.
+       */
+      initialView={runsTheSound ? "desk" : "board"}
       desk={
         desk
           ? {

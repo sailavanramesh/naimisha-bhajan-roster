@@ -131,6 +131,7 @@ export function LiveBoard({
   categoryName,
   categoryImage,
   slots,
+  initialView = "board",
   desk,
 }: {
   sessionId: string;
@@ -140,6 +141,15 @@ export function LiveBoard({
   categoryName?: string | null;
   categoryImage?: string | null;
   slots: LiveSlot[];
+  /**
+   * Which view this person opens on.
+   *
+   * Somebody down as sound engineer or mic coordinator came to run the desk,
+   * so that is what they get — the same reasoning that sends them to the live
+   * board rather than the roster grid in the first place (lib/sessionView.ts).
+   * The toggle is right there, so nobody is stuck with the wrong one.
+   */
+  initialView?: "board" | "desk";
   /**
    * The desk this session is mixed on, for the mic view. Null when the centre
    * has no desks described yet, in which case the toggle is not offered at all.
@@ -165,7 +175,7 @@ export function LiveBoard({
    * underneath both. State rather than a route because the two views are the
    * same screen looked at two ways, and a sound person flips between them.
    */
-  const [view, setView] = useState<"board" | "desk">("board");
+  const [view, setView] = useState<"board" | "desk">(desk ? initialView : "board");
   /*
    * The rest of the board, kept current too.
    *
