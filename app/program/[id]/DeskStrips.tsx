@@ -71,11 +71,24 @@ export function DeskStrips({
    * colours and nothing says which of them is singing the bhajan — Sailavan,
    * 2026-08-18. So the lead's number bar fills and says the word.
    *
-   * A WORD, and a fill rather than a tint, because this component already holds
-   * the rule a few lines down: colour is never the only carrier, since a dark
-   * hall and a colour-blind operator are both ordinary. And deliberately not
-   * brass, which on these strips already means open, "this one now" and a
-   * clash; a fourth meaning would empty the other three.
+   * THE BRASS CHIP, the one the running order already uses for the bhajan the
+   * room is on: a filled gold bar with the number in ivory. Sailavan asked for it
+   * directly — "the same way the 1 gets a goldish circle and the text becomes
+   * that light beige … when that bhajan is selected" — and he is right that it
+   * belongs here. The chip does not mean a fourth thing; it means what it means
+   * on the heading above, "the principal one here", said in the same voice one
+   * level down — and a shade quieter, in `brass-soft`, so a strip never shouts
+   * over the bhajan heading it sits under. See the token in globals.css for why
+   * it stops where it does.
+   *
+   * Not colour alone, which this component forbids a few lines below: the chip
+   * is a dark fill against a pale bar, so it survives a colour-blind reading on
+   * contrast, and the title carries the word "lead" for a screen reader.
+   *
+   * Two earlier attempts, both Sailavan's calls: a solid black bar reading
+   * "5 · lead" ("looks a bit weird … doesn't fit the mould" — the only pure
+   * dark thing in a warm palette, and a mono number beside a sans word), then
+   * the word on the line under the name.
    *
    * Empty on a programme, which has performers rather than a lead.
    */
@@ -130,9 +143,11 @@ export function DeskStrips({
             <span
               aria-hidden
               className={`block border-b px-1 py-0.5 text-center font-mono text-[11px] font-bold leading-none ${
-                open
-                  ? "border-on-ground/20 bg-surface/60 text-on-ground"
-                  : "border-rule text-on-ground-muted"
+                lead
+                  ? "border-brass-soft bg-brass-soft text-ivory"
+                  : open
+                    ? "border-on-ground/20 bg-surface/60 text-on-ground"
+                    : "border-rule text-on-ground-muted"
               }`}
             >
               {stripNumber(s.number, s.stereo)}
@@ -178,36 +193,9 @@ export function DeskStrips({
               <span className="block w-full truncate text-[12px] font-bold leading-tight">
                 {s.who ?? deskLabel(s.label) ?? "—"}
               </span>
-              {/*
-                WHO LEADS, on the line built for qualifying the person.
-
-                Its rule is that it only says something the name does not, and
-                for the lead "lead" beats "Lead vocal 5" — which channel this is
-                is printed above, and with three strips lit in three cushion
-                colours the one thing the picture cannot say is which of them is
-                singing the bhajan.
-
-                First attempt filled the number bar and read "5 · lead".
-                Sailavan: "the black fill for the lead looks a bit weird … the
-                2 - lead just doesn't look like it fits the mould." Both fair —
-                the fill was the only pure dark thing in a warm palette, and a
-                mono number beside a sans word is two ideas in one 11px bar.
-                Here it is one idea on a line that already existed.
-
-                Solid and letter-spaced rather than muted, so it lifts off the
-                cushion colour it sits on; still the same size, so no strip
-                grows a line or changes height.
-              */}
-              {(lead ? ["lead", s.mic] : [s.who ? deskLabel(s.label) : null, s.mic]).filter(Boolean)
-                .length > 0 ? (
-                <span
-                  className={`mt-0.5 block w-full truncate text-[9px] leading-none ${
-                    lead ? "font-semibold tracking-wide" : "opacity-80"
-                  }`}
-                >
-                  {(lead ? ["lead", s.mic] : [s.who ? deskLabel(s.label) : null, s.mic])
-                    .filter(Boolean)
-                    .join(" · ")}
+              {[s.who ? deskLabel(s.label) : null, s.mic].filter(Boolean).length > 0 ? (
+                <span className="mt-0.5 block w-full truncate text-[9px] leading-none opacity-80">
+                  {[s.who ? deskLabel(s.label) : null, s.mic].filter(Boolean).join(" · ")}
                 </span>
               ) : null}
             </span>

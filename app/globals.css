@@ -255,6 +255,22 @@
    */
   --brass-ink: 124 95 32;
 
+  /*
+   * A step back from brass-ink, for a filled chip that should not shout.
+   *
+   * The running order marks the bhajan the room is on with a brass-ink chip,
+   * and the desk marks the lead singer's channel the same way one level down —
+   * Sailavan asked for it, then for "not the same gold that is used for
+   * selection … something slightly less, but on that track". This is that:
+   * seven tenths of the way from brass to brass-ink.
+   *
+   * Where it stops is not taste. Plain brass under ivory is 2.9:1, which is the
+   * reason brass-ink exists three lines above; this is 4.5:1, the least that
+   * still passes for the 11px number it carries on a screen read from across a
+   * hall. Any lighter and it fails the rule this palette was built on.
+   */
+  --brass-soft: 140 109 41;
+
   /* Deliberately NOT kumkum. Warnings are not pitch deviation. */
   --warn: 146 106 20;
 }
