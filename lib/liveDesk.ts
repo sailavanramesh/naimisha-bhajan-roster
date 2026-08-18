@@ -164,6 +164,19 @@ export type LiveSlotPlan = {
   plan: LiveDeskPlan;
   /** Strips with somebody on them — the faders that are up for this bhajan. */
   openIds: Set<string>;
+  /**
+   * The strip carrying the LEAD singer, where one landed.
+   *
+   * Sailavan: with a lead and two chorus singers, three strips light up in
+   * their cushion colours and "might get lost as to who is the lead". The
+   * colours say which cushion, and nothing said which of them is singing the
+   * bhajan.
+   *
+   * A set rather than one id because the honest answer can be none — a lead on
+   * a cushion this desk has no channel for, or none rostered yet — and because
+   * a desk with two strips of one colour could in principle carry them.
+   */
+  leadStripIds: Set<string>;
 };
 
 /**
@@ -198,11 +211,22 @@ export function planLiveDeskForSlots({
     }
 
     const plan = planLiveDesk({ strips, people });
+    const leadId = slot.lead?.singerId ?? null;
+
     return {
       position: slot.position,
       title: slot.title,
       plan,
       openIds: new Set(plan.strips.filter((a) => a.people.length > 0).map((a) => a.strip.id)),
+      // Read back off the plan rather than guessed from the cushion, so a lead
+      // the desk could not place simply has no strip — which is the truth.
+      leadStripIds: new Set(
+        leadId
+          ? plan.strips
+              .filter((a) => a.people.some((p) => p.singerId === leadId))
+              .map((a) => a.strip.id)
+          : [],
+      ),
     };
   });
 }

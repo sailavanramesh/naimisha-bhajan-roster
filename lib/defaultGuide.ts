@@ -116,7 +116,7 @@ The button under the × switches to the **mic view**: the desk drawn as strips, 
 
 - **Every bhajan of the night, one desk each**, down the page. The picture changes from one to the next because the singer does, and because a chorus cushion belongs to the bhajan rather than to the night.
 - Nothing is allocated by hand. The cushions sit on fixed channels, so tapping a blue dot on the board has already said who is on channel 1.
-- A strip lights up in brass when somebody is singing on it. Two people on the same cushion, or a cushion this desk has no channel for, is called out under that bhajan rather than quietly resolved — both are things to fix before the session starts.
+- A strip lights up when somebody is singing on it, in that person's cushion colour. The **lead** singer's channel number sits in a gold chip, the same mark the bhajan above wears when the room is on it — because with a lead and two chorus mics three strips light up at once, and the cushion colours alone cannot say which one is singing the bhajan. Two people on the same cushion, or a cushion this desk has no channel for, is called out under that bhajan rather than quietly resolved — both are things to fix before the session starts.
 - **Tap a bhajan to say the room is on it.** It takes the brass ring, and every other screen follows within a few seconds — the desk, the stage and anybody watching stay on the same one. Tap it again to go back to not started.
 
 > Everyone can open the mic view. Changing **which desk** the session is on is for editors and for whoever is down as sound engineer or mic coordinator; the desk itself is described in **Admin → Sound desks**.`,

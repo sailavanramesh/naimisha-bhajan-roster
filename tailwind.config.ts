@@ -21,6 +21,7 @@ const config: Config = {
         muted: rgb("muted"),
         warn: rgb("warn"),
         "brass-ink": rgb("brass-ink"),
+        "brass-soft": rgb("brass-soft"),
         panel: {
           DEFAULT: rgb("panel"),
           hover: rgb("panel-hover"),

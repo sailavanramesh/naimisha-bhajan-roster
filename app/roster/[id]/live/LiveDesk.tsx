@@ -215,6 +215,7 @@ export function LiveDesk({
                   strip before the session starts.
                 */
                 swappedIds={new Set(s.plan.strips.filter((a) => a.clash).map((a) => a.strip.id))}
+                leadIds={s.leadStripIds}
                 flagLabel="two people on this cushion"
               />
 

@@ -64,6 +64,35 @@ export function DeskStrips({
    * meanings, so `flagLabel` says which one the tooltip should read.
    */
   swappedIds,
+  /**
+   * Strips carrying the LEAD, on a bhajan night.
+   *
+   * With a lead and two chorus singers, three strips light up in their cushion
+   * colours and nothing says which of them is singing the bhajan — Sailavan,
+   * 2026-08-18. So the lead's number bar fills and says the word.
+   *
+   * THE BRASS CHIP, the one the running order already uses for the bhajan the
+   * room is on: a filled gold bar with the number in ivory. Sailavan asked for it
+   * directly — "the same way the 1 gets a goldish circle and the text becomes
+   * that light beige … when that bhajan is selected" — and he is right that it
+   * belongs here. The chip does not mean a fourth thing; it means what it means
+   * on the heading above, "the principal one here", said in the same voice one
+   * level down — and a shade quieter, in `brass-soft`, so a strip never shouts
+   * over the bhajan heading it sits under. See the token in globals.css for why
+   * it stops where it does.
+   *
+   * Not colour alone, which this component forbids a few lines below: the chip
+   * is a dark fill against a pale bar, so it survives a colour-blind reading on
+   * contrast, and the title carries the word "lead" for a screen reader.
+   *
+   * Two earlier attempts, both Sailavan's calls: a solid black bar reading
+   * "5 · lead" ("looks a bit weird … doesn't fit the mould" — the only pure
+   * dark thing in a warm palette, and a mono number beside a sans word), then
+   * the word on the line under the name.
+   *
+   * Empty on a programme, which has performers rather than a lead.
+   */
+  leadIds,
   flagLabel = "for this item only",
   onPick,
   dense = false,
@@ -71,6 +100,7 @@ export function DeskStrips({
   strips: Strip[];
   openIds?: ReadonlySet<string>;
   swappedIds?: ReadonlySet<string>;
+  leadIds?: ReadonlySet<string>;
   flagLabel?: string;
   onPick?: (id: string) => void;
   dense?: boolean;
@@ -88,6 +118,7 @@ export function DeskStrips({
       {strips.map((s) => {
         const open = live ? openIds!.has(s.id) : true;
         const swapped = swappedIds?.has(s.id) ?? false;
+        const lead = leadIds?.has(s.id) ?? false;
         // A cushion belongs to a mic, so only a vocal strip has one.
         const cushion = s.kind === "vocal" && s.colour ? micColourDot(s.colour) : null;
 
@@ -98,6 +129,7 @@ export function DeskStrips({
           s.who,
           s.kind === "vocal" && s.colour ? `${micColourLabel(s.colour)} cushion` : null,
           s.mic,
+          lead ? "lead" : null,
           swapped ? flagLabel : null,
           live ? (open ? "open" : "closed") : null,
         ]
@@ -111,9 +143,11 @@ export function DeskStrips({
             <span
               aria-hidden
               className={`block border-b px-1 py-0.5 text-center font-mono text-[11px] font-bold leading-none ${
-                open
-                  ? "border-on-ground/20 bg-surface/60 text-on-ground"
-                  : "border-rule text-on-ground-muted"
+                lead
+                  ? "border-brass-soft bg-brass-soft text-ivory"
+                  : open
+                    ? "border-on-ground/20 bg-surface/60 text-on-ground"
+                    : "border-rule text-on-ground-muted"
               }`}
             >
               {stripNumber(s.number, s.stereo)}
