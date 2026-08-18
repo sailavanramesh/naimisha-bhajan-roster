@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { KeepScroll } from "@/components/KeepScroll";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from "@/components/ui";
@@ -24,6 +25,9 @@ const list = (sp: SP, k: string): string[] => {
   return raw.flatMap((s) => s.split(",")).map((s) => s.trim()).filter(Boolean);
 };
 
+/** A fresh seed, i.e. a fresh set. Same shape as the one "Show me another set" makes. */
+const randomSeed = () => `explore#${Math.random().toString(36).slice(2, 8)}`;
+
 const PRIMARY_LANGUAGES = ["Sanskrit / Hindi", "English", "Tamil", "Telugu"];
 const DEFAULT_LANGUAGES = ["Sanskrit / Hindi", "Tamil", "Telugu"];
 
@@ -44,8 +48,31 @@ export default async function ExplorePage({ searchParams }: { searchParams: Prom
   }
 
   const sp = await searchParams;
+
+  /*
+   * Arriving with no seed pins a random one, because the seed IS the set.
+   * The default used to be the constant "explore#1", so every cold landing —
+   * every tap on Explore in the nav — dealt the same twelve bhajans, and only
+   * "Show me another set" ever produced anything else.
+   *
+   * A redirect rather than just seeding in memory, because this page is
+   * force-dynamic and Back re-renders it on the server: on a seedless url the
+   * set would be reshuffled every time you came back from a bhajan, and
+   * KeepScroll — which keys on the url, query and all — would drop you at your
+   * old offset in a list that had changed underneath you.
+   */
+  const seed = one(sp, "seed");
+  if (!seed) {
+    const p = new URLSearchParams();
+    for (const [k, v] of Object.entries(sp)) {
+      const value = Array.isArray(v) ? v.filter(Boolean).join(",") : v;
+      if (value) p.set(k, value);
+    }
+    p.set("seed", randomSeed());
+    redirect(`/explore?${p.toString()}`);
+  }
+
   const count = Math.min(50, Math.max(1, Number(one(sp, "n") ?? 12) || 12));
-  const seed = one(sp, "seed") ?? "explore#1";
   const freshnessDays = Number(one(sp, "fresh") ?? DEFAULT_FRESHNESS_DAYS) || DEFAULT_FRESHNESS_DAYS;
   const sungBefore = (one(sp, "sung") as "any" | "known" | "new") ?? "any";
 
@@ -85,8 +112,7 @@ export default async function ExplorePage({ searchParams }: { searchParams: Prom
     return qs ? `/explore?${qs}` : "/explore";
   };
 
-  const base = seed.includes("#") ? seed.slice(0, seed.lastIndexOf("#")) : seed;
-  const nextSeed = `${base}#${Math.random().toString(36).slice(2, 8)}`;
+  const nextSeed = randomSeed();
 
   return (
     <div className="grid gap-4">
