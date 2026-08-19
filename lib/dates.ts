@@ -56,6 +56,28 @@ export function melbourneTodayISO(now: Date = new Date()): string {
 }
 
 /**
+ * Today as the DEVICE reckons it, `YYYY-MM-DD`.
+ *
+ * The counterpart to `melbourneTodayISO`, and the difference between them is
+ * the point. Melbourne's today is the right answer to "what day is the group
+ * on"; the device's is the right answer to "what day is it where you are
+ * standing", which is what somebody pressing a Today button means.
+ *
+ * Built from the local getters rather than from `toISOString`, which would
+ * answer in UTC. That was the bug: on Azure, which runs UTC, the roster
+ * calendar called `new Date().toISOString().slice(0, 10)` and so believed it
+ * was still Tuesday until 10am Wednesday in Melbourne.
+ *
+ * Only meaningful on a client, where there is a device to ask. On the server it
+ * reports the host's zone, which is why callers reach for `melbourneTodayISO`
+ * there instead.
+ */
+export function deviceTodayISO(now: Date = new Date()): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
+/**
  * The hour of the day in Melbourne, 0–23.
  *
  * Computed from the zone rather than from an offset because the group is in a

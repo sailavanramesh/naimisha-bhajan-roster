@@ -128,10 +128,13 @@ export default async function SingerPage({
                 className="rounded-[12px] border border-rule-surface bg-panel p-3 hover:bg-panel-hover focus-visible:ring-2 focus-visible:ring-black/20"
               >
                 <div className="text-sm font-medium">
-                  {new Date(h.session.date).toLocaleDateString(undefined, {
+                  {/* A session date is a calendar date: read it back in UTC,
+                      where it was written, or it slips a day west of UTC. */}
+                  {new Date(h.session.date).toLocaleDateString("en-AU", {
                     year: "numeric",
                     month: "short",
                     day: "numeric",
+                    timeZone: "UTC",
                   })}
                 </div>
                 <div className="mt-1 text-sm text-on-surface-muted">
