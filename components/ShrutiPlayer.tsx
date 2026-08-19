@@ -13,7 +13,7 @@
  * about the page rather than about this button.
  */
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { tanpuraVoice } from "@/lib/tanpura";
 import { getState, play, stop, subscribe, type PlayingState } from "@/lib/tanpuraEngine";
 import { cn } from "@/components/ui";
@@ -40,16 +40,24 @@ export function ShrutiPlayer({
   const voice = tanpuraVoice(label);
   const playing = usePlaying();
 
+  const isThis = voice !== null && playing.label === label;
+
   // A drone left sounding after the control leaves the screen has no way to be
   // stopped — the button that owns it is gone. So unmounting while playing
-  // stops it. Navigating away from a roster therefore falls silent, which is
-  // what someone closing the page expects.
-  const isThis = voice !== null && playing.label === label;
+  // stops it, and navigating away from a roster falls silent.
+  //
+  // Empty deps, with the current value read through a ref, and both halves
+  // matter. Depending on `isThis` would re-run the effect whenever this button
+  // stopped being the playing one — and its cleanup, closing over the previous
+  // `true`, would call stop(). Switching from one shruti to another would then
+  // silence the one just started, from the component that lost the race.
+  const isThisRef = useRef(isThis);
+  isThisRef.current = isThis;
   useEffect(() => {
     return () => {
-      if (isThis) stop();
+      if (isThisRef.current) stop();
     };
-  }, [isThis]);
+  }, []);
 
   if (!voice || !label) return null;
 

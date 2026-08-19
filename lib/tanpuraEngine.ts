@@ -57,26 +57,51 @@ const pending = new Map<string, Promise<AudioBuffer>>();
 
 const listeners = new Set<(state: PlayingState) => void>();
 
-function state(): PlayingState {
-  return { label: currentLabel, loading: loadingLabel !== null, error: lastError };
-}
+/**
+ * The current snapshot, held as ONE object and replaced only when something
+ * actually changes.
+ *
+ * It must be referentially stable: `useSyncExternalStore` compares the value it
+ * gets from `getState` with the previous one to decide whether to re-render, so
+ * a freshly built object every call means "changed" every call — React detects
+ * the resulting loop and throws, taking down every page the control appears on.
+ */
+let snapshot: PlayingState = { label: null, loading: false, error: null };
 
+/** Rebuild the snapshot, and tell everyone, only if some field really moved. */
 function emit() {
-  const snapshot = state();
+  const next: PlayingState = {
+    label: currentLabel,
+    loading: loadingLabel !== null,
+    error: lastError,
+  };
+  if (
+    next.label === snapshot.label &&
+    next.loading === snapshot.loading &&
+    next.error === snapshot.error
+  ) {
+    return;
+  }
+  snapshot = next;
   for (const listener of listeners) listener(snapshot);
 }
 
-/** Watch what is sounding. Returns an unsubscribe. */
+/**
+ * Watch what is sounding. Returns an unsubscribe.
+ *
+ * Does NOT call the listener on subscribe: `useSyncExternalStore` reads the
+ * current value through `getState` itself, and a synchronous call here would
+ * have it render twice for one state.
+ */
 export function subscribe(listener: (state: PlayingState) => void): () => void {
   listeners.add(listener);
-  listener(state());
   return () => {
     listeners.delete(listener);
   };
 }
 
 export function getState(): PlayingState {
-  return state();
+  return snapshot;
 }
 
 function audioContext(): AudioContext | null {
@@ -223,7 +248,18 @@ export function __resetForTests(): void {
   currentLabel = null;
   loadingLabel = null;
   lastError = null;
+  snapshot = { label: null, loading: false, error: null };
   buffers.clear();
   pending.clear();
   listeners.clear();
+}
+
+/** Test seam: drive the store without a browser. Not used by the app. */
+export function __setStateForTests(
+  next: Partial<{ label: string | null; loading: string | null; error: string | null }>,
+): void {
+  if ('label' in next) currentLabel = next.label ?? null;
+  if ('loading' in next) loadingLabel = next.loading ?? null;
+  if ('error' in next) lastError = next.error ?? null;
+  emit();
 }
