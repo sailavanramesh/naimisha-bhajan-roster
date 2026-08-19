@@ -4,6 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCapability, getSignedInSinger } from "@/lib/auth";
 import { isMicColour, type MicColourValue } from "@/lib/micCushion";
+import { cushionsForSession } from "@/lib/sessionDesk";
 
 /**
  * Set which colour mic cushion a singer is on for a session.
@@ -48,6 +49,27 @@ export async function setMicCushion(input: {
 
   const { sessionId, singerId, colour } = schema.parse(input);
   const value = (colour as MicColourValue | null) ?? null;
+
+  /*
+   * A cushion that is not on this session's desk cannot be set, not merely
+   * hidden. Sailavan, 2026-08-19: "if a cushion colour is not ascribed to a
+   * channel set for a certain session, then it can't be picked." A picker that
+   * only omits the option leaves the rule true by accident — a stale tab
+   * rendered before the desk changed would still write the old colour.
+   *
+   * Clearing is always allowed: null is "take the cushion off", which stays
+   * available however the desk is configured, and is the only way to correct a
+   * colour the desk has since dropped.
+   */
+  if (value !== null) {
+    const offered = await cushionsForSession(
+      (await prisma.session.findUnique({ where: { id: sessionId }, select: { deskId: true } }))
+        ?.deskId ?? null,
+    );
+    if (!offered.some((c) => c.value === value)) {
+      throw new Error("That cushion is not on this session's desk.");
+    }
+  }
 
   const who = await getSignedInSinger();
   const setByName = who?.name ?? null;

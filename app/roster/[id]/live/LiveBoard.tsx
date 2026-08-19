@@ -6,7 +6,7 @@ import { DeitySymbols } from "@/components/DeitySymbol";
 import { useMicCushions, cushionTint } from "@/components/MicCushions";
 import { useSessionVersion } from "@/components/useSessionVersion";
 import { hasMoreBelow, isRowSeen, movedRows } from "@/lib/liveBoard";
-import { MIC_COLOURS, micColourDot, micColourLabel, type ChorusMic } from "@/lib/micCushion";
+import { ALL_CUSHIONS, micColourDot, micColourLabel, type ChorusMic } from "@/lib/micCushion";
 import type { LiveStrip } from "@/lib/liveDesk";
 import { LiveDesk } from "./LiveDesk";
 
@@ -82,8 +82,8 @@ function ChorusLine({ mics, dense = false }: { mics: ChorusMic[]; dense?: boolea
     >
       {mics.map((mic) => {
         const dot = micColourDot(mic.cushion);
-        // micColourLabel, not a lookup in MIC_COLOURS: green is the chorus-only
-        // colour and is not in that list at all, so it would never resolve.
+        // micColourLabel reads the whole catalogue, so it resolves any colour
+        // ever stored — including one the desk no longer carries.
         const label = mic.cushion ? micColourLabel(mic.cushion) : null;
 
         return (
@@ -665,7 +665,10 @@ export function LiveBoard({
         >
           {slots.map((s) => {
             const tint = cushionTint(cushions.get(s.singerId ?? "")?.colour ?? null);
-            const dot = MIC_COLOURS.find(
+            // The catalogue, not the desk's current set: this only RENDERS a
+            // colour already stored, and a cushion the desk has since retired
+            // must still show on the night it was used.
+            const dot = ALL_CUSHIONS.find(
               (c) => c.value === cushions.get(s.singerId ?? "")?.colour,
             );
             return (

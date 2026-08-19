@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { requireCapability, getRole, can, getSignedInSinger } from "@/lib/auth";
-import { isChorusColour, type MicColourValue } from "@/lib/micCushion";
+import { isMicColour, type MicColourValue } from "@/lib/micCushion";
 import { proposeChannels } from "@/lib/deskChannels";
 import { jobsOf, runsSound } from "@/lib/sessionView";
 import { revalidatePath } from "next/cache";
@@ -337,7 +337,7 @@ export async function updateChannel(input: {
       withPerson: Text(80).optional(),
       colour: z
         .union([z.string(), z.null()])
-        .refine((v) => v === null || v === "" || isChorusColour(v), "not a cushion colour"),
+        .refine((v) => v === null || v === "" || isMicColour(v), "not a cushion colour"),
       // Whether THIS programme runs the pair as a pair. See SessionChannel.
       stereo: z.boolean().optional(),
     })

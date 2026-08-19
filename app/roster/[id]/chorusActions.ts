@@ -3,7 +3,8 @@
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCapability } from "@/lib/auth";
-import { isChorusColour, type ChorusMic, type MicColourValue } from "@/lib/micCushion";
+import { isMicColour, type ChorusMic, type MicColourValue } from "@/lib/micCushion";
+import { cushionsForSession } from "@/lib/sessionDesk";
 import { describeChorusCopy, planChorusCopy } from "@/lib/chorusCopy";
 import { revalidatePath } from "next/cache";
 
@@ -161,13 +162,30 @@ export async function setChorusCushion(input: {
   const parsed = SlotSinger.extend({
     colour: z
       .union([z.string(), z.null()])
-      .refine((v) => v === null || isChorusColour(v), "not a cushion colour"),
+      .refine((v) => v === null || isMicColour(v), "not a cushion colour"),
   }).safeParse(input);
   if (!parsed.success) return { ok: false, error: "That is not a cushion colour." };
   const { slotId, singerId, colour } = parsed.data;
 
   const sessionId = await sessionOf(slotId);
   if (!sessionId) return { ok: false, error: "That row is gone." };
+
+  /*
+   * Same rule as the lead cushions, and the same reason it is enforced here
+   * rather than only in the picker: a cushion that is not on this session's
+   * desk cannot be set. Clearing stays open, so a colour the desk has dropped
+   * can always be taken off.
+   */
+  if (colour !== null) {
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { deskId: true },
+    });
+    const offered = await cushionsForSession(session?.deskId ?? null);
+    if (!offered.some((c) => c.value === colour)) {
+      return { ok: false, error: "That cushion is not on this session's desk." };
+    }
+  }
 
   // updateMany rather than update, for the same reason as the delete above: the
   // person may have been taken off the mic between the render and the tap, and

@@ -15,6 +15,7 @@ import { SessionMetaPanel } from "./SessionMetaPanel";
 import { DeleteSessionButton } from "./DeleteSessionButton";
 import { NotifyPanel } from "./NotifyPanel";
 import { melbourneTodayISO } from "@/lib/dates";
+import { cushionsForSession } from "@/lib/sessionDesk";
 import { sortByStart, sessionLabel, hasSeveral } from "@/lib/sessionsOfDay";
 import { resolveSessionView, jobBanner, jobsOf } from "@/lib/sessionView";
 import { missingParts } from "@/lib/notify";
@@ -111,6 +112,7 @@ export default async function RosterSessionPage({
   // Any signed-in user, editor or member: this is live sound-desk state.
   const canSetMicCushion = can(role, "setMicCushion");
 
+
   const session = await prisma.session.findUnique({
     where: { id: sessionId },
     include: {
@@ -197,6 +199,15 @@ export default async function RosterSessionPage({
   // Cheap: four rows the centre owns, and the session already has its own.
   // Bhajan kinds only — the program vocabulary is a different list, and
   // offering "Musical offering" as a kind of Thursday would be nonsense.
+/*
+   * The cushions on offer come from the DESK, not from a list in the code.
+   *
+   * Sailavan, 2026-08-19: "if a cushion colour is not ascribed to a channel set
+   * for a certain session, then it can't be picked." One list, in channel
+   * order, for the lead dots and the chorus dots alike.
+   */
+  const cushions = await cushionsForSession(session.deskId);
+
   const sessionCategories = await prisma.sessionCategory.findMany({
     where: { scope: "bhajans" },
     orderBy: [{ order: "asc" }, { name: "asc" }],
@@ -606,6 +617,7 @@ export default async function RosterSessionPage({
           <SessionSingersGrid
             canEdit={canEdit}
             canSetMicCushion={canSetMicCushion}
+            cushions={cushions}
             tablaOverrides={tablaOverrides}
             sessionId={sessionId}
             singers={allSingers}

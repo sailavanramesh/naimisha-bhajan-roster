@@ -8,6 +8,7 @@ import { DeitySymbols } from "@/components/DeitySymbol";
 import { Button } from "@/components/ui";
 import { deleteSingerRow, upsertSessionSingerRows, type SingerRowInput } from "./actions";
 import { useMicCushions, MicCushionDots, cushionTint } from "@/components/MicCushions";
+import { type Cushion } from "@/lib/micCushion";
 import type { ChorusMic } from "@/lib/micCushion";
 import { ChorusCell } from "./ChorusCell";
 import { LeaveWithChangesDialog } from "@/components/LeaveWithChangesDialog";
@@ -137,6 +138,13 @@ function hintKey(singerId: string, bhajanId: string): string {
 
 export function SessionSingersGrid(props: {
   canSetMicCushion: boolean;
+  /**
+   * The cushions this session's desk carries, in channel order.
+   *
+   * One list for the lead dots and the chorus dots alike — they are the same
+   * cushions, and where they come from is the desk. See lib/sessionDesk.ts.
+   */
+  cushions: Cushion[];
   tablaOverrides: Record<string, string | null>;
   canEdit: boolean;
   /** May move singers between slots. Members may not. */
@@ -1496,6 +1504,7 @@ export function SessionSingersGrid(props: {
                         singerId={r.singerId}
                         controller={cushions}
                         canSet={props.canSetMicCushion}
+                        cushions={props.cushions}
                       />
                     ) : null}
                   </td>
@@ -1736,6 +1745,7 @@ export function SessionSingersGrid(props: {
                       /* Everybody signed in, not just an editor: a chorus mic
                          is desk state, not a rostered part. See ChorusCell. */
                       canEdit={props.canSetMicCushion}
+                      cushions={props.cushions}
                       /* Nothing to copy onto from the last bhajan, and an
                          unsaved row has no slot for the server to copy from. */
                       canCopyDown={Boolean(r.id) && i < rows.length - 1}

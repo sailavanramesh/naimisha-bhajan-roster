@@ -3,7 +3,7 @@
 import { prisma } from "@/lib/db";
 import { requireGrantedCapability } from "@/lib/auth";
 import { defaultStrips } from "@/lib/deskChannels";
-import { isChorusColour } from "@/lib/micCushion";
+import { isMicColour } from "@/lib/micCushion";
 import { melbourneTodayISO } from "@/lib/dates";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -178,7 +178,7 @@ export async function updateDeskChannel(input: {
       colour: z
         .union([z.string(), z.null()])
         .optional()
-        .refine((v) => v === undefined || v === null || isChorusColour(v), "not a cushion"),
+        .refine((v) => v === undefined || v === null || isMicColour(v), "not a cushion"),
       // "Wired", "Pegasus", "WL1", "Rode" — the sound person's own shorthand.
       mic: z.union([z.string().trim().max(40), z.null()]).optional(),
       stereo: z.boolean().optional(),

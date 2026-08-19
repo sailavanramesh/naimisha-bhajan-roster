@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { CHORUS_COLOURS, type ChorusMic, type MicColourValue } from "@/lib/micCushion";
+import { type Cushion, type ChorusMic, type MicColourValue } from "@/lib/micCushion";
 import {
   addChorusSinger,
   copyChorusDown,
@@ -44,12 +44,15 @@ export function ChorusCell({
   singers,
   mics: fromServer,
   canEdit,
+  cushions,
   canCopyDown = false,
   onCopied,
 }: {
   slotId: string | null;
   singers: { id: string; name: string }[];
   mics: ChorusMic[];
+  /** The cushions this session's desk carries, in channel order. */
+  cushions: ReadonlyArray<Cushion>;
   /** May work the chorus mics at all: add, remove, colour, copy down. */
   canEdit: boolean;
   /** Is there a bhajan below this one to copy onto? Not shown on the last row. */
@@ -180,7 +183,9 @@ export function ChorusCell({
             own cushion.
           */}
           <span className="flex flex-wrap items-center gap-1">
-            {CHORUS_COLOURS.map((c) => {
+            {/* The desk's cushions, same list the lead dots use — a chorus
+                mic is a different mic, not a different set of cushions. */}
+            {cushions.map((c) => {
               const on = mic.cushion === c.value;
               return (
                 <button

@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
-  MIC_COLOURS,
+  ALL_CUSHIONS,
   mergeCushions,
   applyOwnWrite,
   micColourLabel,
+  type Cushion,
   type CushionEntry,
   type MicColourValue,
 } from "@/lib/micCushion";
@@ -160,10 +161,18 @@ export function MicCushionDots({
   singerId,
   controller,
   canSet,
+  cushions,
 }: {
   singerId: string;
   controller: CushionController;
   canSet: boolean;
+  /**
+   * The cushions this session's desk carries, in channel order.
+   *
+   * Passed in rather than imported, because it is a fact about the desk the
+   * session is on and not about the app. See lib/sessionDesk.ts.
+   */
+  cushions: ReadonlyArray<Cushion>;
 }) {
   const entry = controller.get(singerId);
   const selected = entry?.colour ?? null;
@@ -173,7 +182,14 @@ export function MicCushionDots({
 
   if (!canSet) {
     if (!selected) return null;
-    const c = MIC_COLOURS.find((x) => x.value === selected)!;
+    /*
+     * From the catalogue, not from this desk's cushions. A colour already set
+     * has to render even if the desk has since stopped carrying it — otherwise
+     * retiring a cushion would blank out every session that ever used it, and
+     * the record of what was actually on the mic that night would go with it.
+     */
+    const c = ALL_CUSHIONS.find((x) => x.value === selected);
+    if (!c) return null;
     return (
       <span
         className="mt-1 inline-flex items-center gap-1 text-[11px] text-on-surface-muted"
@@ -201,7 +217,17 @@ export function MicCushionDots({
       className="mt-1 flex items-center gap-2 sm:gap-1"
       title={selected ? `${micColourLabel(selected)} cushion${setBy}` : "Mic cushion"}
     >
-      {MIC_COLOURS.map((c) => {
+      {/*
+        No cushions on the desk is a real state, and silence looks like a bug.
+        It happens when nothing has been pinned to a strip yet, and it says
+        where to go and fix it rather than leaving a blank gap in the row.
+      */}
+      {cushions.length === 0 ? (
+        <span className="text-[11px] text-on-surface-muted">
+          No cushions on this desk yet
+        </span>
+      ) : null}
+      {cushions.map((c) => {
         const on = selected === c.value;
         return (
           <button
@@ -270,7 +296,7 @@ export function MicCushionDots({
  */
 export function cushionTint(colour: MicColourValue | null): { row: string; edge: string } | null {
   if (!colour) return null;
-  const dot = MIC_COLOURS.find((c) => c.value === colour)?.dot;
+  const dot = ALL_CUSHIONS.find((c) => c.value === colour)?.dot;
   if (!dot) return null;
   return {
     row: `color-mix(in srgb, ${dot} 13%, rgb(var(--surface)))`,
