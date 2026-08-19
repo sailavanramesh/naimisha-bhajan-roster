@@ -28,8 +28,8 @@ describe('noteSlug / tanpuraSrc', () => {
   it('spells out the sharp, because # would start a URL fragment', () => {
     expect(noteSlug('D#')).toBe('d-sharp');
     expect(noteSlug('C')).toBe('c');
-    expect(tanpuraSrc('Pancham', 'D#')).toBe('/audio/tanpura/pancham-d-sharp.mp3');
-    expect(tanpuraSrc('Madhyam', 'A')).toBe('/audio/tanpura/madhyam-a.mp3');
+    expect(tanpuraSrc('Pancham', 'D#')).toBe('/audio/tanpura/pancham-d-sharp.wav');
+    expect(tanpuraSrc('Madhyam', 'A')).toBe('/audio/tanpura/madhyam-a.wav');
   });
 
   it('never emits a # or a space in an asset path', () => {
@@ -44,6 +44,10 @@ describe('noteSlug / tanpuraSrc', () => {
       TANPURA_BASE_NOTES.Madhyam.length + TANPURA_BASE_NOTES.Pancham.length;
     expect(allTanpuraSrcs()).toHaveLength(expected);
     expect(new Set(allTanpuraSrcs()).size).toBe(expected);
+  });
+
+  it('is uncompressed, so the loop point has no codec padding in it', () => {
+    for (const src of allTanpuraSrcs()) expect(src.endsWith('.wav')).toBe(true);
   });
 });
 
@@ -69,34 +73,48 @@ describe('nearestSample', () => {
     }
   });
 
-  it('never stretches further than half the gap between recordings', () => {
-    // Four notes three semitones apart -> worst case 1.5, so |detune| <= 1.5.
+  it('holds Pancham — the common case — inside two semitones', () => {
+    // 626 of the group's 688 sung pitches are Pancham, so this is the bound
+    // that matters. Four recordings at A, C, E, F#.
     for (let semitone = 0; semitone < 12; semitone++) {
-      for (const series of ['Madhyam', 'Pancham'] as const) {
-        const got = nearestSample(series, semitone);
-        expect(got).not.toBeNull();
-        expect(Math.abs(got!.detune)).toBeLessThanOrEqual(1.5);
+      const got = nearestSample('Pancham', semitone);
+      expect(got).not.toBeNull();
+      expect(Math.abs(got!.detune), `Pancham ${semitone}`).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('holds Madhyam inside four semitones, the price of only two recordings', () => {
+    // Documented rather than hidden: the Madhyam tuning exists at F# and A
+    // only, so the far side of the circle is stretched. Adding recordings near
+    // C and D# would bring this to 2 — this bound is what to tighten then.
+    for (let semitone = 0; semitone < 12; semitone++) {
+      const got = nearestSample('Madhyam', semitone);
+      expect(got).not.toBeNull();
+      expect(Math.abs(got!.detune), `Madhyam ${semitone}`).toBeLessThanOrEqual(4);
+    }
+  });
+
+  it('always picks a recording at the minimum distance available', () => {
+    for (const series of ['Madhyam', 'Pancham'] as const) {
+      for (let semitone = 0; semitone < 12; semitone++) {
+        const winner = nearestSample(series, semitone)!;
+        const best = Math.min(
+          ...TANPURA_BASE_NOTES[series].map((note) =>
+            Math.abs(shortestShift(NOTE_NAMES.indexOf(note), semitone)),
+          ),
+        );
+        expect(Math.abs(winner.detune), `${series} ${semitone}`).toBe(best);
       }
     }
   });
 
-  it('cannot face a tie with the current recordings, and says so', () => {
-    // The base notes sit three semitones apart. An exact tie needs a target
-    // half a gap from two recordings, i.e. 1.5 semitones — never a whole
-    // semitone, so with this set the tie rule in nearestSample is unreachable.
-    // Asserting that keeps the claim honest: if someone re-spaces the
-    // recordings evenly, this test fails and the tie rule starts to matter.
-    for (const series of ['Madhyam', 'Pancham'] as const) {
-      for (let semitone = 0; semitone < 12; semitone++) {
-        const winner = nearestSample(series, semitone)!;
-        const distances = TANPURA_BASE_NOTES[series].map((note) =>
-          Math.abs(shortestShift(NOTE_NAMES.indexOf(note), semitone)),
-        );
-        const best = Math.min(...distances);
-        expect(distances.filter((d) => d === best), `${series} ${semitone}`).toHaveLength(1);
-        expect(Math.abs(winner.detune)).toBe(best);
-      }
-    }
+  it('breaks a tie upward, preferring to speed a recording up', () => {
+    // D (2) is a genuine tie in Pancham: two above C, two below E. A tanpura
+    // shifted up keeps its buzz better than one dragged down, so C wins.
+    expect(nearestSample('Pancham', NOTE_NAMES.indexOf('D'))).toEqual({
+      note: 'C',
+      detune: 2,
+    });
   });
 
   it('shifts down by one for B, the nearest recording being C above it', () => {
@@ -158,10 +176,11 @@ describe('tanpuraVoice', () => {
   });
 
   it('keeps playback rate inside a range a drone survives', () => {
+    // +-4 semitones is 0.794 to 1.26. Nothing may exceed that.
     for (const label of ALL_LABELS) {
       const v = tanpuraVoice(label)!;
-      expect(v.playbackRate).toBeGreaterThan(0.9);
-      expect(v.playbackRate).toBeLessThan(1.1);
+      expect(v.playbackRate, label).toBeGreaterThan(0.79);
+      expect(v.playbackRate, label).toBeLessThan(1.27);
     }
   });
 

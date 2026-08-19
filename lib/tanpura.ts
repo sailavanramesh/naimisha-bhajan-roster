@@ -37,36 +37,59 @@ import { saOf, PITCH_CLASS, NOTE_NAMES, type NoteName, type Series } from './pit
 /**
  * The Sa notes we hold recordings at, per series.
  *
- * Four, evenly spaced three semitones apart, so the worst case is a 1.5
- * semitone correction in either direction — about 9% of playback rate, which a
- * drone carries without obvious artefacts.
+ * The two series list DIFFERENT notes, and that is not an oversight. The
+ * recordings are the electronic-tanpura pack described in
+ * public/audio/tanpura/README.md, which was recorded at whatever pitches its
+ * author happened to use — four in the Pancham tuning, only two in Madhyam.
+ * `nearestSample` reads whatever each series declares, so this asymmetry costs
+ * nothing but accuracy in the thinner series.
  *
- * Both series list the same notes. They need not: `nearestSample` reads
- * whatever each series declares, so a series with more recordings simply gets
- * better coverage.
+ * What it means in practice:
+ *
+ *   Pancham — worst case 2 semitones of correction (a target on D).
+ *   Madhyam — worst case 4 semitones (targets on C# and D).
+ *
+ * That is a fair trade for now because the group's own data is lopsided the
+ * same way: of 688 sung pitches on record, 626 are Pancham and 62 Madhyam. The
+ * common case is the accurate one.
+ *
+ * Adding two Madhyam recordings near C and D# would bring that series to the
+ * same 2 semitones. It is a one-line change here plus the files.
  */
 export const TANPURA_BASE_NOTES: Readonly<Record<Series, readonly NoteName[]>> = {
-  Madhyam: ['C', 'D#', 'F#', 'A'],
-  Pancham: ['C', 'D#', 'F#', 'A'],
+  Madhyam: ['F#', 'A'],
+  Pancham: ['A', 'C', 'E', 'F#'],
 };
 
 /** Where the recordings live, relative to the site root. */
 export const TANPURA_DIR = '/audio/tanpura';
 
 /**
+ * Uncompressed, deliberately.
+ *
+ * MP3 and AAC both add encoder delay and padding, and browsers disagree about
+ * trimming it on decode — which puts a gap at the loop point of a sound whose
+ * whole job is to be continuous. WAV has no such framing, so the loop is
+ * sample-exact everywhere. The files are 8 seconds of 16-bit mono at 22.05 kHz,
+ * about 350 KB each: more than an MP3, still a fraction of a second on a phone,
+ * and fetched once per shruti and then cached.
+ */
+export const TANPURA_EXT = '.wav';
+
+/**
  * Filename-safe form of a note: `D#` -> `d-sharp`.
  *
  * Spelled out rather than kept as `#` because a `#` in a URL starts the
- * fragment, so `/audio/tanpura/pancham-D#.mp3` would request
+ * fragment, so `/audio/tanpura/pancham-D#.wav` would request
  * `/audio/tanpura/pancham-D` and 404.
  */
 export function noteSlug(note: NoteName): string {
   return note.toLowerCase().replace('#', '-sharp');
 }
 
-/** The asset path for one recording, e.g. `/audio/tanpura/pancham-d-sharp.mp3`. */
+/** The asset path for one recording, e.g. `/audio/tanpura/pancham-f-sharp.wav`. */
 export function tanpuraSrc(series: Series, note: NoteName): string {
-  return `${TANPURA_DIR}/${series.toLowerCase()}-${noteSlug(note)}.mp3`;
+  return `${TANPURA_DIR}/${series.toLowerCase()}-${noteSlug(note)}${TANPURA_EXT}`;
 }
 
 /** Every recording the app expects to exist. Used by the asset check script. */

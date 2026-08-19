@@ -233,6 +233,44 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 */}
                 {walled ? <SignInWall /> : children}
               </main>
+
+              {/*
+                Sound credit. The shruti player uses recordings released under
+                CC BY 4.0, which requires naming the author, the source and the
+                licence wherever the work is used. It lives in the layout rather
+                than on the guide page because the guide is editable content —
+                a credit somebody can delete by accident is not a credit.
+              */}
+              <footer className="mt-10 border-t border-rule pt-3 pb-6 text-[11px] leading-relaxed text-on-ground-muted">
+                Tanpura recordings by{" "}
+                <a
+                  href="https://freesound.org/people/sankalp/"
+                  className="underline hover:text-on-ground"
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  sankalp
+                </a>{" "}
+                on{" "}
+                <a
+                  href="https://freesound.org/people/sankalp/packs/9600/"
+                  className="underline hover:text-on-ground"
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  Freesound
+                </a>
+                , trimmed to loops and retuned for this app, used under{" "}
+                <a
+                  href="https://creativecommons.org/licenses/by/4.0/"
+                  className="underline hover:text-on-ground"
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  CC BY 4.0
+                </a>
+                .
+              </footer>
             </div>
           </div>
         </div>

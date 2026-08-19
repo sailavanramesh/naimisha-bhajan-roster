@@ -1,63 +1,86 @@
 # Tanpura recordings
 
-The shruti play control (`components/ShrutiPlayer.tsx`) sounds a real tanpura
-recording, pitch-corrected to the shruti being played. This directory holds
-those recordings. **Until the files below exist, the control renders but fails
-on click** — run `npm run check:tanpura` to see what is missing.
+The shruti play control (`components/ShrutiPlayer.tsx`) sounds a real drone
+recording, retuned to the shruti being played. These are those recordings.
+`npm run check:tanpura` reports what is present and what is missing.
 
-## What is needed
+## What is here
 
-Eight files. Two tunings × four base pitches:
+Six files. The two tunings do **not** cover the same pitches — see below.
 
-| Series  | Sa | File |
-|---------|----|------|
-| Madhyam | C  | `madhyam-c.mp3` |
-| Madhyam | D# | `madhyam-d-sharp.mp3` |
-| Madhyam | F# | `madhyam-f-sharp.mp3` |
-| Madhyam | A  | `madhyam-a.mp3` |
-| Pancham | C  | `pancham-c.mp3` |
-| Pancham | D# | `pancham-d-sharp.mp3` |
-| Pancham | F# | `pancham-f-sharp.mp3` |
-| Pancham | A  | `pancham-a.mp3` |
+| Series  | Sa | File | Source sound |
+|---------|----|------|--------------|
+| Pancham | A  | `pancham-a.wav` | [155494](https://freesound.org/people/sankalp/sounds/155494/) |
+| Pancham | C  | `pancham-c.wav` | [155498](https://freesound.org/people/sankalp/sounds/155498/) |
+| Pancham | E  | `pancham-e.wav` | [155485](https://freesound.org/people/sankalp/sounds/155485/) |
+| Pancham | F# | `pancham-f-sharp.wav` | [155489](https://freesound.org/people/sankalp/sounds/155489/) |
+| Madhyam | F# | `madhyam-f-sharp.wav` | [155493](https://freesound.org/people/sankalp/sounds/155493/) |
+| Madhyam | A  | `madhyam-a.wav` | [155496](https://freesound.org/people/sankalp/sounds/155496/) |
 
-The list is generated from `TANPURA_BASE_NOTES` in `lib/tanpura.ts`. Adding
-base pitches there narrows the worst-case correction; nothing else changes.
+The list the app expects comes from `TANPURA_BASE_NOTES` in `lib/tanpura.ts`;
+`lib/tanpuraAssets.test.ts` fails if this table and that constant disagree.
 
-## Why these eight and not twenty-four
+## Licence — attribution is required
 
-A recording is tuned to its exact shruti by playing it back faster or slower,
-which shifts pitch and length together and starts to smear the jivari buzz once
-pushed far. Four base pitches three semitones apart mean nothing is ever
-corrected by more than 1.5 semitones — under 10% of playback rate, which a
-drone carries cleanly.
+All six come from the **Electronic Tanpura** pack by **sankalp** on Freesound,
+released under **CC BY 4.0**. That licence permits commercial use and
+redistribution, including of these edited versions, on condition that the
+author, source and licence are credited wherever the work appears.
 
-The two series are genuinely different recordings, not the same one relabelled:
-a Pancham tanpura sounds Pa against Sa, a Madhyam one sounds Ma. That is the
-whole reason the group writes the series on a pitch. Sa itself is identical
-between them — `1 Madhyam / F` and `3.5 Pancham / F` are the same Sa, per
-CLAUDE.md rule 2, and the code never converts one series to the other.
+That credit is rendered in `app/layout.tsx`, in the footer on every page. **It
+is a licence condition, not decoration — do not remove it.** If the recordings
+are ever replaced with the centre's own, remove the credit in the same commit.
 
-## What each file must be
+The same author's *Acoustic* tanpura pack is mostly CC0 and needs no credit, but
+it is a plucked instrument that loops far less cleanly, and its Madhyam tuning
+exists at only two pitches as well.
 
-- **A seamless loop.** It is played on repeat with no crossfade, so the last
-  sample must meet the first without a click. Trim on a zero crossing.
-- **8–20 seconds.** Long enough to cover a full cycle of the four strings,
-  short enough to download on a phone in a hall.
-- **In tune with A4 = 440 Hz**, and tuned to the Sa in the filename. Everything
-  downstream trusts the filename: a recording that is actually a quartertone
-  flat will play a quartertone flat at every shruti derived from it.
-- **Mono, 96–128 kbps MP3.** A drone has little stereo information and this is
-  loaded over mobile data. Keep each file under about 300 KB.
-- **Even in level, with no fade of its own.** The player does its own fade in
-  and out; a fade baked into the file would fade again on every loop.
+## The uneven coverage, and why
 
-## Where they can come from
+The recordings are of a Raagini electronic tanpura — effectively a shruti box,
+which is both what the group actually uses and far easier to loop than a plucked
+tanpura, whose four strings are struck in sequence and never repeat.
 
-Recording the centre's own tanpura or shruti box is the surest route — it is
-then unambiguously the group's own material, and it will match what people hear
-in the hall. Record eight takes, one per row above, or record one take per
-series at C and let someone re-tune between takes.
+Its author recorded the Pancham tuning (`pa SA SA sa`) at four pitches but the
+Madhyam tuning (`ma SA SA sa`) at only two. So:
 
-If a purchased or downloaded sample library is used instead, check the licence
-covers redistribution: these files are served publicly to every visitor, which
-most "personal use only" sample licences do not permit.
+- **Pancham** — recordings at A, C, E, F#; worst-case correction **2 semitones**.
+- **Madhyam** — recordings at F# and A only; worst-case correction **4 semitones**,
+  on targets around C# and D.
+
+This is an acceptable trade only because the group's own usage leans the same
+way: of 688 sung pitches on record, **626 are Pancham and 62 Madhyam**. The
+common case is the accurate one, and a Madhyam shruti at the far side of the
+circle still sounds the right Sa — it just sounds more obviously stretched.
+
+Recording the centre's own box in Madhyam near **C** and **D#** would bring that
+series to 2 semitones as well. It is a one-line change to `TANPURA_BASE_NOTES`
+plus the files, and the bound asserted in `lib/tanpura.test.ts`.
+
+## How these were prepared
+
+From the public 128 kbps preview of each sound (the full-quality downloads need
+a Freesound login), then:
+
+1. decoded to 16-bit mono 22.05 kHz with `afconvert`;
+2. an 8-second segment taken from 40% of the way in, past the onset;
+3. the segment's tail crossfaded into its head with equal-power weights, so the
+   wrap is a real continuation of the recording and cannot click;
+4. levels matched across all six to the same RMS, peak-limited below clipping.
+
+Measured fundamentals were checked against the stated pitches before use: all
+six landed within 6 cents of equal temperament at A4 = 440.
+
+## Why WAV and not MP3
+
+MP3 and AAC both carry encoder delay and padding, and browsers disagree about
+trimming it on decode — which puts a gap in the one place a drone must not have
+one. WAV has no such framing, so the loop is sample-exact everywhere. Each file
+is about 350 KB, fetched once per shruti and then cached.
+
+## If these are ever replaced
+
+Any replacement must be a **seamless loop** (or be built the same way), in tune
+at **A4 = 440**, tuned to the Sa in its filename, **mono**, and even in level
+with no fade of its own — the player fades in and out itself, and a fade baked
+into the file would fade again on every repeat.

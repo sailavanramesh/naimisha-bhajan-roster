@@ -11,27 +11,28 @@ import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 // Kept in step with lib/tanpura.ts by scripts/checkTanpuraAssets.test.ts.
-const BASE_NOTES = { madhyam: ["c", "d-sharp", "f-sharp", "a"], pancham: ["c", "d-sharp", "f-sharp", "a"] };
+const BASE_NOTES = { madhyam: ["f-sharp", "a"], pancham: ["a", "c", "e", "f-sharp"] };
 const DIR = join(process.cwd(), "public", "audio", "tanpura");
 
+const total = Object.values(BASE_NOTES).reduce((n, v) => n + v.length, 0);
 let missing = 0;
 for (const [series, notes] of Object.entries(BASE_NOTES)) {
   for (const note of notes) {
-    const name = `${series}-${note}.mp3`;
+    const name = `${series}-${note}.wav`;
     const path = join(DIR, name);
     if (!existsSync(path)) {
       console.log(`  missing  ${name}`);
       missing++;
     } else {
       const kb = Math.round(statSync(path).size / 1024);
-      console.log(`  ok       ${name}  ${kb} KB${kb > 300 ? "  (large for mobile — see README)" : ""}`);
+      console.log(`  ok       ${name}  ${kb} KB${kb > 500 ? "  (large for mobile — see README)" : ""}`);
     }
   }
 }
 
 if (missing > 0) {
-  console.log(`\n${missing} of 8 tanpura recordings missing. The shruti play control will fail on click.`);
+  console.log(`\n${missing} of ${total} tanpura recordings missing. The shruti play control will fail on click.`);
   console.log(`See public/audio/tanpura/README.md for what each file must be.`);
 } else {
-  console.log(`\nAll 8 tanpura recordings present.`);
+  console.log(`\nAll ${total} tanpura recordings present.`);
 }
