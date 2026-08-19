@@ -162,6 +162,7 @@ export function MicCushionDots({
   controller,
   canSet,
   cushions,
+  noDesk,
 }: {
   singerId: string;
   controller: CushionController;
@@ -173,6 +174,15 @@ export function MicCushionDots({
    * session is on and not about the app. See lib/sessionDesk.ts.
    */
   cushions: ReadonlyArray<Cushion>;
+  /**
+   * Is this session deliberately off the desk?
+   *
+   * Separates the two reasons there might be no cushions. "No sound desk" is a
+   * DECISION, said once on the session's own line, and repeating it on every
+   * singer's row would be noise. A desk with nothing on its strips is an
+   * OVERSIGHT, and worth saying exactly where somebody would go to fix it.
+   */
+  noDesk?: boolean;
 }) {
   const entry = controller.get(singerId);
   const selected = entry?.colour ?? null;
@@ -222,7 +232,7 @@ export function MicCushionDots({
         It happens when nothing has been pinned to a strip yet, and it says
         where to go and fix it rather than leaving a blank gap in the row.
       */}
-      {cushions.length === 0 ? (
+      {cushions.length === 0 && !noDesk ? (
         <span className="text-[11px] text-on-surface-muted">
           No cushions on this desk yet
         </span>

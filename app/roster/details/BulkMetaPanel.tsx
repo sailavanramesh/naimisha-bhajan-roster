@@ -55,6 +55,16 @@ export function BulkMetaPanel({
    */
   const [timeZone, setTimeZone] = useState<string>("");
   const [touchTimeZone, setTouchTimeZone] = useState(false);
+  /*
+   * Value and "did you ask" kept apart, because false is a real answer here.
+   * A single boolean could not tell "set these to not-mic'd" from "leave the
+   * tabla alone", and a bulk edit that guessed would silently unmic a year of
+   * sessions somebody was only retagging.
+   */
+  const [noDesk, setNoDesk] = useState(false);
+  const [touchNoDesk, setTouchNoDesk] = useState(false);
+  const [tablaMicd, setTablaMicd] = useState(false);
+  const [touchTablaMicd, setTouchTablaMicd] = useState(false);
   const [topic, setTopic] = useState<string>("");
   const [touchTopic, setTouchTopic] = useState(false);
   const [location, setLocation] = useState<string>("");
@@ -94,6 +104,8 @@ export function BulkMetaPanel({
         ...(categoryId === "" ? {} : { categoryId: categoryId === "__clear__" ? "" : categoryId }),
         ...(startsAt === "" ? {} : { startsAt }),
         ...(touchTimeZone ? { timeZone: timeZone || CENTRE_TIME_ZONE } : {}),
+        ...(touchNoDesk ? { noDesk } : {}),
+        ...(touchTablaMicd ? { tablaMicd } : {}),
         ...(touchTopic ? { topic } : {}),
         ...(touchLocation ? { location } : {}),
       });
@@ -169,6 +181,48 @@ export function BulkMetaPanel({
               onChange={(e) => setStartsAt(e.target.value)}
               className="h-9 rounded-[10px] border border-rule-surface bg-field px-2 text-sm text-on-surface"
             />
+          </label>
+
+          <label className="grid gap-1 text-[11px] text-on-surface-muted">
+            <span className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={touchNoDesk}
+                onChange={(e) => setTouchNoDesk(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              Also set sound desk
+            </span>
+            <select
+              value={noDesk ? "none" : "desk"}
+              disabled={!touchNoDesk}
+              onChange={(e) => setNoDesk(e.target.value === "none")}
+              className="h-9 rounded-[10px] border border-rule-surface bg-field px-2 text-sm text-on-surface"
+            >
+              <option value="desk">On the sound desk</option>
+              <option value="none">No sound desk</option>
+            </select>
+          </label>
+
+          <label className="grid gap-1 text-[11px] text-on-surface-muted">
+            <span className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={touchTablaMicd}
+                onChange={(e) => setTouchTablaMicd(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              Also set tabla mic
+            </span>
+            <select
+              value={tablaMicd ? "yes" : "no"}
+              disabled={!touchTablaMicd}
+              onChange={(e) => setTablaMicd(e.target.value === "yes")}
+              className="h-9 rounded-[10px] border border-rule-surface bg-field px-2 text-sm text-on-surface"
+            >
+              <option value="no">Tabla not mic&rsquo;d</option>
+              <option value="yes">Tabla is mic&rsquo;d</option>
+            </select>
           </label>
 
           {/* Opt-in, like "also set where": every session already has a zone,

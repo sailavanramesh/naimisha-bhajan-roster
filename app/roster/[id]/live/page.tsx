@@ -3,6 +3,15 @@ import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { jobsOf, runsSound } from "@/lib/sessionView";
 import { LiveBoard, type LiveSlot } from "./LiveBoard";
 import { planTablas } from "@/lib/tablaPlan";
+
+/**
+ * What both the roster and the desk call the drum.
+ *
+ * The join between a rostered instrument and a desk channel is this word, so it
+ * is named once rather than typed twice — see planLiveDesk, which matches on
+ * the channel label.
+ */
+const TABLA = "Tabla";
 import type { LiveStrip } from "@/lib/liveDesk";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +47,9 @@ export default async function LiveSessionPage({
     where: { id: sessionId },
     include: {
       category: { select: { name: true, image: true } },
+      // Who is on the tabla, for the desk's tabla line. Cheap, and only read
+      // when the session says the drum is mic'd.
+      instruments: { select: { instrument: true, person: true } },
       slots: {
         include: {
           singer: true,
@@ -114,21 +126,22 @@ export default async function LiveSessionPage({
    * snapshotted: a bhajan session has no historical channel record to protect,
    * so tidying a desk fixes every session at once. See live/deskActions.ts.
    */
-  const desk =
-    (session.deskId
-      ? await prisma.desk.findUnique({
-          where: { id: session.deskId },
-          include: { channels: { orderBy: { number: "asc" } } },
-        })
-      : null) ??
-    (await prisma.desk.findFirst({
-      where: { isDefault: true },
-      include: { channels: { orderBy: { number: "asc" } } },
-    })) ??
-    (await prisma.desk.findFirst({
-      orderBy: { name: "asc" },
-      include: { channels: { orderBy: { number: "asc" } } },
-    }));
+  const desk = session.noDesk
+    ? null
+    : (session.deskId
+        ? await prisma.desk.findUnique({
+            where: { id: session.deskId },
+            include: { channels: { orderBy: { number: "asc" } } },
+          })
+        : null) ??
+      (await prisma.desk.findFirst({
+        where: { isDefault: true },
+        include: { channels: { orderBy: { number: "asc" } } },
+      })) ??
+      (await prisma.desk.findFirst({
+        orderBy: { name: "asc" },
+        include: { channels: { orderBy: { number: "asc" } } },
+      }));
 
   /*
    * Who may change which desk this session is on.
@@ -212,6 +225,26 @@ export default async function LiveSessionPage({
               choices: deskChoices,
               currentPosition: session.currentItemPosition,
               canSetUp: canSetUpDesk,
+              /*
+               * The tabla line, when there is a mic on the drum.
+               *
+               * Sailavan, 2026-08-19: "all sessions should have an option to
+               * say tabla is mic'd, and then that channel shows on the desk
+               * view (as long as its allocated in the sound desk, which it is
+               * currently)." Channel 9 is already labelled Tabla; this is the
+               * half that was missing.
+               */
+              instruments: session.tablaMicd
+                ? [
+                    {
+                      label: TABLA,
+                      person:
+                        session.instruments.find(
+                          (i) => i.instrument.trim().toLowerCase() === TABLA.toLowerCase(),
+                        )?.person ?? null,
+                    },
+                  ]
+                : [],
             }
           : null
       }

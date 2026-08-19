@@ -85,9 +85,25 @@ function carriesCushion(strip: LiveStrip): boolean {
 export function planLiveDesk({
   strips,
   people,
+  instruments = [],
 }: {
   strips: readonly LiveStrip[];
   people: readonly CushionPerson[];
+  /**
+   * Players on a named line rather than on a cushion — the tabla, today.
+   *
+   * Matched by the channel's LABEL, case-insensitively, because that is what
+   * ties the two together on the real desk: channel 9 is called "Tabla" and the
+   * roster calls the instrument "Tabla". Not matched on `kind`, because the
+   * centre's tabla channel is typed `spare` and a feature that only worked
+   * after somebody re-typed it would look broken until they did.
+   *
+   * Kept apart from the cushion pass entirely. A cushion is a mic a singer
+   * picks up and could be on any coloured strip; this is a fixed line with one
+   * instrument on it. Folding them together is how a tabla channel that
+   * happened to be coloured would swallow a singer — see `carriesCushion`.
+   */
+  instruments?: readonly { label: string; person: string | null }[];
 }): LiveDeskPlan {
   const assigned = new Map<string, CushionPerson[]>(strips.map((s) => [s.id, []]));
 
@@ -127,6 +143,34 @@ export function planLiveDesk({
       const strip = available[Math.min(i, available.length - 1)];
       assigned.get(strip.id)!.push(person);
     });
+  }
+
+  /*
+   * The instrument lines, after the cushions and never competing with them.
+   *
+   * Only onto a strip no cushion reached: if a singer is already on this
+   * channel the desk has a real conflict, and quietly adding the tabla player's
+   * name beside them would hide it rather than show it.
+   */
+  const byLabel = new Map<string, LiveStrip[]>();
+  for (const strip of strips) {
+    const key = strip.label.trim().toLowerCase();
+    byLabel.set(key, [...(byLabel.get(key) ?? []), strip]);
+  }
+  for (const instrument of instruments) {
+    for (const strip of byLabel.get(instrument.label.trim().toLowerCase()) ?? []) {
+      const on = assigned.get(strip.id)!;
+      if (on.length > 0) continue;
+      on.push({
+        // No singer id: this is a line, not somebody holding a cushion, and
+        // nothing downstream should be able to mistake it for one.
+        singerId: `instrument:${instrument.label.trim().toLowerCase()}`,
+        // Unnamed is a true answer — the tabla is mic'd and nobody is down to
+        // play it yet, which the desk would rather see than not.
+        name: instrument.person?.trim() || instrument.label.trim(),
+        cushion: null,
+      });
+    }
   }
 
   const out: StripAssignment[] = strips.map((strip) => {
@@ -196,9 +240,18 @@ export type LiveSlotPlan = {
 export function planLiveDeskForSlots({
   strips,
   slots,
+  instruments = [],
 }: {
   strips: readonly LiveStrip[];
   slots: readonly LiveSlotInput[];
+  /**
+   * Lines that are live all night, on every bhajan of it.
+   *
+   * Passed once and applied to each slot's plan, because the tabla does not
+   * come and go between bhajans the way a lead singer does — if it is mic'd, it
+   * is mic'd for the session.
+   */
+  instruments?: readonly { label: string; person: string | null }[];
 }): LiveSlotPlan[] {
   return slots.map((slot) => {
     const people: CushionPerson[] = [];
@@ -210,7 +263,7 @@ export function planLiveDeskForSlots({
       people.push(person);
     }
 
-    const plan = planLiveDesk({ strips, people });
+    const plan = planLiveDesk({ strips, people, instruments });
     const leadId = slot.lead?.singerId ?? null;
 
     return {

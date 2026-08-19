@@ -303,3 +303,83 @@ describe("planLiveDeskForSlots — the lead's strip", () => {
     expect([...plans[1].leadStripIds]).toEqual(["c3"]);
   });
 });
+
+describe("instrument lines — the tabla mic", () => {
+  /*
+   * Sailavan, 2026-08-19: "all sessions should have an option to say tabla is
+   * mic'd, and then that channel shows on the desk view (as long as its
+   * allocated in the sound desk, which it is currently)."
+   */
+  const tabla = (person: string | null) => [{ label: "Tabla", person }];
+
+  const whoIsOn = (plan: ReturnType<typeof planLiveDesk>, label: string) =>
+    plan.strips.find((s) => s.strip.label === label)?.people.map((p) => p.name) ?? [];
+
+  it("puts the rostered player on the tabla channel", () => {
+    const plan = planLiveDesk({ strips: DESK, people: [], instruments: tabla("Prithvi") });
+    expect(whoIsOn(plan, "Tabla")).toEqual(["Prithvi"]);
+  });
+
+  it("leaves the channel empty when the drum is not mic'd", () => {
+    const plan = planLiveDesk({ strips: DESK, people: [] });
+    expect(whoIsOn(plan, "Tabla")).toEqual([]);
+  });
+
+  it("matches the channel by label whatever the case", () => {
+    const plan = planLiveDesk({
+      strips: DESK,
+      people: [],
+      instruments: [{ label: "  tabla ", person: "Prithvi" }],
+    });
+    expect(whoIsOn(plan, "Tabla")).toEqual(["Prithvi"]);
+  });
+
+  /*
+   * The centre's real tabla channel is typed `spare`, not `instrument`. Matching
+   * on kind would mean the feature only worked after somebody re-typed it in the
+   * desk admin, which is not a dependency worth having.
+   */
+  it("does not care how the channel is typed", () => {
+    const spareDesk = [strip(9, "Tabla", null, "spare")];
+    const plan = planLiveDesk({ strips: spareDesk, people: [], instruments: tabla("Prithvi") });
+    expect(whoIsOn(plan, "Tabla")).toEqual(["Prithvi"]);
+  });
+
+  it("names the instrument when nobody is rostered on it", () => {
+    const plan = planLiveDesk({ strips: DESK, people: [], instruments: tabla(null) });
+    expect(whoIsOn(plan, "Tabla")).toEqual(["Tabla"]);
+  });
+
+  /*
+   * The guard that matters. A cushion is a mic a singer picks up; an instrument
+   * line is fixed. If a tabla channel ever carried a colour, adding the player
+   * beside the singer would hide a real conflict rather than show it.
+   */
+  it("never displaces a singer already on that channel", () => {
+    const clashing = [strip(9, "Tabla", "blue")];
+    const plan = planLiveDesk({
+      strips: clashing,
+      people: [person("s1", "Ashwin", "blue")],
+      instruments: tabla("Prithvi"),
+    });
+    expect(whoIsOn(plan, "Tabla")).toEqual(["Ashwin"]);
+  });
+
+  it("does not count as a cushion problem", () => {
+    const plan = planLiveDesk({ strips: DESK, people: [], instruments: tabla("Prithvi") });
+    expect(plan.hasProblem).toBe(false);
+    expect(plan.unplaced).toEqual([]);
+  });
+
+  it("is live on every bhajan of the night, not just the first", () => {
+    const plans = planLiveDeskForSlots({
+      strips: DESK,
+      slots: [
+        { position: 1, title: "One", lead: person("s1", "Ashwin", "blue"), chorus: [] },
+        { position: 2, title: "Two", lead: person("s2", "Jothsna", "pink"), chorus: [] },
+      ],
+      instruments: tabla("Prithvi"),
+    });
+    for (const p of plans) expect(whoIsOn(p.plan, "Tabla")).toEqual(["Prithvi"]);
+  });
+});

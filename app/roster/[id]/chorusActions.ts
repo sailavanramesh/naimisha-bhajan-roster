@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireCapability } from "@/lib/auth";
 import { isMicColour, type ChorusMic, type MicColourValue } from "@/lib/micCushion";
-import { cushionsForSession } from "@/lib/sessionDesk";
+import { cushionsForSession, deskRefOf } from "@/lib/sessionDesk";
 import { describeChorusCopy, planChorusCopy } from "@/lib/chorusCopy";
 import { revalidatePath } from "next/cache";
 
@@ -177,11 +177,7 @@ export async function setChorusCushion(input: {
    * can always be taken off.
    */
   if (colour !== null) {
-    const session = await prisma.session.findUnique({
-      where: { id: sessionId },
-      select: { deskId: true },
-    });
-    const offered = await cushionsForSession(session?.deskId ?? null);
+    const offered = await cushionsForSession(await deskRefOf(sessionId));
     if (!offered.some((c) => c.value === colour)) {
       return { ok: false, error: "That cushion is not on this session's desk." };
     }

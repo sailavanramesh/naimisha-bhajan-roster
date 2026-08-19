@@ -145,6 +145,8 @@ export function SessionSingersGrid(props: {
    * cushions, and where they come from is the desk. See lib/sessionDesk.ts.
    */
   cushions: Cushion[];
+  /** This session is deliberately not on a desk. See Session.noDesk. */
+  noDesk: boolean;
   tablaOverrides: Record<string, string | null>;
   canEdit: boolean;
   /** May move singers between slots. Members may not. */
@@ -1505,6 +1507,7 @@ export function SessionSingersGrid(props: {
                         controller={cushions}
                         canSet={props.canSetMicCushion}
                         cushions={props.cushions}
+                        noDesk={props.noDesk}
                       />
                     ) : null}
                   </td>

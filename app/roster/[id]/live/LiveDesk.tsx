@@ -38,6 +38,7 @@ export function LiveDesk({
   deskId,
   desks,
   strips,
+  instruments,
   slots,
   currentPosition,
   canSetUpDesk,
@@ -48,6 +49,8 @@ export function LiveDesk({
   deskId: string | null;
   desks: { id: string; name: string }[];
   strips: LiveStrip[];
+  /** Lines live on every bhajan — the tabla, when the drum is mic'd. */
+  instruments: { label: string; person: string | null }[];
   slots: LiveSlotInput[];
   /** Which bhajan the room is on. Null until somebody says. */
   currentPosition: number | null;
@@ -56,7 +59,7 @@ export function LiveDesk({
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
-  const plans = planLiveDeskForSlots({ strips, slots });
+  const plans = planLiveDeskForSlots({ strips, slots, instruments });
 
   if (strips.length === 0) {
     return (

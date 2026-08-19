@@ -206,7 +206,7 @@ export default async function RosterSessionPage({
    * for a certain session, then it can't be picked." One list, in channel
    * order, for the lead dots and the chorus dots alike.
    */
-  const cushions = await cushionsForSession(session.deskId);
+  const cushions = await cushionsForSession(session);
 
   const sessionCategories = await prisma.sessionCategory.findMany({
     where: { scope: "bhajans" },
@@ -618,6 +618,7 @@ export default async function RosterSessionPage({
             canEdit={canEdit}
             canSetMicCushion={canSetMicCushion}
             cushions={cushions}
+            noDesk={session.noDesk}
             tablaOverrides={tablaOverrides}
             sessionId={sessionId}
             singers={allSingers}
@@ -656,6 +657,8 @@ export default async function RosterSessionPage({
               date: session.date.toISOString().slice(0, 10),
               startsAt: session.startsAt,
               timeZone: session.timeZone,
+              noDesk: session.noDesk,
+              tablaMicd: session.tablaMicd,
             }}
           />
 

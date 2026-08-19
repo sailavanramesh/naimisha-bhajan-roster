@@ -9,7 +9,22 @@ import { deskCushions, type Cushion } from "@/lib/micCushion";
  * desk is this?" would eventually disagree, and the one place that would show
  * is the pickers offering different cushions on two screens of the same
  * session, which is the exact bug this whole change is fixing.
+ *
+ * That makes this the one choke point for "no desk" as well. Both pickers and
+ * both write actions already come through here, so switching a session off the
+ * desk switches off the offer AND the enforcement together, rather than in four
+ * places that could drift apart.
  */
+
+/**
+ * The two fields that decide which desk a session is on, if any.
+ *
+ * Taken together rather than as a bare `deskId`, because reading one without
+ * the other is always a bug: a session with `noDesk` set still has whatever
+ * `deskId` it had before, and answering from that alone would hand cushions to
+ * a session that is not amplified.
+ */
+export type SessionDeskRef = { deskId: string | null; noDesk: boolean };
 
 /** Just enough of a desk to know its cushions. */
 export type DeskCushionSource = {
@@ -36,7 +51,12 @@ const CHANNEL_SELECT = {
  *
  * Null only when there is no desk in the database whatsoever.
  */
-export async function deskForSession(deskId: string | null): Promise<DeskCushionSource | null> {
+export async function deskForSession(session: SessionDeskRef): Promise<DeskCushionSource | null> {
+  // Not on a desk at all: no fallback, because falling back is what "not
+  // specified" means and this is a decision, not an omission.
+  if (session.noDesk) return null;
+
+  const { deskId } = session;
   const byId = deskId
     ? await prisma.desk.findUnique({
         where: { id: deskId },
@@ -61,11 +81,21 @@ export async function deskForSession(deskId: string | null): Promise<DeskCushion
 /**
  * The cushions offered on a session, in channel order.
  *
- * An empty list is a true answer, not a failure: a desk with no cushions on any
- * strip has no cushions to hand out, and the pickers say so rather than
- * offering colours the sound person would go looking for and not find.
+ * An empty list is a true answer, not a failure, and it arises two ways: the
+ * session is not on a desk, or it is on one with nothing on its strips. Both
+ * mean "nothing to hand out"; the pickers tell the two apart when they say so,
+ * because the fix is different.
  */
-export async function cushionsForSession(deskId: string | null): Promise<Cushion[]> {
-  const desk = await deskForSession(deskId);
+export async function cushionsForSession(session: SessionDeskRef): Promise<Cushion[]> {
+  const desk = await deskForSession(session);
   return desk ? deskCushions(desk.channels) : [];
+}
+
+/** The two fields, for a session id. For callers that hold only the id. */
+export async function deskRefOf(sessionId: string): Promise<SessionDeskRef> {
+  const row = await prisma.session.findUnique({
+    where: { id: sessionId },
+    select: { deskId: true, noDesk: true },
+  });
+  return { deskId: row?.deskId ?? null, noDesk: row?.noDesk ?? false };
 }

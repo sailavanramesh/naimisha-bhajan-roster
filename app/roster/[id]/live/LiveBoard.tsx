@@ -162,6 +162,8 @@ export function LiveBoard({
     /** Which bhajan the room is on. Shared across devices, so it polls in. */
     currentPosition: number | null;
     canSetUp: boolean;
+    /** Lines live all night — the tabla, when the drum is mic'd. */
+    instruments: { label: string; person: string | null }[];
   } | null;
 }) {
   const cushions = useMicCushions(sessionId);
@@ -596,6 +598,7 @@ export function LiveBoard({
             deskName={desk.name}
             desks={desk.choices}
             strips={desk.strips}
+            instruments={desk.instruments}
             currentPosition={desk.currentPosition}
             /*
              * One entry per BHAJAN, because that is the level at which the
