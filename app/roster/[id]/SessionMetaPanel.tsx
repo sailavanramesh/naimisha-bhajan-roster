@@ -15,6 +15,10 @@ export type SessionMeta = {
   startsAt: string | null;
   /** Whose clock `startsAt` is on. An IANA zone. See Session.timeZone. */
   timeZone: string;
+  /** Not on a sound desk at all: unamplified, no cushions. */
+  noDesk: boolean;
+  /** Is there a mic on the tabla? */
+  tablaMicd: boolean;
   /** "YYYY-MM-DD". The day this session is on, and can be moved to. */
   date: string;
 };
@@ -62,6 +66,8 @@ export function SessionMetaPanel({
         location: value.location ?? "",
         startsAt: value.startsAt ?? "",
         timeZone: value.timeZone || CENTRE_TIME_ZONE,
+        noDesk: value.noDesk,
+        tablaMicd: value.tablaMicd,
         // Was missed when the date became editable, and the whole form stopped
         // saving: the action requires it, so every submit failed validation with
         // a bare "Required" that named no field and pointed at nothing on screen.
@@ -185,6 +191,36 @@ export function SessionMetaPanel({
             </datalist>
           </label>
 
+          {/*
+            The sound of the room, in two answers.
+
+            Beside the venue rather than in the desk admin, because both are
+            facts about THIS session — the desk describes the hardware, and
+            whether tonight uses it is a different question. Checkboxes rather
+            than a select: each is a plain yes or no, and the unticked state is
+            the ordinary one for both.
+          */}
+          <label className="flex items-center gap-2 self-end pb-2 text-[11px] text-on-surface-muted">
+            <input
+              type="checkbox"
+              checked={value.noDesk}
+              onChange={(e) => setValue((v) => ({ ...v, noDesk: e.target.checked }))}
+              className="h-3.5 w-3.5"
+            />
+            No sound desk
+          </label>
+
+          <label className="flex items-center gap-2 self-end pb-2 text-[11px] text-on-surface-muted">
+            <input
+              type="checkbox"
+              checked={value.tablaMicd}
+              onChange={(e) => setValue((v) => ({ ...v, tablaMicd: e.target.checked }))}
+              className="h-3.5 w-3.5"
+              disabled={value.noDesk}
+            />
+            Tabla is mic&rsquo;d
+          </label>
+
           <label className="grid min-w-[12rem] flex-1 gap-1 text-[11px] text-on-surface-muted">
             Topic
             <input
@@ -238,6 +274,10 @@ function describe(
     ) : null,
     meta.location,
     meta.topic,
+    // Worth a word on the line, because it changes what the session IS. The
+    // tabla mic is not: that is desk detail, and this line already carries
+    // five things.
+    meta.noDesk ? "no sound desk" : null,
   ].filter(Boolean);
 }
 

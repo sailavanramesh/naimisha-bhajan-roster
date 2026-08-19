@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
-  MIC_COLOURS,
+  ALL_CUSHIONS,
+  deskCushions,
   isMicColour,
   micColourLabel,
   mergeCushions,
@@ -21,19 +22,32 @@ const polled = (
   updatedAt: number,
 ): PolledCushion => ({ singerId, colour, updatedAt });
 
-describe("mic colour values", () => {
+/** The centre's real desk, as configured on 2026-08-19. */
+const YAMAHA = [
+  { number: 1, colour: "blue" },
+  { number: 2, colour: "grey" },
+  { number: 3, colour: "green" },
+  { number: 4, colour: null },
+  { number: 5, colour: "orange" },
+  { number: 6, colour: "pink" },
+  { number: 7, colour: "green" },
+  { number: 8, colour: null },
+  { number: 11, colour: null },
+];
+
+describe("the cushion catalogue", () => {
   /*
-   * The list is the cushions the centre physically owns — four until black,
-   * yellow and maroon were added on 2026-08-18. Asserted in order, because the
-   * four originals staying first is the part that matters: they are what
-   * everybody's thumb already knows where to find.
+   * The CATALOGUE, not an offer. What a picker shows comes from the desk; this
+   * list only says which cushions exist at all, so a stored colour can always
+   * be rendered and the desk admin can put any of them on a strip.
    */
-  it("offers exactly the cushions on the desk, originals first", () => {
-    expect(MIC_COLOURS.map((c) => c.value)).toEqual([
+  it("holds every colour the database can store", () => {
+    expect(ALL_CUSHIONS.map((c) => c.value)).toEqual([
       "blue",
       "grey",
       "orange",
       "pink",
+      "green",
       "black",
       "yellow",
       "maroon",
@@ -42,6 +56,9 @@ describe("mic colour values", () => {
 
   it("accepts only real colours", () => {
     expect(isMicColour("blue")).toBe(true);
+    // Green is no longer special. It was rejected here while the lead picker
+    // refused it, on a desk that had it on two Lead vocal strips.
+    expect(isMicColour("green")).toBe(true);
     expect(isMicColour("red")).toBe(false);
     expect(isMicColour(null)).toBe(false);
     expect(isMicColour(3)).toBe(false);
@@ -128,15 +145,72 @@ describe("applyOwnWrite", () => {
   });
 });
 
+describe("deskCushions", () => {
+  /*
+   * The whole point. Sailavan, 2026-08-19: "you pick the cushions that apply to
+   * a channel on the sound desk, and those options show up under lead singer
+   * and chorus singer in the same order as the channel ascribing was done."
+   */
+  it("offers the desk's colours in channel order", () => {
+    expect(deskCushions(YAMAHA).map((c) => c.value)).toEqual([
+      "blue",
+      "grey",
+      "green",
+      "orange",
+      "pink",
+    ]);
+  });
+
+  it("shows a colour once, where it first appears", () => {
+    // The centre's green is on channels 3 AND 7.
+    const greens = deskCushions(YAMAHA).filter((c) => c.value === "green");
+    expect(greens).toHaveLength(1);
+    expect(deskCushions(YAMAHA)[2].value).toBe("green");
+  });
+
+  it("leaves out a cushion that is on no channel", () => {
+    // Black, yellow and maroon exist in the catalogue and are on no strip.
+    const offered = deskCushions(YAMAHA).map((c) => c.value);
+    expect(offered).not.toContain("black");
+    expect(offered).not.toContain("yellow");
+    expect(offered).not.toContain("maroon");
+  });
+
+  it("reads channel order, not the order it was handed the rows", () => {
+    const shuffled = [...YAMAHA].reverse();
+    expect(deskCushions(shuffled).map((c) => c.value)).toEqual(
+      deskCushions(YAMAHA).map((c) => c.value),
+    );
+  });
+
+  it("a desk with nothing on its strips offers nothing", () => {
+    expect(deskCushions([{ number: 1, colour: null }])).toEqual([]);
+    expect(deskCushions([])).toEqual([]);
+  });
+
+  it("ignores a colour the catalogue does not know", () => {
+    expect(deskCushions([{ number: 1, colour: "chartreuse" }])).toEqual([]);
+  });
+});
+
 describe("nextColour", () => {
-  it("cycles the palette and ends on no cushion", () => {
-    expect(nextColour(null)).toBe("blue");
-    expect(nextColour("blue")).toBe("grey");
-    expect(nextColour("grey")).toBe("orange");
-    expect(nextColour("orange")).toBe("pink");
-    expect(nextColour("pink")).toBe("black");
-    expect(nextColour("black")).toBe("yellow");
-    expect(nextColour("yellow")).toBe("maroon");
-    expect(nextColour("maroon")).toBe(null);
+  const yamaha = deskCushions(YAMAHA);
+
+  it("cycles this desk's cushions and ends on no cushion", () => {
+    expect(nextColour(null, yamaha)).toBe("blue");
+    expect(nextColour("blue", yamaha)).toBe("grey");
+    expect(nextColour("grey", yamaha)).toBe("green");
+    expect(nextColour("green", yamaha)).toBe("orange");
+    expect(nextColour("orange", yamaha)).toBe("pink");
+    expect(nextColour("pink", yamaha)).toBe(null);
+  });
+
+  it("clears a colour the desk no longer carries, rather than jumping to the front", () => {
+    expect(nextColour("maroon", yamaha)).toBe(null);
+  });
+
+  it("has nowhere to go on a desk with no cushions", () => {
+    expect(nextColour(null, [])).toBe(null);
+    expect(nextColour("blue", [])).toBe(null);
   });
 });

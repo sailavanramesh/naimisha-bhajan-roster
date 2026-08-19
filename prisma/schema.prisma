@@ -412,6 +412,30 @@ model Session {
   archivedBy      String?
 
   deskId              String?
+
+  /// This session is not on a sound desk at all — unamplified, no cushions.
+  ///
+  /// A FLAG rather than a null `deskId`, because null already means "not
+  /// specified" and resolves to the default desk (lib/sessionDesk.ts). Only one
+  /// session in two hundred names a desk, so that fallback is what makes
+  /// cushions work everywhere; teaching null to also mean "none" would switch
+  /// cushions off for all of them.
+  ///
+  /// Sailavan, 2026-08-19: "an option for a session to not be using any sound
+  /// desk and have no sound cushions. It should not be the default, but can be
+  /// selected." Hence false.
+  noDesk              Boolean @default(false)
+
+  /// Is there a mic on the tabla?
+  ///
+  /// The drum is rostered on SessionInstrument and the desk has a channel
+  /// labelled Tabla, but nothing joined the two, so the desk view drew that
+  /// channel as an empty labelled strip whether or not anybody had put a mic on
+  /// it. When this is set the channel carries the rostered player.
+  ///
+  /// Per SESSION rather than per desk: the channel is a standing fact about the
+  /// hardware, and whether it is live tonight is not.
+  tablaMicd           Boolean @default(false)
   /// Which item in the running order the programme is ON right now.
   ///
   /// A POSITION, not an item id, so it survives an item being deleted mid-

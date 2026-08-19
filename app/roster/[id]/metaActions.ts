@@ -33,6 +33,10 @@ const Input = z.object({
   timeZone: z
     .string()
     .refine((z) => z === "" || isValidTimeZone(z), "That is not a timezone."),
+  /** Not on a sound desk at all: unamplified, no cushions. See Session.noDesk. */
+  noDesk: z.boolean(),
+  /** Is there a mic on the tabla? See Session.tablaMicd. */
+  tablaMicd: z.boolean(),
 });
 
 /**
@@ -70,7 +74,8 @@ export async function updateSessionMeta(
       error: field ? `${field}: ${issue.message}` : (issue?.message ?? "Could not save."),
     };
   }
-  const { sessionId, categoryId, topic, location, startsAt, date, timeZone } = parsed.data;
+  const { sessionId, categoryId, topic, location, startsAt, date, timeZone, noDesk, tablaMicd } =
+    parsed.data;
 
   if (categoryId) {
     const exists = await prisma.sessionCategory.count({ where: { id: categoryId } });
@@ -95,6 +100,8 @@ export async function updateSessionMeta(
       startsAt: startsAt || null,
       date: when,
       timeZone: timeZone || CENTRE_TIME_ZONE,
+      noDesk,
+      tablaMicd,
     },
   });
 
@@ -171,6 +178,8 @@ const BulkInput = z.object({
   startsAt: z.string().regex(/^$|^([01]\d|2[0-3]):[0-5]\d$/).nullish(),
   topic: z.string().max(200).nullish(),
   location: z.string().max(120).nullish(),
+  noDesk: z.boolean().nullish(),
+  tablaMicd: z.boolean().nullish(),
   /** An IANA zone. "" is not meaningful here — see the write below. */
   timeZone: z
     .string()
@@ -198,6 +207,8 @@ export async function bulkUpdateSessionMeta(input: {
   topic?: string | null;
   location?: string | null;
   timeZone?: string | null;
+  noDesk?: boolean | null;
+  tablaMicd?: boolean | null;
 }): Promise<{ ok: true; updated: number; fields: string[] } | { ok: false; error: string }> {
   await requireCapability("editSessionNotes");
 
@@ -208,6 +219,7 @@ export async function bulkUpdateSessionMeta(input: {
   const v = parsed.data;
 
   const data: Record<string, string | null> = {};
+  const boolData: Record<string, boolean> = {};
   const fields: string[] = [];
 
   if (v.categoryId !== undefined && v.categoryId !== null) {
@@ -240,12 +252,22 @@ export async function bulkUpdateSessionMeta(input: {
     data.timeZone = v.timeZone;
     fields.push("time zone");
   }
+  // Booleans, so `undefined` is the only "leave alone" — false is a real value
+  // here and must not be mistaken for "not asked for".
+  if (v.noDesk !== undefined && v.noDesk !== null) {
+    boolData.noDesk = v.noDesk;
+    fields.push("sound desk");
+  }
+  if (v.tablaMicd !== undefined && v.tablaMicd !== null) {
+    boolData.tablaMicd = v.tablaMicd;
+    fields.push("tabla mic");
+  }
 
   if (fields.length === 0) return { ok: false, error: "Nothing to change — fill in a field first." };
 
   const res = await prisma.session.updateMany({
     where: { id: { in: v.sessionIds } },
-    data,
+    data: { ...data, ...boolData },
   });
 
   revalidatePath("/roster/details");

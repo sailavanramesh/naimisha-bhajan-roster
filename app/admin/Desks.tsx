@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Button, Input } from "@/components/ui";
-import { CHORUS_COLOURS, type MicColourValue } from "@/lib/micCushion";
+import { ALL_CUSHIONS, type MicColourValue } from "@/lib/micCushion";
 import { stripNumber, overlappedStrips } from "@/lib/deskChannels";
 import {
   absorbOverlappingStrip,
@@ -360,7 +360,10 @@ function ChannelRow({
       */}
       {kind === "vocal" ? (
         <span className="flex items-center gap-1">
-          {CHORUS_COLOURS.map((c) => {
+          {/* Every cushion, not the desk's current set: this control is
+            what PUTS a cushion on a strip, so offering only the ones already
+            placed would make a new colour impossible to introduce. */}
+          {ALL_CUSHIONS.map((c) => {
             const on = colour === c.value;
             return (
               <button

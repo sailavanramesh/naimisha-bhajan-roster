@@ -257,6 +257,8 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
               date: session.date.toISOString().slice(0, 10),
               startsAt: session.startsAt,
               timeZone: session.timeZone,
+              noDesk: session.noDesk,
+              tablaMicd: session.tablaMicd,
             }}
           />
         </CardContent>

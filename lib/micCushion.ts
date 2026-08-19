@@ -6,69 +6,96 @@
  * A cushion belongs to a SINGER within a SESSION, not to a slot: a singer has
  * one mic for the night, so if they sing twice the cushion follows them.
  *
- * The CHORUS mics are the exception, and they are why `green` exists here.
- * Those cushions are stored per BHAJAN (SessionSlotChorus) rather than per
+ * The CHORUS cushions are stored per BHAJAN (SessionSlotChorus) rather than per
  * person, because a chorus mic is a different mic — the same singer may lead
  * one bhajan on blue and chorus another on green, and a per-person key cannot
- * hold both facts at once.
+ * hold both facts at once. They are the same CUSHIONS either way, though: what
+ * a desk owns does not depend on who is holding the mic, which is why both
+ * pickers read one list from `deskCushions`.
  */
 
 /**
- * The lead cushions on the desk.
+ * Every cushion the centre could own — the CATALOGUE, not an offer.
  *
- * Seven since black, yellow and maroon were added — the list is the cushions
- * the centre physically owns, which is why it grows by being told rather than
- * by anybody deciding a fifth colour would be tidy. Order is the order they are
- * offered in; the four originals stay first so nothing about the existing
- * cushions moves under somebody's thumb.
+ * This is what a stored colour is rendered from, and what the desk admin
+ * offers when pinning a cushion to a strip. It is deliberately NOT what a
+ * roster picker shows: see `deskCushions`.
+ *
+ * Order here is only the order the desk admin lists them in; the four
+ * originals stay first so nothing about the existing cushions moves under
+ * somebody's thumb.
  */
-export const MIC_COLOURS = [
+export const ALL_CUSHIONS = [
   { value: "blue", label: "Blue", dot: "#3B7DD8" },
   { value: "grey", label: "Grey", dot: "#8B9099" },
   { value: "orange", label: "Orange", dot: "#E08A2E" },
   { value: "pink", label: "Pink", dot: "#DC6FA4" },
+  { value: "green", label: "Green", dot: "#4E9A57" },
   { value: "black", label: "Black", dot: "#2F3033" },
   { value: "yellow", label: "Yellow", dot: "#D9A81F" },
   { value: "maroon", label: "Maroon", dot: "#8C3242" },
 ] as const;
 
-/** The chorus cushion, which is offered only there. */
-export const CHORUS_ONLY_COLOUR = { value: "green", label: "Green", dot: "#4E9A57" } as const;
+export type MicColourValue = (typeof ALL_CUSHIONS)[number]["value"];
+export type Cushion = { value: MicColourValue; label: string; dot: string };
+
+const BY_VALUE = new Map<string, Cushion>(ALL_CUSHIONS.map((c) => [c.value, { ...c }]));
 
 /**
- * What the chorus column offers: every lead cushion, plus green.
+ * The cushions a desk actually has, in the order its channels are numbered.
  *
- * A second list rather than a longer first one, because green is a cushion the
- * lead mics do not have — offering it there would put a cushion on the desk
- * that is not on the desk.
+ * THIS is what both pickers offer, and it is the whole point. Sailavan,
+ * 2026-08-19: "you pick the cushions that apply to a channel on the sound desk,
+ * and those options show up under lead singer and chorus singer in the same
+ * order as the channel ascribing was done" — and "if a cushion colour is not
+ * ascribed to a channel set for a certain session, then it can't be picked".
+ *
+ * Before this, three hardcoded lists disagreed with each other and with the
+ * hardware. The lead picker refused green on the grounds that the lead mics do
+ * not have it, while the centre's desk had green on Lead vocal 3 AND Lead vocal
+ * 7; and both pickers offered black, yellow and maroon, which were on no strip
+ * at all. The rule the old code stated was right. It was just enforced against
+ * a list nobody could keep in step with the desk, so it drifted the moment the
+ * desk changed. Deriving cannot drift.
+ *
+ * Lead and chorus get the SAME list. Green stops being a special case: it is
+ * offered wherever the desk has it, like every other colour.
+ *
+ * Duplicates collapse to their FIRST channel — the centre's green is on two
+ * strips and should appear once, where it first appears on the desk.
  */
-export const CHORUS_COLOURS = [...MIC_COLOURS, CHORUS_ONLY_COLOUR] as const;
+export function deskCushions(
+  channels: ReadonlyArray<{ number: number; colour: string | null }>,
+): Cushion[] {
+  const seen = new Set<string>();
+  const out: Cushion[] = [];
 
-export type MicColourValue = (typeof CHORUS_COLOURS)[number]["value"];
-/** The subset a LEAD mic may be. */
-export type LeadColourValue = (typeof MIC_COLOURS)[number]["value"];
-
-const VALUES = new Set<string>(MIC_COLOURS.map((c) => c.value));
-const CHORUS_VALUES = new Set<string>(CHORUS_COLOURS.map((c) => c.value));
-
-/** A lead cushion. Green is deliberately NOT one — see CHORUS_COLOURS. */
-export function isMicColour(value: unknown): value is LeadColourValue {
-  return typeof value === "string" && VALUES.has(value);
+  for (const ch of [...channels].sort((a, b) => a.number - b.number)) {
+    if (!ch.colour || seen.has(ch.colour)) continue;
+    const cushion = BY_VALUE.get(ch.colour);
+    if (!cushion) continue;
+    seen.add(ch.colour);
+    out.push(cushion);
+  }
+  return out;
 }
 
-export function isChorusColour(value: unknown): value is MicColourValue {
-  return typeof value === "string" && CHORUS_VALUES.has(value);
+const VALUES = new Set<string>(ALL_CUSHIONS.map((c) => c.value));
+
+/** Is this one of the cushions that exist at all? Bounds what may be stored. */
+export function isMicColour(value: unknown): value is MicColourValue {
+  return typeof value === "string" && VALUES.has(value);
 }
 
 /** Null is "no cushion", which is a state a user can deliberately choose. */
 export function micColourLabel(colour: MicColourValue | null): string {
   if (colour === null) return "No cushion";
-  return CHORUS_COLOURS.find((c) => c.value === colour)?.label ?? "No cushion";
+  return BY_VALUE.get(colour)?.label ?? "No cushion";
 }
 
 export function micColourDot(colour: MicColourValue | null): string | null {
   if (colour === null) return null;
-  return CHORUS_COLOURS.find((c) => c.value === colour)?.dot ?? null;
+  return BY_VALUE.get(colour)?.dot ?? null;
 }
 
 /**
@@ -158,10 +185,23 @@ export function applyOwnWrite(
   return next;
 }
 
-/** Cycle through the palette, ending on "no cushion". Used by the tap target. */
-export function nextColour(colour: MicColourValue | null): MicColourValue | null {
-  if (colour === null) return MIC_COLOURS[0].value;
-  const i = MIC_COLOURS.findIndex((c) => c.value === colour);
-  if (i < 0 || i === MIC_COLOURS.length - 1) return null;
-  return MIC_COLOURS[i + 1].value;
+/**
+ * Cycle through this desk's cushions, ending on "no cushion".
+ *
+ * Takes the list rather than closing over a global one, because what comes
+ * next depends on which desk the session is on.
+ *
+ * A colour the desk no longer offers cycles to "no cushion" rather than to the
+ * front. It is being cleared on the way past, which is the honest outcome for a
+ * cushion that is no longer on the hardware.
+ */
+export function nextColour(
+  colour: MicColourValue | null,
+  cushions: ReadonlyArray<Cushion>,
+): MicColourValue | null {
+  if (cushions.length === 0) return null;
+  if (colour === null) return cushions[0].value;
+  const i = cushions.findIndex((c) => c.value === colour);
+  if (i < 0 || i === cushions.length - 1) return null;
+  return cushions[i + 1].value;
 }
