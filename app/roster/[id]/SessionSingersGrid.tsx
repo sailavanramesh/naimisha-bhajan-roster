@@ -10,6 +10,7 @@ import { deleteSingerRow, upsertSessionSingerRows, type SingerRowInput } from ".
 import { useMicCushions, MicCushionDots, cushionTint } from "@/components/MicCushions";
 import { type Cushion } from "@/lib/micCushion";
 import type { ChorusMic } from "@/lib/micCushion";
+import { ShrutiPlayer } from "@/components/ShrutiPlayer";
 import { ChorusCell } from "./ChorusCell";
 import { LeaveWithChangesDialog } from "@/components/LeaveWithChangesDialog";
 import {
@@ -1662,6 +1663,11 @@ export function SessionSingersGrid(props: {
                           >
                             +
                           </button>
+                          {/* Hear it. Reads the value in the field, so it
+                              follows the nudges above rather than the last
+                              saved pitch. */}
+                          <ShrutiPlayer label={pu.q || r.confirmedPitch} />
+
                           {r.recommendedPitch && r.confirmedPitch !== r.recommendedPitch ? (
                             <button
                               type="button"
@@ -1734,7 +1740,10 @@ export function SessionSingersGrid(props: {
                         })()}
                       </div>
                     ) : (
-                      <div className="whitespace-nowrap text-[14px] font-semibold">{r.confirmedPitch ?? "—"}</div>
+                      <div className="flex items-center gap-1.5 whitespace-nowrap text-[14px] font-semibold">
+                        {r.confirmedPitch ?? "—"}
+                        <ShrutiPlayer label={r.confirmedPitch} />
+                      </div>
                     )}
                   </td>
 

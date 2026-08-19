@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { Gender } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { ShrutiLadder } from "@/components/ShrutiLadder";
+import { ShrutiPlayer } from "@/components/ShrutiPlayer";
 import { DeitySymbols } from "@/components/DeitySymbol";
 import {
   getPitchLabels,
@@ -240,8 +241,9 @@ export default async function BhajanPage({
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="rounded-[12px] border border-rule-surface bg-panel p-3">
               <div className="text-xs font-semibold text-on-surface-muted">Gents pitch</div>
-              <div className="mt-1 text-sm">
+              <div className="mt-1 flex items-center gap-1.5 text-sm">
                 {bhajan.referenceGentsPitch ?? "—"}
+                <ShrutiPlayer label={bhajan.referenceGentsPitch} />
                 {editOf("referenceGentsPitch") ? (
                   <EditedDot
                     field="referenceGentsPitch"
@@ -253,8 +255,9 @@ export default async function BhajanPage({
 
             <div className="rounded-[12px] border border-rule-surface bg-panel p-3">
               <div className="text-xs font-semibold text-on-surface-muted">Ladies pitch</div>
-              <div className="mt-1 text-sm">
+              <div className="mt-1 flex items-center gap-1.5 text-sm">
                 {bhajan.referenceLadiesPitch ?? "—"}
+                <ShrutiPlayer label={bhajan.referenceLadiesPitch} />
                 {editOf("referenceLadiesPitch") ? (
                   <EditedDot
                     field="referenceLadiesPitch"
@@ -377,7 +380,10 @@ export default async function BhajanPage({
                           {r.date.toISOString().slice(0, 10)}
                         </td>
                         <td className="px-3 py-2 font-mono tabular-nums">
-                          {r.confirmedPitch ?? "—"}
+                          <span className="inline-flex items-center gap-1.5">
+                            {r.confirmedPitch ?? "—"}
+                            <ShrutiPlayer label={r.confirmedPitch} />
+                          </span>
                         </td>
                         <td
                           className={r.delta ? "px-3 py-2 font-mono tabular font-semibold text-kumkum" : "px-3 py-2 font-mono tabular font-semibold"}

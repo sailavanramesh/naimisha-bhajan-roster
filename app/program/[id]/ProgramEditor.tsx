@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Button, Card, CardContent, Input } from "@/components/ui";
+import { ShrutiPlayer } from "@/components/ShrutiPlayer";
 import { NOTE_NAMES } from "@/lib/pitch";
 import { instrumentsLabel, performersLabel, runningOrderLabel, songNumbers } from "@/lib/program";
 import {
@@ -243,8 +244,9 @@ function ItemCard({
             <span className="flex min-w-0 items-baseline gap-2 font-display text-lg font-semibold">
               <span className="min-w-0 truncate">{heading}</span>
               {draft.pitchNote ? (
-                <span className="shrink-0 font-mono text-sm font-normal text-on-surface-muted">
+                <span className="flex shrink-0 items-center gap-1.5 font-mono text-sm font-normal text-on-surface-muted">
                   {draft.pitchNote}
+                  <ShrutiPlayer label={draft.pitchNote} />
                 </span>
               ) : null}
             </span>
@@ -335,7 +337,11 @@ function ItemCard({
               {!isReading ? (
                 <div className="grid grid-cols-2 gap-2">
                   <label className="grid gap-1 text-xs text-on-surface-muted">
-                    Pitch
+                    <span className="flex items-center gap-1.5">
+                      Pitch
+                      {/* Audition while choosing, rather than saving first. */}
+                      <ShrutiPlayer label={draft.pitchNote} />
+                    </span>
                     <select
                       value={draft.pitchNote}
                       disabled={!canEdit}
