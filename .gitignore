@@ -37,3 +37,8 @@ pnpm-debug.log*
 
 # one-off dev->prod data transfer scripts, never committed
 .transfer/
+.tracks/
+# Throwaway scripts. One of these was committed by accident on 2026-08-20.
+*.tmp.mjs
+*.tmp.ts
+*.tmp.test.ts

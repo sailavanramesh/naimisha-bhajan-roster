@@ -25,9 +25,18 @@ describe('recommendTabla — the common cases', () => {
     expect(r).toMatchObject({ note: 'D', degree: 'sa', confidence: 'certain' });
   });
 
-  it('uses the fifth when Sa is not owned — the traditional second choice', () => {
-    // Sa = G, fifth = D.
+  it('uses the FOURTH when Sa is not owned, even where the fifth is also owned', () => {
+    // Sa = G. The ashram owns both the fourth (C) and the fifth (D), and the
+    // fourth wins: Sailavan, 2026-08-20, "prioritise the Sa, then Ma, then it
+    // depends on the raga". Shankarabharanam has a natural Ma, so C is real.
     const r = recommendTablaForLabel('5 Pancham / G', scale('Shankarabharanam'), ASHRAM);
+    expect(r).toMatchObject({ note: 'C', degree: 'ma' });
+  });
+
+  it('falls to the fifth when the raga has no fourth to offer', () => {
+    // Sa = G in Hamsadhwani, which is Sa Ri Ga Pa Ni — no Ma at all. So the
+    // fourth is not available to prefer and the fifth, D, is the answer.
+    const r = recommendTablaForLabel('5 Pancham / G', scale('Hamsadhwani'), ASHRAM);
     expect(r).toMatchObject({ note: 'D', degree: 'pa' });
   });
 
@@ -137,8 +146,11 @@ describe('tablasForSession', () => {
       { title: 'C', choice: recommendTablaForLabel('1 Pancham / C', scale('Bilawal'), ASHRAM) },
     ];
     const { calls, unresolved } = tablasForSession(slots);
+    // B is Sa G, whose fourth is C — so it now shares the C drum with bhajan C
+    // rather than the D drum with bhajan A.
     expect(calls.map((c) => c.note)).toEqual(['C', 'D']);
-    expect(calls.find((c) => c.note === 'D')!.forBhajans).toEqual(['A', 'B']);
+    expect(calls.find((c) => c.note === 'C')!.forBhajans).toEqual(['B', 'C']);
+    expect(calls.find((c) => c.note === 'D')!.forBhajans).toEqual(['A']);
     expect(unresolved).toHaveLength(0);
   });
 

@@ -17,7 +17,11 @@
     "db:templates": "tsx scripts/seedTemplates.ts",
     "db:eligibility": "tsx scripts/seedEligibility.ts",
     "db:backfill-text": "tsx scripts/backfillText.ts",
-    "db:guide": "tsx scripts/seedGuide.ts"
+    "db:guide": "tsx scripts/seedGuide.ts",
+    "check:tanpura": "node scripts/checkTanpuraAssets.mjs",
+    "check:tanpura-tuning": "python3 scripts/verifyTanpuraTuning.py",
+    "smoke:shruti": "node scripts/smokeShrutiPlayer.mjs",
+    "db:guide-order": "node scripts/alignGuideOrder.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",

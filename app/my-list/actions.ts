@@ -6,6 +6,7 @@ import { RepertoireKind } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { contradiction, LEARNABLE } from "@/lib/repertoireGuard";
 import { z } from "zod";
+import { parsePitchLabel } from "@/lib/pitch";
 
 /**
  * The personal learning list.
@@ -236,4 +237,75 @@ export async function addToList(input: {
   revalidatePath("/my-list");
   revalidatePath(`/singers/${singerId}`);
   return { ok: true, title: resolvedTitle };
+}
+
+/**
+ * Record the pitch a singer has settled on for a bhajan.
+ *
+ * This is what the pitch finder saves. It is a narrower thing than
+ * `upsertLearning`: it changes one field and never moves an entry between
+ * kinds, so it does not go through `contradiction` — settling on a pitch says
+ * nothing about whether you know the bhajan or are learning it.
+ *
+ * `preferredPitch` lives only on SingerRepertoire, so saving a pitch does mean
+ * having a row. Where none exists one is created as `learning`, which is the
+ * honest reading of somebody working out their pitch for it, and the finder
+ * says so before saving. Where a row already exists its kind is left alone.
+ *
+ * The pitch reaches the rosterer on its own: `lib/suggestedPitch.ts` already
+ * prefers a list pitch and the roster grid shows it as "saved".
+ */
+export async function setPreferredPitch(input: {
+  singerId: string;
+  title: string;
+  /** A shruti label, or "" to clear it. */
+  pitch: string;
+}): Promise<{ ok: true; pitch: string | null; created: boolean } | { ok: false; error: string }> {
+  await requireCapability("manageOwnLearning");
+
+  const title = input.title.trim();
+  if (!title) return { ok: false, error: "No bhajan given." };
+
+  const pitch = input.pitch.trim();
+  // Anything the group actually uses parses; anything else is refused rather
+  // than stored, so a typo cannot become somebody's reference pitch.
+  if (pitch && !parsePitchLabel(pitch)) {
+    return { ok: false, error: `"${pitch}" is not a shruti this app knows.` };
+  }
+
+  const singerId = await resolveSingerId(input.singerId);
+
+  const existing = await prisma.singerRepertoire.findFirst({
+    where: { singerId, title: { equals: title, mode: "insensitive" } },
+    // If they hold it under more than one kind, the one they know wins: that is
+    // the entry a rosterer is most likely to be looking at.
+    orderBy: { kind: "asc" },
+    select: { id: true },
+  });
+
+  if (existing) {
+    await prisma.singerRepertoire.update({
+      where: { id: existing.id },
+      data: { preferredPitch: pitch || null },
+    });
+  } else {
+    const bhajan = await prisma.bhajan.findFirst({
+      where: { title: { equals: title, mode: "insensitive" } },
+      select: { id: true, title: true },
+    });
+    await prisma.singerRepertoire.create({
+      data: {
+        singerId,
+        kind: RepertoireKind.learning,
+        title: bhajan?.title ?? title,
+        bhajanId: bhajan?.id ?? null,
+        preferredPitch: pitch || null,
+      },
+    });
+  }
+
+  revalidatePath("/my-list");
+  revalidatePath("/find-my-pitch");
+  revalidatePath(`/singers/${singerId}`);
+  return { ok: true, pitch: pitch || null, created: !existing };
 }

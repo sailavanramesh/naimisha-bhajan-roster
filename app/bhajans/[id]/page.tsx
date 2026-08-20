@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { Gender } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { ShrutiLadder } from "@/components/ShrutiLadder";
+import { ShrutiPlayer } from "@/components/ShrutiPlayer";
 import { DeitySymbols } from "@/components/DeitySymbol";
 import {
   getPitchLabels,
@@ -14,6 +15,7 @@ import {
 import { predictForSinger } from "@/lib/singerProfile";
 import { semitoneDelta } from "@/lib/pitch";
 import { AddToList } from "@/components/AddToList";
+import { PitchFinder } from "@/components/PitchFinder";
 import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { rosterable } from "@/lib/rosterEligibility";
 import { EditBhajanPanel, EditedDot } from "./EditBhajanPanel";
@@ -175,6 +177,40 @@ export default async function BhajanPage({
 
   const mostRecent = sungBy[0] ?? null;
 
+  /*
+   * What the signed-in singer should start from when finding their pitch.
+   *
+   * Their own saved pitch if they have one, else their prediction where there
+   * is enough history to trust it, else the reference for their side. The
+   * reason is passed through with it: a number nobody can account for is worse
+   * than no number.
+   */
+  const mine = signedIn
+    ? await prisma.singerRepertoire.findFirst({
+        where: { singerId: signedIn.id, title: { equals: bhajan.title, mode: "insensitive" } },
+        orderBy: { kind: "asc" },
+        select: { preferredPitch: true },
+      })
+    : null;
+
+  // getSignedInSinger returns identity and role, not the singer record, and
+  // the reference to start from depends on which side they sing. The full list
+  // is already loaded above, so take it from there rather than query again.
+  const meRecord = signedIn ? (singers.find((x) => x.id === signedIn.id) ?? null) : null;
+  const myReference = referenceFor(meRecord?.gender ?? null);
+  const myPrediction = signedIn
+    ? predictForSinger(profiles.get(signedIn.name), myReference, bhajan.raga, labelStrings)
+    : null;
+
+  const startPitch = myPrediction?.label ?? myReference ?? null;
+  const startReason = !signedIn
+    ? null
+    : myPrediction?.predicted
+      ? `what you usually sing, from ${myPrediction.n} recorded ${myPrediction.n === 1 ? "time" : "times"}`
+      : myReference
+        ? `the ${meRecord?.gender === Gender.Ladies ? "ladies" : "gents"} reference`
+        : null;
+
   /** The group's correction to one field, if there is one. */
   const editOf = (field: string) => bhajan.fieldEdits.find((e) => e.field === field) ?? null;
 
@@ -240,8 +276,9 @@ export default async function BhajanPage({
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="rounded-[12px] border border-rule-surface bg-panel p-3">
               <div className="text-xs font-semibold text-on-surface-muted">Gents pitch</div>
-              <div className="mt-1 text-sm">
+              <div className="mt-1 flex items-center gap-1.5 text-sm">
                 {bhajan.referenceGentsPitch ?? "—"}
+                <ShrutiPlayer label={bhajan.referenceGentsPitch} />
                 {editOf("referenceGentsPitch") ? (
                   <EditedDot
                     field="referenceGentsPitch"
@@ -253,8 +290,9 @@ export default async function BhajanPage({
 
             <div className="rounded-[12px] border border-rule-surface bg-panel p-3">
               <div className="text-xs font-semibold text-on-surface-muted">Ladies pitch</div>
-              <div className="mt-1 text-sm">
+              <div className="mt-1 flex items-center gap-1.5 text-sm">
                 {bhajan.referenceLadiesPitch ?? "—"}
+                <ShrutiPlayer label={bhajan.referenceLadiesPitch} />
                 {editOf("referenceLadiesPitch") ? (
                   <EditedDot
                     field="referenceLadiesPitch"
@@ -263,6 +301,18 @@ export default async function BhajanPage({
                 ) : null}
               </div>
             </div>
+
+          {signedIn ? (
+            <PitchFinder
+              singerId={signedIn.id}
+              title={bhajan.title}
+              startPitch={startPitch}
+              savedPitch={mine?.preferredPitch ?? null}
+              startReason={startReason}
+              options={labelStrings}
+              canSave={canAddToList}
+            />
+          ) : null}
           </div>
 
           {/*
@@ -377,7 +427,10 @@ export default async function BhajanPage({
                           {r.date.toISOString().slice(0, 10)}
                         </td>
                         <td className="px-3 py-2 font-mono tabular-nums">
-                          {r.confirmedPitch ?? "—"}
+                          <span className="inline-flex items-center gap-1.5">
+                            {r.confirmedPitch ?? "—"}
+                            <ShrutiPlayer label={r.confirmedPitch} />
+                          </span>
                         </td>
                         <td
                           className={r.delta ? "px-3 py-2 font-mono tabular font-semibold text-kumkum" : "px-3 py-2 font-mono tabular font-semibold"}

@@ -73,22 +73,62 @@ This is the heart of the app. Get it wrong and everything downstream is wrong.
 
 ### Rules
 
-1. **Absolute Sa comes only from the note letter after the slash.** Parse with
-   `/\/\s*([A-G]#?)\s*$/`. Map to a pitch class `C=0 … B=11`.
-2. **Madhyam vs Pancham does not change the pitch.** It is display metadata.
-   Preserve whichever series the source label used when rendering; never
-   silently convert one to the other.
-3. **Tabla pitch = Sa + 7 semitones.** Verified true for all 24 pitch labels in
-   the lookup table. Derive it; do not store it per-row.
+1. **Sa comes from the STEP NUMBER, not from the letter alone.** The note after
+   the slash is the DRONE note: in Pancham that note IS Sa, in Madhyam it is
+   **Ma, a perfect fourth above Sa**. So Sa is the written note for Pancham and
+   the written note **minus five semitones** for Madhyam. One constant does
+   this, `NOTE_ABOVE_SA` in `lib/pitch.ts`; nothing else should ever subtract a
+   five.
+
+   `4.5 Madhyam / B` is **Sa F#** with B droning against it. `4.5 Pancham / F#`
+   is **Sa F#** with C# droning against it.
+
+   > Corrected 2026-08-20, on Sailavan's instruction after hearing the tanpura
+   > play. **Four independent measurements argue against it** and are recorded
+   > in full against `NOTE_ABOVE_SA` — chiefly that on 97 bhajans written in two
+   > series the gents-to-ladies interval matches the other 2921 only under the
+   > old reading (90 of 97 versus 0 of 97). The likeliest account is that the
+   > source sheet was filled in comparing letters, whatever the shruti box does.
+   > Setting `Madhyam: 0` reverses everything.
+
+2. **The series does not change Sa.** The same step number is the same Sa in
+   both series; only the drone note differs. Preserve whichever series the
+   source label used when rendering; never silently convert one to the other.
+3. **Tabla pitch is chosen, not computed.** The order is **Sa, then Ma, then
+   whatever the raga contains** — `recommendTabla` in `lib/tabla.ts`, against
+   the four drums the ashram owns (C, C#, D, E) and the raga's own notes. A
+   raga without a Pa cannot have its tabla tuned to one, so every degree is
+   checked against the scale rather than assumed. Where the raga is unknown the
+   answer is marked `assumed`.
+
+   Over the 688 sung records: Sa 51.5%, Ma 25.7%, Pa 11.6%, then thirds, sixths
+   and flat sevenths, with 3.1% that no drum they own fits.
+
+   `tablaPitchOf` in `lib/pitch.ts` still returns the bare fifth, Sa + 7. It is
+   the OLD rule and takes no account of the raga or of which drums exist —
+   `components/ShrutiLadder.tsx` and `lib/pitchSuggestions.ts` still call it.
+   Prefer `recommendTabla` for anything a player acts on.
+
+   Do not read `PitchLabel.tablaPitch` from the database. It is the written
+   note + 7 in all 24 rows, which under rule 1 is wrong for the twelve Madhyam
+   ones.
+
 4. **Deviation between two pitches** is the signed shortest distance mod 12,
    wrapped to `[-6, +6]`:
 
 ```ts
 const PC = { C:0,'C#':1,D:2,'D#':3,E:4,F:5,'F#':6,G:7,'G#':8,A:9,'A#':10,B:11 };
 
+const NOTE_ABOVE_SA = { Pancham: 0, Madhyam: 5 };
+
 export function saOf(label?: string | null): number | null {
-  const m = /\/\s*([A-G]#?)\s*$/.exec((label ?? '').trim());
-  return m ? PC[m[1] as keyof typeof PC] : null;
+  const raw = (label ?? '').trim();
+  const m = /\/\s*([A-G]#?)\s*$/.exec(raw);
+  if (!m) return null;
+  const written = PC[m[1] as keyof typeof PC];
+  if (written === undefined) return null;
+  const above = /madhyam/i.test(raw) ? NOTE_ABOVE_SA.Madhyam : NOTE_ABOVE_SA.Pancham;
+  return (((written - above) % 12) + 12) % 12;
 }
 
 /** Semitones from `reference` to `actual`. +2 means sung two semitones higher. */
@@ -113,21 +153,26 @@ export function semitoneDelta(actual?: string | null, reference?: string | null)
 ### Singer offset profiles (computed from the seeded history)
 
 Median semitone offset from the gender reference — these are real and should
-reproduce after seeding. Use them as a regression test for the pitch code:
+reproduce after seeding. Use them as a regression test for the pitch code.
+
+**Recomputed 2026-08-20** under rule 1 as corrected. Every sample count is
+unchanged, which is the part that proves the import is intact; the offsets moved
+because 52 of 669 comparisons put a Madhyam label against a Pancham one. The
+previous figures are in git at 2b40a4d:
 
 | Singer | Gender | n | Median | Mean |
 |---|---|---:|---:|---:|
-| Sailavan | Gents | 99 | +1 | +0.85 |
-| Ashwin | Gents | 96 | 0 | +0.31 |
-| Prithvi | Gents | 89 | +1 | +1.35 |
-| Jothsna | Ladies | 69 | 0 | +0.42 |
-| Prasanna | Ladies | 63 | +1 | +1.05 |
-| Pavitra | Ladies | 40 | 0 | +0.25 |
-| Shravya | Ladies | 40 | 0 | +0.55 |
-| Sriraag | Gents | 39 | 0 | −0.23 |
-| Rhuben | Gents | 35 | 0 | 0.00 |
-| Anvita | Ladies | 25 | 0 | −0.52 |
-| Triveni | Ladies | 16 | 0 | +0.25 |
+| Sailavan | Gents | 99 | +1 | +0.90 |
+| Ashwin | Gents | 96 | 0 | +0.625 |
+| Prithvi | Gents | 89 | +1 | +1.63 |
+| Jothsna | Ladies | 69 | 0 | +0.43 |
+| Prasanna | Ladies | 63 | +1 | +0.90 |
+| Pavitra | Ladies | 40 | 0 | +0.375 |
+| Shravya | Ladies | 40 | +1 | +1.18 |
+| Sriraag | Gents | 39 | 0 | +0.21 |
+| Rhuben | Gents | 35 | 0 | +0.14 |
+| Anvita | Ladies | 25 | 0 | −0.32 |
+| Triveni | Ladies | 16 | 0 | −0.50 |
 
 ---
 

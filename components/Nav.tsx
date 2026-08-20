@@ -23,6 +23,8 @@ const ITEMS: NavItem[] = [
   { href: "/bhajans", label: "Bhajans", short: "B" },
   { href: "/explore", label: "Explore", short: "?" },
   { href: "/my-list", label: "My list", short: "♪" },
+  { href: "/find-my-pitch", label: "My pitch", short: "♯" },
+  { href: "/availability", label: "When I can't", short: "✗" },
   { href: "/notifications", label: "Alerts", short: "!" },
   { href: "/singers", label: "Singers", short: "S" },
   { href: "/fairness", label: "Fairness", short: "≡" },

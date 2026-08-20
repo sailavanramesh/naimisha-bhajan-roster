@@ -94,6 +94,7 @@ const CAPABILITIES: Capability[] = [
   "addBhajan",
   "exploreBhajans",
   "manageOwnLearning",
+  "manageOwnAvailability",
   "setMicCushion",
   "notifySingers",
   "manageNotificationRules",

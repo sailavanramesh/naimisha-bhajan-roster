@@ -191,7 +191,10 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             up half off the screen on a phone.
           */}
           <div className="min-w-0 flex-1">
-            <div className="mx-auto max-w-6xl px-3 pb-16 pt-14 sm:px-6 sm:pt-8">
+            {/* A column, so the credit sits at the BOTTOM rather than
+                directly under the header while a page is still streaming in.
+                Without this a slow page reads as "the site is just a footer". */}
+            <div className="mx-auto flex min-h-screen max-w-6xl flex-col px-3 pb-16 pt-14 sm:px-6 sm:pt-8">
               <header className="no-print mb-6">
                 <div className="flex items-center gap-4 border-b border-rule pb-4">
                   <YantraFull size={54} className="shrink-0 text-brass" variant={isDev ? "dev" : "brand"} />
@@ -225,7 +228,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 </div>
               </header>
 
-              <main id="main">
+              <main id="main" className="flex-1">
                 {/*
                   Closed testing: everything is behind sign-in. Enforced in the
                   layout so it covers every page at once — a per-page check
@@ -233,6 +236,44 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 */}
                 {walled ? <SignInWall /> : children}
               </main>
+
+              {/*
+                Sound credit. The shruti player uses recordings released under
+                CC BY 4.0, which requires naming the author, the source and the
+                licence wherever the work is used. It lives in the layout rather
+                than on the guide page because the guide is editable content —
+                a credit somebody can delete by accident is not a credit.
+              */}
+              <footer className="mt-10 border-t border-rule pt-3 text-[11px] leading-relaxed text-on-ground-muted">
+                Tanpura recordings by{" "}
+                <a
+                  href="https://freesound.org/people/sankalp/"
+                  className="underline hover:text-on-ground"
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  sankalp
+                </a>{" "}
+                on{" "}
+                <a
+                  href="https://freesound.org/people/sankalp/packs/9600/"
+                  className="underline hover:text-on-ground"
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  Freesound
+                </a>
+                , trimmed to loops and retuned for this app, used under{" "}
+                <a
+                  href="https://creativecommons.org/licenses/by/4.0/"
+                  className="underline hover:text-on-ground"
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  CC BY 4.0
+                </a>
+                .
+              </footer>
             </div>
           </div>
         </div>
