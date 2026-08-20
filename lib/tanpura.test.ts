@@ -184,13 +184,13 @@ describe('tanpuraVoice', () => {
     expect(NOTE_NAMES[(v.targetSemitone + 7) % 12]).toBe('C#');
   });
 
-  it('does not disturb how the rest of the app reads a label', () => {
-    // saOf still answers "what note is written", which is what the ladder,
-    // the deviation history and the tabla panel are built on. Only the drone
-    // is corrected.
-    expect(saOf('4.5 Madhyam / B')).toBe(NOTE_NAMES.indexOf('B'));
+  it('agrees with the rest of the app about Sa', () => {
+    // The Madhyam correction moved into lib/pitch.ts on 2026-08-20, so the
+    // drone, the ladder, the deviations and the tabla panel now read one Sa.
+    for (const label of ALL_LABELS) {
+      expect(soundingSa(label), label).toBe(saOf(label));
+    }
     expect(soundingSa('4.5 Madhyam / B')).toBe(NOTE_NAMES.indexOf('F#'));
-    expect(saOf('4.5 Pancham / F#')).toBe(soundingSa('4.5 Pancham / F#'));
   });
 
   it('picks the series recording from the label', () => {
@@ -200,8 +200,10 @@ describe('tanpuraVoice', () => {
 
   it('sounds every Madhyam label a fourth below the note printed on it', () => {
     for (const label of ALL_LABELS.filter((l) => /madhyam/i.test(l))) {
-      const written = saOf(label)!;
-      expect(tanpuraVoice(label)!.targetSemitone, label).toBe((written - 5 + 12) % 12);
+      const printed = NOTE_NAMES.indexOf(
+        /\/\s*([A-G]#?)\s*$/.exec(label)![1] as (typeof NOTE_NAMES)[number],
+      );
+      expect(tanpuraVoice(label)!.targetSemitone, label).toBe((printed - 5 + 12) % 12);
     }
   });
 

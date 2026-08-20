@@ -23,21 +23,10 @@
  * madhyam /B is misleading, the 4.5 madhyam means Sa is F# (4.5) and B is the
  * Ma", and "4.5 pancham would be Sa is F# and Pa is C#".
  *
- * ## Why this correction lives HERE and not in lib/pitch.ts
- *
- * `saOf` still reads the written note as Sa, and the rest of the app still
- * compares pitches that way. Applying this correction there instead was tried
- * and measured against the group's own singing history: it makes each singer's
- * offsets from their reference markedly WORSE — spread 1.02 to 1.59 semitones,
- * and rows where somebody supposedly sang more than three semitones from their
- * reference going from 12 to 59 out of 669. The sung-pitch records therefore
- * behave as though the written note were the pitch, whatever the shruti box
- * does with the same words.
- *
- * Both can be true at once: the sheet compares letters, and the box sounds a
- * fourth below on Madhyam. Only playback has to agree with the box, so only
- * playback is corrected. Widening it is a decision about 709 rows of history
- * and is Sailavan's to make with those numbers in front of him.
+ * The correction itself lives in lib/pitch.ts (`NOTE_ABOVE_SA`), and applies to
+ * the whole app — the ladder, the deviations and the tabla pitch as well as the
+ * drone. The measurements that argue against it, and how to reverse it, are
+ * recorded there.
  *
  * ## Why nearest-sample-plus-detune
  *
@@ -55,30 +44,15 @@
 import { saOf, PITCH_CLASS, NOTE_NAMES, type NoteName, type Series } from './pitch';
 
 /**
- * How far the written note sits above Sa, per series. See the note above.
+ * The Sa a label should be sounded at.
  *
- * Pancham writes Sa itself; Madhyam writes Ma, a perfect fourth up. To sound a
- * Madhyam label the drone therefore has to start five semitones BELOW the note
- * printed on it.
- */
-export const NOTE_ABOVE_SA: Readonly<Record<Series, number>> = {
-  Pancham: 0,
-  Madhyam: 5,
-};
-
-/**
- * The Sa a label should actually be sounded at.
- *
- * Deliberately NOT `saOf`: that answers the question the rest of the app asks,
- * which is "what note is written here". This answers "what note should the
- * drone be tuned to", and for Madhyam they differ by a fourth.
+ * Now just `saOfAnyPitch`: the Madhyam correction that used to live here moved
+ * into lib/pitch.ts on 2026-08-20, so the whole app reads Sa one way. Kept as a
+ * name because it says what the call site means, and because it is where to
+ * put a divergence if playback ever has to disagree with the app again.
  */
 export function soundingSa(label?: string | null): number | null {
-  const written = saOfAnyPitch(label);
-  if (written === null) return null;
-  // A bare programme note has no series and is taken at face value.
-  const series: Series = /madhyam/i.test(label ?? '') ? 'Madhyam' : 'Pancham';
-  return (((written - NOTE_ABOVE_SA[series]) % 12) + 12) % 12;
+  return saOfAnyPitch(label);
 }
 
 /**

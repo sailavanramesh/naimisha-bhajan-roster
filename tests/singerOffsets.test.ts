@@ -9,6 +9,19 @@
  * maths is wrong — fix that, or stop and report it. Changing these numbers
  * destroys the only check that the import preserved the group's real history.
  *
+ * They were rewritten ONCE, on 2026-08-20, and only because the pitch maths
+ * changed on purpose: a Madhyam label was found to name its Ma rather than its
+ * Sa, so Sa moved a fourth for every Madhyam pitch (lib/pitch.ts,
+ * NOTE_ABOVE_SA). Sailavan asked for that after hearing the drone.
+ *
+ * What did NOT change is the part this gate exists to protect: all eleven
+ * singers, and all eleven sample counts, are exactly as before — the same rows
+ * still qualify. Only the offsets moved, and only because 52 of 669
+ * comparisons put a Madhyam label against a Pancham one. The means widened,
+ * which is the cost recorded against NOTE_ABOVE_SA; if that constant is ever
+ * put back to 0, these numbers go back to their previous values, which are in
+ * git history at 2b40a4d.
+ *
  * The offsets are measured against SessionSlot.historicalRecommendedPitch —
  * the recommendation as recorded in the source sheet — not against a masterlist
  * lookup. The two agree on value (617 of 618 rows) but disagree on which rows
@@ -18,19 +31,26 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PrismaClient } from '@prisma/client';
 import { semitoneDelta, median, mean } from '../lib/pitch';
 
-/** Straight from the table in CLAUDE.md: [gender, n, median, mean]. */
+/**
+ * Straight from the table in CLAUDE.md: [gender, n, median, mean].
+ *
+ * Means are quoted to two decimals, except Ashwin and Pavitra, whose means land
+ * exactly on the 2-decimal rounding boundary (0.625, 0.375). The comparison
+ * below allows a difference of under 0.005, which a value sitting exactly on
+ * 0.005 fails either way it is rounded, so those two are given in full.
+ */
 const EXPECTED = {
-  Sailavan: ['Gents', 99, 1, 0.85],
-  Ashwin: ['Gents', 96, 0, 0.31],
-  Prithvi: ['Gents', 89, 1, 1.35],
-  Jothsna: ['Ladies', 69, 0, 0.42],
-  Prasanna: ['Ladies', 63, 1, 1.05],
-  Pavitra: ['Ladies', 40, 0, 0.25],
-  Shravya: ['Ladies', 40, 0, 0.55],
-  Sriraag: ['Gents', 39, 0, -0.23],
-  Rhuben: ['Gents', 35, 0, 0.0],
-  Anvita: ['Ladies', 25, 0, -0.52],
-  Triveni: ['Ladies', 16, 0, 0.25],
+  Sailavan: ['Gents', 99, 1, 0.9],
+  Ashwin: ['Gents', 96, 0, 0.625],
+  Prithvi: ['Gents', 89, 1, 1.63],
+  Jothsna: ['Ladies', 69, 0, 0.43],
+  Prasanna: ['Ladies', 63, 1, 0.9],
+  Pavitra: ['Ladies', 40, 0, 0.375],
+  Shravya: ['Ladies', 40, 1, 1.18],
+  Sriraag: ['Gents', 39, 0, 0.21],
+  Rhuben: ['Gents', 35, 0, 0.14],
+  Anvita: ['Ladies', 25, 0, -0.32],
+  Triveni: ['Ladies', 16, 0, -0.5],
 } as const satisfies Record<string, readonly [string, number, number, number]>;
 
 const EXPECTED_TOTAL = Object.values(EXPECTED).reduce((sum, [, n]) => sum + n, 0);

@@ -1,3 +1,4 @@
+import { saOf } from './pitch';
 /**
  * lib/pitchQueries.ts — the database side of pitch intelligence.
  *
@@ -61,8 +62,19 @@ export async function getPitchLabels(): Promise<PitchLabelRow[]> {
       select: { label: true, step: true, series: true, note: true, semitone: true },
     })
     .then((rows) => {
-      pitchLabelCache = rows;
-      return rows;
+      /*
+       * Recompute `semitone` rather than trust the column.
+       *
+       * The stored value was written when the app read the note after the slash
+       * as Sa. For Madhyam rows that note is Ma, so the column is a fourth
+       * high. Deriving it keeps lib/pitch.ts the only authority on what Sa is,
+       * and spares a migration over live history for a derivable value.
+       */
+      pitchLabelCache = rows.map((row) => ({
+        ...row,
+        semitone: saOf(row.label) ?? row.semitone,
+      }));
+      return pitchLabelCache;
     })
     .finally(() => {
       pitchLabelInFlight = null;

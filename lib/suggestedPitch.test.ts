@@ -27,10 +27,17 @@ describe('suggestPitch', () => {
   });
 
   it('does NOT call two names for the same Sa a conflict', () => {
-    // 1 Madhyam / F and 4 Pancham / F are one pitch (CLAUDE.md rule 2).
-    const r = suggestPitch({ listPitch: '1 Madhyam / F', sungPitches: ['4 Pancham / F'] });
+    // Same step number, so one pitch under two names (CLAUDE.md rule 2):
+    // 1 Madhyam / F is Sa C with F droning, 1 Pancham / C is Sa C with G.
+    const r = suggestPitch({ listPitch: '1 Madhyam / F', sungPitches: ['1 Pancham / C'] });
     expect(r.conflicted).toBe(false);
     expect(r.pitch).toBe('1 Madhyam / F');
+  });
+
+  it('DOES call the same letter in two series a conflict, because it is not one pitch', () => {
+    // 1 Madhyam / F is Sa C; 4 Pancham / F is Sa F. A fourth apart.
+    const r = suggestPitch({ listPitch: '1 Madhyam / F', sungPitches: ['4 Pancham / F'] });
+    expect(r.conflicted).toBe(true);
   });
 
   it('prefers anything real over a prediction', () => {

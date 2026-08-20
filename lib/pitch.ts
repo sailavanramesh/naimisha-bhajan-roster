@@ -4,9 +4,13 @@
  * Canonical rules live in CLAUDE.md ("The pitch model"). Restated here because
  * getting these wrong makes everything downstream wrong:
  *
- *   1. Absolute Sa comes ONLY from the note letter after the slash.
- *   2. Madhyam vs Pancham is display metadata. It does not change the pitch.
- *      `1 Madhyam / F` and `4 Pancham / F` are the same Sa.
+ *   1. Sa comes from the STEP NUMBER. The note after the slash is the DRONE
+ *      note: in Pancham that IS Sa, in Madhyam it is Ma, a perfect fourth
+ *      above Sa. So Sa is the written note for Pancham, and the written note
+ *      minus five semitones for Madhyam.
+ *   2. The series does not change Sa. The same step number is the same Sa in
+ *      both: `4.5 Madhyam / B` and `4.5 Pancham / F#` are both Sa = F#, and
+ *      differ only in whether B or C# drones against it.
  *   3. Tabla pitch = Sa + 7 semitones. Derived, never stored per row.
  *   4. Deviation between two pitches is the signed shortest distance mod 12,
  *      wrapped to [-6, +6].
@@ -39,13 +43,68 @@ export const NOTE_NAMES: readonly NoteName[] = [
 /** Which drone the shruti box plays against Sa. A convention label, not a pitch. */
 export type Series = 'Madhyam' | 'Pancham';
 
+/**
+ * How far the WRITTEN note sits above Sa, per series.
+ *
+ * A label names the note the DRONE sounds, which is not always Sa:
+ *
+ *   Pancham — the written note IS Sa. `4.5 Pancham / F#` is Sa F#, droning Pa
+ *             (C#, a fifth up) against it.
+ *   Madhyam — the written note is MA, a perfect fourth above Sa.
+ *             `4.5 Madhyam / B` is Sa F#, droning Ma (B) against it.
+ *
+ * The group's table bears it out: for every step number the Madhyam note is
+ * exactly five semitones above the Pancham note, which is what Ma is.
+ *
+ * Sailavan, 2026-08-20: "the 4.5 madhyam /B is misleading, the 4.5 madhyam
+ * means Sa is F# (4.5) and B is the Ma", and "4.5 pancham would be Sa is F# and
+ * Pa is C#". Reaffirmed after seeing the measurements in the note below.
+ *
+ * ## What the recorded data says, which is the opposite
+ *
+ * This was measured four ways before being applied, and all four favour the
+ * older reading in which the written note is always Sa:
+ *
+ *   - Gents-to-ladies interval: across 2921 bhajans written in ONE series it is
+ *     -5 semitones. For the 97 written in different series, reading letters
+ *     directly reproduces -5 in 90 of them; this rule fits 0 of 97.
+ *   - Same singer, same bhajan, one take each series (n=8): letters agree
+ *     exactly in 4 and within a semitone in 6; this rule agrees in 1.
+ *   - Singer offsets from their reference (n=669): spread widens from 1.02 to
+ *     1.59 semitones, and rows implying somebody sang more than three semitones
+ *     off go from 12 to 59.
+ *   - `PitchLabel.tablaPitch` is the written note + 7 in all 24 rows, which
+ *     only holds if the written note is Sa.
+ *
+ * The likeliest reading of that is that the source sheet was filled in
+ * comparing letters, whatever the shruti box does with the same words. It is
+ * recorded here so that whoever meets a strange offset knows where to look.
+ *
+ * To go back, set Madhyam to 0. Nothing else has to change.
+ */
+export const NOTE_ABOVE_SA: Readonly<Record<Series, number>> = {
+  Pancham: 0,
+  Madhyam: 5,
+};
+
+/** The series a label is written in. Pancham when it does not say. */
+export function seriesOf(label?: string | null): Series {
+  return /madhyam/i.test(label ?? '') ? 'Madhyam' : 'Pancham';
+}
+
 export type PitchLabel = {
   /** The numeric step in the label, e.g. 2 in `2 Pancham / D`. May be fractional. */
   step: number;
   series: Series;
+  /**
+   * The note as WRITTEN, after the slash: the DRONE note. Sa in Pancham, Ma in
+   * Madhyam — so not always the same as `saNote`.
+   */
   note: NoteName;
-  /** Absolute Sa as a pitch class, 0..11. */
+  /** Absolute Sa as a pitch class, 0..11. Derived via NOTE_ABOVE_SA. */
   semitone: number;
+  /** Absolute Sa as a note name — the note the singer is actually pitched to. */
+  saNote: NoteName;
   /** The label as written, trimmed. Round-trips for display. */
   raw: string;
 };
@@ -61,11 +120,14 @@ const NOTE_SUFFIX_RE = /\/\s*([A-G]#?)\s*$/;
  * there is no parseable note.
  */
 export function saOf(label?: string | null): number | null {
-  const m = NOTE_SUFFIX_RE.exec((label ?? '').trim());
+  const raw = (label ?? '').trim();
+  const m = NOTE_SUFFIX_RE.exec(raw);
   if (!m) return null;
-  const note = m[1].toUpperCase() as NoteName;
-  const pc = PITCH_CLASS[note];
-  return pc === undefined ? null : pc;
+  const written = PITCH_CLASS[m[1].toUpperCase() as NoteName];
+  if (written === undefined) return null;
+  // The written note is the drone; how far it sits above Sa depends on which
+  // drone the series names. See NOTE_ABOVE_SA.
+  return (((written - NOTE_ABOVE_SA[seriesOf(raw)]) % 12) + 12) % 12;
 }
 
 /**
@@ -80,10 +142,11 @@ export function parsePitchLabel(label?: string | null): PitchLabel | null {
   const m = LABEL_RE.exec(raw);
   if (!m) return null;
   const note = m[3].toUpperCase() as NoteName;
-  const semitone = PITCH_CLASS[note];
-  if (semitone === undefined) return null;
+  const written = PITCH_CLASS[note];
+  if (written === undefined) return null;
   const series = (m[2][0].toUpperCase() + m[2].slice(1).toLowerCase()) as Series;
-  return { step: Number(m[1]), series, note, semitone, raw };
+  const semitone = (((written - NOTE_ABOVE_SA[series]) % 12) + 12) % 12;
+  return { step: Number(m[1]), series, note, semitone, saNote: NOTE_NAMES[semitone], raw };
 }
 
 /**

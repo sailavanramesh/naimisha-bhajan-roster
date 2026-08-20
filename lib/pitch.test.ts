@@ -56,14 +56,35 @@ const LOOKUP: ReadonlyArray<readonly [string, string]> = [
 const ALL_LABELS = LOOKUP.map(([label]) => label);
 
 describe('saOf', () => {
-  it('reads Sa from the note letter after the slash', () => {
+  it('reads Sa from the letter in Pancham, where the letter IS Sa', () => {
     expect(saOf('2 Pancham / D')).toBe(PITCH_CLASS.D);
-    expect(saOf('1 Madhyam / F')).toBe(PITCH_CLASS.F);
     expect(saOf('1.5 Pancham / C#')).toBe(PITCH_CLASS['C#']);
   });
 
-  it('treats Madhyam and Pancham as the same pitch (CLAUDE.md rule 2)', () => {
-    expect(saOf('1 Madhyam / F')).toBe(saOf('4 Pancham / F'));
+  it('reads Sa a fourth BELOW the letter in Madhyam, where the letter is Ma', () => {
+    // "1 Madhyam / F" is Sa C with F droning a fourth above it.
+    expect(saOf('1 Madhyam / F')).toBe(PITCH_CLASS.C);
+    expect(saOf('4.5 Madhyam / B')).toBe(PITCH_CLASS['F#']);
+    expect(saOf('7 Madhyam / E')).toBe(PITCH_CLASS.B);
+  });
+
+  it('gives the same Sa for the same STEP in either series (CLAUDE.md rule 2)', () => {
+    // The number is Sa; the series only decides what drones against it.
+    for (const [step, madhyam, pancham] of [
+      ['1', '1 Madhyam / F', '1 Pancham / C'],
+      ['2.5', '2.5 Madhyam / G#', '2.5 Pancham / D#'],
+      ['4.5', '4.5 Madhyam / B', '4.5 Pancham / F#'],
+      ['7', '7 Madhyam / E', '7 Pancham / B'],
+    ]) {
+      expect(saOf(madhyam), `step ${step}`).toBe(saOf(pancham));
+    }
+  });
+
+  it('puts the written note a fourth above Sa for every Madhyam label', () => {
+    for (const label of ALL_LABELS.filter((l) => /madhyam/i.test(l))) {
+      const written = PITCH_CLASS[/\/\s*([A-G]#?)\s*$/.exec(label)![1] as keyof typeof PITCH_CLASS];
+      expect((saOf(label)! + 5) % 12, label).toBe(written);
+    }
   });
 
   it('ignores surrounding whitespace', () => {
@@ -87,12 +108,21 @@ describe('parsePitchLabel', () => {
     }
   });
 
-  it('splits step, series and note', () => {
+  it('splits step, series and note, and resolves Sa', () => {
+    // `note` is the note as WRITTEN — here the Ma. `semitone`/`saNote` are Sa.
     expect(parsePitchLabel('2.5 Madhyam / G#')).toMatchObject({
       step: 2.5,
       series: 'Madhyam',
       note: 'G#',
-      semitone: PITCH_CLASS['G#'],
+      semitone: PITCH_CLASS['D#'],
+      saNote: 'D#',
+    });
+    expect(parsePitchLabel('2.5 Pancham / D#')).toMatchObject({
+      step: 2.5,
+      series: 'Pancham',
+      note: 'D#',
+      semitone: PITCH_CLASS['D#'],
+      saNote: 'D#',
     });
   });
 
@@ -105,8 +135,9 @@ describe('parsePitchLabel', () => {
 });
 
 describe('semitoneDelta', () => {
-  it('is zero for identical pitches regardless of series', () => {
-    expect(semitoneDelta('1 Madhyam / F', '4 Pancham / F')).toBe(0);
+  it('is zero across series when the STEP is the same', () => {
+    expect(semitoneDelta('1 Madhyam / F', '1 Pancham / C')).toBe(0);
+    expect(semitoneDelta('4.5 Madhyam / B', '4.5 Pancham / F#')).toBe(0);
   });
 
   it('is signed: positive means sung higher', () => {
@@ -138,9 +169,34 @@ describe('semitoneDelta', () => {
 });
 
 describe('tabla pitch', () => {
-  it('is Sa + 7 semitones for all 24 labels in the lookup table', () => {
-    for (const [label, expectedTabla] of LOOKUP) {
-      expect(tablaPitchOf(label), label).toBe(expectedTabla);
+  it('is Sa + 7 semitones for all 24 labels', () => {
+    for (const [label] of LOOKUP) {
+      expect(tablaPitchOf(label), label).toBe(NOTE_NAMES[(saOf(label)! + 7) % 12]);
+    }
+  });
+
+  /**
+   * The sheet's own tabla column, and where it parts company with rule 1.
+   *
+   * It is the WRITTEN note + 7 in all 24 rows. For Pancham that is Sa + 7 and
+   * agrees. For Madhyam, where the written note is Ma, it comes out a fourth
+   * high — it lands on Sa itself rather than a fifth above it.
+   *
+   * Asserted rather than quietly ignored, because it is the strongest evidence
+   * against rule 1 as it now stands, and because anybody who reads
+   * `PitchLabel.tablaPitch` directly will get the old answer for half the
+   * table. Derive it with `tablaPitchOf`; never read the column.
+   */
+  it('disagrees with the sheet on every Madhyam row, and agrees on every Pancham one', () => {
+    for (const [label, sheetTabla] of LOOKUP) {
+      const derived = tablaPitchOf(label)!;
+      if (/madhyam/i.test(label)) {
+        expect(derived, `${label} should NOT match the sheet`).not.toBe(sheetTabla);
+        // The sheet's value is Sa, a fourth below where the tabla belongs.
+        expect(sheetTabla, `${label} sheet value`).toBe(NOTE_NAMES[saOf(label)!]);
+      } else {
+        expect(derived, `${label} should match the sheet`).toBe(sheetTabla);
+      }
     }
   });
 
@@ -388,16 +444,16 @@ describe('pitchRank / lowestPitch', () => {
     expect(pitchRank('7 Pancham / B')).toBe(11);
   });
 
-  it('ranks a Madhyam label by the same note as its Pancham twin', () => {
-    // Both are F, and both are C, under two naming conventions (rule 2).
-    expect(pitchRank('1 Madhyam / F')).toBe(pitchRank('4 Pancham / F'));
-    expect(pitchRank('5 Madhyam / C')).toBe(pitchRank('1 Pancham / C'));
+  it('ranks a Madhyam label with its same-numbered Pancham twin', () => {
+    // Same step, same Sa, so the same rank — whatever letters they print.
+    expect(pitchRank('1 Madhyam / F')).toBe(pitchRank('1 Pancham / C'));
+    expect(pitchRank('4.5 Madhyam / B')).toBe(pitchRank('4.5 Pancham / F#'));
   });
 
-  it('agrees with real pitch where the printed step numbers would not', () => {
-    // "1 Madhyam / F" has the SMALLER step number, but F is above D.
-    expect(pitchRank('2 Pancham / D')!).toBeLessThan(pitchRank('1 Madhyam / F')!);
-    expect(lowestPitch(['1 Madhyam / F', '2 Pancham / D'])).toBe('2 Pancham / D');
+  it('ranks by Sa, not by the letter printed on the label', () => {
+    // "1 Madhyam / F" prints an F, above D — but its Sa is C, below D.
+    expect(pitchRank('1 Madhyam / F')!).toBeLessThan(pitchRank('2 Pancham / D')!);
+    expect(lowestPitch(['2 Pancham / D', '1 Madhyam / F'])).toBe('1 Madhyam / F');
   });
 
   it('ties EXACTLY when two labels are the same Sa, and never otherwise', () => {
