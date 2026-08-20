@@ -104,3 +104,32 @@ const CAPABILITIES: Capability[] = [
   "manageArchive",
   "viewAllPages",
 ];
+
+/**
+ * The 2026-08-20 production bug, pinned.
+ *
+ * A member saw an editable pitch field in the roster grid — the grid's gate is
+ * `editSlotBhajan`, which they have — typed a pitch, was told the save had
+ * worked, and had the value silently replaced from the database, because
+ * app/roster/[id]/actions.ts reverted `confirmedPitch` for anybody without
+ * `assignSingers`. Nothing failed; the edit simply never happened.
+ *
+ * The action now asks about `editConfirmedPitch` on its own. These two
+ * assertions are the halves that have to stay in step: a member may record a
+ * pitch, and still may not move singers between slots.
+ */
+describe("a member recording a confirmed pitch", () => {
+  it("may edit the pitch, which the roster grid has always offered them", () => {
+    expect(can("member", "editConfirmedPitch")).toBe(true);
+    expect(can("member", "editSlotBhajan")).toBe(true);
+  });
+
+  it("still may not change who is in a slot", () => {
+    expect(can("member", "assignSingers")).toBe(false);
+  });
+
+  it("leaves a viewer able to do neither", () => {
+    expect(can("viewer", "editConfirmedPitch")).toBe(false);
+    expect(can("viewer", "editSlotBhajan")).toBe(false);
+  });
+});

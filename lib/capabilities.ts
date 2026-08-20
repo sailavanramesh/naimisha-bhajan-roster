@@ -88,9 +88,21 @@ const MATRIX: Record<Role, ReadonlySet<Capability>> = {
   editor: new Set<Capability>(EDITOR_CAPABILITIES),
   member: new Set<Capability>([
     // Sailavan: "only be able to edit the bhajan column, can't change the
-    // allocation of singers." Taken literally — confirmed pitch is left to an
-    // editor too. See OPEN-QUESTIONS in PROGRESS.md.
+    // allocation of singers." Still true of the allocation.
     "editSlotBhajan",
+    /*
+     * Confirmed pitch WAS editor-only, read literally from the same
+     * instruction. That turned out to be the wrong half to enforce in the
+     * action: the grid's edit gate is `editSlotBhajan`, which a member has, so
+     * a member saw a live pitch field, typed in it, was told the save had
+     * worked, and had the value silently replaced with whatever was already in
+     * the database. A person in production hit exactly that on 2026-08-20 and
+     * Sailavan asked for it to save.
+     *
+     * The allocation of singers is still not theirs; that is stripped in
+     * app/roster/[id]/actions.ts, and the UI does not offer it either.
+     */
+    "editConfirmedPitch",
     "exploreBhajans",
     "manageOwnLearning",
     // Sailavan: any user sets this. It is live sound-desk state, not the
