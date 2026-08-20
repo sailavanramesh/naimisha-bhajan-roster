@@ -15,6 +15,7 @@ import {
 import { predictForSinger } from "@/lib/singerProfile";
 import { semitoneDelta } from "@/lib/pitch";
 import { AddToList } from "@/components/AddToList";
+import { PitchFinder } from "@/components/PitchFinder";
 import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { rosterable } from "@/lib/rosterEligibility";
 import { EditBhajanPanel, EditedDot } from "./EditBhajanPanel";
@@ -176,6 +177,40 @@ export default async function BhajanPage({
 
   const mostRecent = sungBy[0] ?? null;
 
+  /*
+   * What the signed-in singer should start from when finding their pitch.
+   *
+   * Their own saved pitch if they have one, else their prediction where there
+   * is enough history to trust it, else the reference for their side. The
+   * reason is passed through with it: a number nobody can account for is worse
+   * than no number.
+   */
+  const mine = signedIn
+    ? await prisma.singerRepertoire.findFirst({
+        where: { singerId: signedIn.id, title: { equals: bhajan.title, mode: "insensitive" } },
+        orderBy: { kind: "asc" },
+        select: { preferredPitch: true },
+      })
+    : null;
+
+  // getSignedInSinger returns identity and role, not the singer record, and
+  // the reference to start from depends on which side they sing. The full list
+  // is already loaded above, so take it from there rather than query again.
+  const meRecord = signedIn ? (singers.find((x) => x.id === signedIn.id) ?? null) : null;
+  const myReference = referenceFor(meRecord?.gender ?? null);
+  const myPrediction = signedIn
+    ? predictForSinger(profiles.get(signedIn.name), myReference, bhajan.raga, labelStrings)
+    : null;
+
+  const startPitch = myPrediction?.label ?? myReference ?? null;
+  const startReason = !signedIn
+    ? null
+    : myPrediction?.predicted
+      ? `what you usually sing, from ${myPrediction.n} recorded ${myPrediction.n === 1 ? "time" : "times"}`
+      : myReference
+        ? `the ${meRecord?.gender === Gender.Ladies ? "ladies" : "gents"} reference`
+        : null;
+
   /** The group's correction to one field, if there is one. */
   const editOf = (field: string) => bhajan.fieldEdits.find((e) => e.field === field) ?? null;
 
@@ -266,6 +301,18 @@ export default async function BhajanPage({
                 ) : null}
               </div>
             </div>
+
+          {signedIn ? (
+            <PitchFinder
+              singerId={signedIn.id}
+              title={bhajan.title}
+              startPitch={startPitch}
+              savedPitch={mine?.preferredPitch ?? null}
+              startReason={startReason}
+              options={labelStrings}
+              canSave={canAddToList}
+            />
+          ) : null}
           </div>
 
           {/*
