@@ -29,6 +29,31 @@ spanning 2025-03-18 → 2026-08-09.
 - Auth: link-based edit key (`EDIT_KEY` env var + `middleware.ts`). See spec for
   the planned upgrade to named identities — do not rip this out until then.
 
+### The hosting, as it actually stands (2026-08-21)
+
+Worth knowing before diagnosing "the app is slow": most of that story is here
+rather than in the code.
+
+- **Two App Service plans**, both B1 Linux in Australia East.
+  `asp-naimisha-roster` carries production alone, with Always On;
+  `asp-naimisha-roster-dev` carries dev, without. They shared ONE plan until
+  2026-08-21 — one vCPU and 1.75 GB between both apps — so dev waking up took
+  CPU from production. A restart was measured answering in 6–18 seconds while
+  the two booted together, settling to ~250 ms once warm. Keep them separate.
+- **HTTP/2 is on for both**, from 2026-08-21. It was off, which capped a phone
+  at about six parallel requests for the thirty-odd chunks and fonts a page
+  pulls.
+- **Postgres is Burstable** (`psql-naimisha-roster`, Standard_B1ms). It earns
+  CPU credits and is throttled to a fraction of a core when they run out, which
+  is why a query costs a few milliseconds one minute and thirty the next. Prefer
+  ONE `Promise.all` over several sequential `await`s in a page: the number of
+  round trips is what that variance multiplies.
+- **public/ is cached immutable** by `headers()` in `next.config.js` — fonts,
+  tanpura audio, icons. `sw.js` is deliberately excluded: a cached service
+  worker is an app that cannot update itself.
+- `LOG_QUERIES=1` turns on Prisma statement logging (`lib/db.ts`), for counting
+  a page's round trips rather than guessing at them.
+
 ## Commands
 
 ```bash
