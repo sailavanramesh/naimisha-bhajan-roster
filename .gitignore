@@ -37,3 +37,4 @@ pnpm-debug.log*
 
 # one-off dev->prod data transfer scripts, never committed
 .transfer/
+.tracks/

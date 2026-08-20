@@ -194,6 +194,14 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
     title: item.title ?? "",
     narration: item.narration ?? "",
     pitchNote: item.pitchNote ?? "",
+    // The track is read-only from the editor's point of view: uploads go
+    // straight to the route and report back, rather than through the draft.
+    track: {
+      file: item.trackFile,
+      name: item.trackName,
+      bytes: item.trackBytes,
+      uploadedBy: item.trackUploadedBy,
+    },
     bpm: item.bpm === null ? "" : String(item.bpm),
     referenceUrl: item.referenceUrl ?? "",
     arrangement: item.arrangement ?? "",

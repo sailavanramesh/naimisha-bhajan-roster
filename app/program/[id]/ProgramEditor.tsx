@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Button, Card, CardContent, Input } from "@/components/ui";
 import { ShrutiPlayer } from "@/components/ShrutiPlayer";
+import { TrackControl } from "@/components/TrackControl";
 import { NOTE_NAMES } from "@/lib/pitch";
 import { instrumentsLabel, performersLabel, runningOrderLabel, songNumbers } from "@/lib/program";
 import {
@@ -32,6 +33,13 @@ export type EditorItem = {
   title: string;
   narration: string;
   pitchNote: string;
+  /** The audio for this song, if somebody has added one. */
+  track: {
+    file: string | null;
+    name: string | null;
+    bytes: number | null;
+    uploadedBy: string | null;
+  };
   bpm: string;
   referenceUrl: string;
   arrangement: string;
@@ -366,6 +374,25 @@ function ItemCard({
                       placeholder="e.g. 70"
                     />
                   </label>
+                </div>
+              ) : null}
+
+              {/*
+                THE TRACK.
+
+                Sailavan: "there should be an option to upload a track to the
+                song so it can be played from the running order section, can
+                scrub through the track to whatever time point".
+
+                Only on a song — a narration has nothing to play. Outside the
+                `!isReading` block above, because listening is not editing: a
+                singer reading the running order on the night is exactly who
+                needs to hear it, and they may not have edit rights.
+              */}
+              {draft.kind === "song" ? (
+                <div className="mt-2 grid gap-1">
+                  <span className="text-xs text-on-surface-muted">Track</span>
+                  <TrackControl itemId={draft.id} initial={draft.track} canEdit={canEdit} />
                 </div>
               ) : null}
             </div>
