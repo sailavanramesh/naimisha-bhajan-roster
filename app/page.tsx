@@ -46,6 +46,14 @@ export default async function Home() {
     },
     orderBy: { date: "asc" },
     select: { id: true, date: true, startsAt: true },
+    /*
+     * Only the FIRST day with something on it is wanted, and the most sessions
+     * one day has ever had is a handful — so reading every future session that
+     * has ever been drafted, which is what this did, is a growing amount of work
+     * to answer a question about one date. Twenty is far past any real day and
+     * the filter below still picks the right session within it.
+     */
+    take: 20,
   });
 
   /*
