@@ -45,13 +45,18 @@ describe('the playing-state store', () => {
   });
 
   it('starts empty and reports what is sounding', () => {
-    expect(getState()).toEqual({ label: null, loading: false, error: null });
+    expect(getState()).toEqual({ label: null, owner: null, loading: false, error: null });
 
     __setStateForTests({ loading: '2 Pancham / D' });
-    expect(getState()).toEqual({ label: null, loading: true, error: null });
+    expect(getState()).toEqual({ label: null, owner: null, loading: true, error: null });
 
-    __setStateForTests({ loading: null, label: '2 Pancham / D' });
-    expect(getState()).toEqual({ label: '2 Pancham / D', loading: false, error: null });
+    __setStateForTests({ loading: null, label: '2 Pancham / D', owner: 'r1' });
+    expect(getState()).toEqual({
+      label: '2 Pancham / D',
+      owner: 'r1',
+      loading: false,
+      error: null,
+    });
   });
 
   it('does not call a new subscriber synchronously', () => {
@@ -79,5 +84,39 @@ describe('the playing-state store', () => {
     expect(getState().error).toContain('404');
     __setStateForTests({ error: null });
     expect(getState().error).toBeNull();
+  });
+});
+
+/**
+ * Identity is the control, not the pitch — the thing that makes nudging work.
+ */
+describe('control identity', () => {
+  beforeEach(() => __resetForTests());
+
+  it('keeps the owner while the label moves underneath it', () => {
+    __setStateForTests({ owner: 'row-1', label: '2 Pancham / D' });
+    const owner = getState().owner;
+
+    __setStateForTests({ label: '2.5 Pancham / D#' });
+    expect(getState().owner).toBe(owner);
+    expect(getState().label).toBe('2.5 Pancham / D#');
+  });
+
+  it('treats two rows on the same pitch as different controls', () => {
+    __setStateForTests({ owner: 'row-1', label: '2 Pancham / D' });
+    expect(getState().owner).toBe('row-1');
+
+    __setStateForTests({ owner: 'row-2' });
+    expect(getState().owner).toBe('row-2');
+    expect(getState().label).toBe('2 Pancham / D');
+  });
+
+  it('emits when only the owner changes', () => {
+    let calls = 0;
+    subscribe(() => calls++);
+    __setStateForTests({ owner: 'row-1', label: 'X' });
+    expect(calls).toBe(1);
+    __setStateForTests({ owner: 'row-2' });
+    expect(calls).toBe(2);
   });
 });

@@ -34,9 +34,29 @@ const FADE_IN_S = 0.35;
 /** Fade out. Longer than the fade in: a drone should recede, not stop dead. */
 const FADE_OUT_S = 0.6;
 
+/**
+ * Following a nudge on the SAME recording: glide the playback rate.
+ *
+ * Short enough to feel like the button did it, long enough not to jump. A
+ * tanpura sliding a semitone over this is what tuning one actually sounds like,
+ * so the transition reads as musical rather than as a glitch. Rapid nudges land
+ * on top of each other and simply re-aim the glide.
+ */
+const GLIDE_S = 0.16;
+
+/**
+ * Following a nudge onto a DIFFERENT recording: crossfade between the two.
+ *
+ * Longer than the glide, because this is two separate recordings overlapping
+ * rather than one changing speed, and a short crossfade there sounds like a cut.
+ */
+const RETUNE_FADE_S = 0.32;
+
 export type PlayingState = {
   /** The label currently sounding, or null when nothing is. */
   label: string | null;
+  /** Which control is sounding it. See `currentOwner`. */
+  owner: string | null;
   /** True while a recording is being fetched and decoded. */
   loading: boolean;
   /** Set when the recording could not be played. Cleared on the next attempt. */
@@ -47,6 +67,24 @@ let context: AudioContext | null = null;
 let source: AudioBufferSourceNode | null = null;
 let gain: GainNode | null = null;
 let currentLabel: string | null = null;
+/** The src actually sounding, so a retune knows whether it can just glide. */
+let currentSrc: string | null = null;
+/**
+ * Which CONTROL is sounding, not which pitch.
+ *
+ * Identity has to survive the label changing underneath it: nudging a shruti up
+ * a semitone gives the same button a new label, and if identity were the label
+ * the button would believe it had stopped. It also keeps two rows that happen
+ * to show the same pitch distinct, so editing one cannot retune the other's
+ * drone.
+ */
+let currentOwner: string | null = null;
+/**
+ * What the sounding control WANTS to play, which can move while a recording is
+ * still being fetched — press + twice quickly and the second press lands before
+ * the first has decoded.
+ */
+let desiredLabel: string | null = null;
 let loadingLabel: string | null = null;
 let lastError: string | null = null;
 
@@ -66,17 +104,19 @@ const listeners = new Set<(state: PlayingState) => void>();
  * a freshly built object every call means "changed" every call — React detects
  * the resulting loop and throws, taking down every page the control appears on.
  */
-let snapshot: PlayingState = { label: null, loading: false, error: null };
+let snapshot: PlayingState = { label: null, owner: null, loading: false, error: null };
 
 /** Rebuild the snapshot, and tell everyone, only if some field really moved. */
 function emit() {
   const next: PlayingState = {
     label: currentLabel,
+    owner: currentOwner,
     loading: loadingLabel !== null,
     error: lastError,
   };
   if (
     next.label === snapshot.label &&
+    next.owner === snapshot.owner &&
     next.loading === snapshot.loading &&
     next.error === snapshot.error
   ) {
@@ -157,6 +197,9 @@ export function stop(): void {
   source = null;
   gain = null;
   currentLabel = null;
+  currentSrc = null;
+  currentOwner = null;
+  desiredLabel = null;
 
   if (ctx && endingSource && endingGain) {
     const now = ctx.currentTime;
@@ -179,8 +222,11 @@ export function stop(): void {
  * Playing the label that is already sounding stops it — the control is a
  * toggle, which is what a single button beside a pitch should be.
  */
-export async function play(label: string): Promise<void> {
-  if (currentLabel === label) {
+export async function play(label: string, owner: string = label): Promise<void> {
+  // Pressing the control that is already sounding stops it. Keyed on the
+  // control, not the pitch, so a button that has been nudged since it started
+  // still toggles itself rather than starting a second drone.
+  if (currentOwner === owner) {
     stop();
     return;
   }
@@ -202,6 +248,8 @@ export async function play(label: string): Promise<void> {
   stop();
   lastError = null;
   loadingLabel = label;
+  desiredLabel = label;
+  currentOwner = owner;
   emit();
 
   let buffer: AudioBuffer;
@@ -237,6 +285,97 @@ export async function play(label: string): Promise<void> {
   source = node;
   gain = envelope;
   currentLabel = label;
+  currentSrc = voice.src;
+  emit();
+
+  // Nudged while the recording was still downloading: catch up now that there
+  // is something to retune. The drone is audible for a moment at the pitch that
+  // was asked for first, which is honest — that is the one that was requested.
+  if (desiredLabel !== null && desiredLabel !== label) await retune(desiredLabel, owner);
+}
+
+/**
+ * Follow a control whose label has changed while it is the one sounding.
+ *
+ * Called when somebody nudges a shruti up or down with the drone running. Two
+ * routes, because the recordings are sparse and a semitone step sometimes stays
+ * on one recording and sometimes crosses to the next:
+ *
+ *   Same recording — glide `playbackRate`. One continuous sound bending to the
+ *   new pitch, which is both the most responsive option and the most musical.
+ *
+ *   Different recording — crossfade. There is no way to bend one recording into
+ *   another, so the old fades out under the new fading in.
+ *
+ * Ignored unless `owner` is the control actually sounding, so a row being edited
+ * cannot retune a drone started somewhere else.
+ */
+export async function retune(label: string, owner: string): Promise<void> {
+  if (currentOwner !== owner) return;
+
+  const voice = tanpuraVoice(label);
+  if (!voice) return;
+
+  // Still downloading: record the intent and let play() apply it on arrival.
+  desiredLabel = label;
+  const ctx = context;
+  if (!ctx || !source || !gain) return;
+
+  if (voice.src === currentSrc) {
+    const now = ctx.currentTime;
+    source.playbackRate.cancelScheduledValues(now);
+    source.playbackRate.setValueAtTime(source.playbackRate.value, now);
+    source.playbackRate.linearRampToValueAtTime(voice.playbackRate, now + GLIDE_S);
+    currentLabel = label;
+    emit();
+    return;
+  }
+
+  let buffer: AudioBuffer;
+  try {
+    buffer = await load(ctx, voice.src);
+  } catch (err) {
+    // Keep the drone that is already playing rather than dropping to silence:
+    // a shruti at the old pitch is more use than none while somebody nudges.
+    if (desiredLabel === label) {
+      lastError = err instanceof Error ? err.message : 'Could not retune.';
+      emit();
+    }
+    return;
+  }
+
+  // Overtaken while decoding, or stopped outright.
+  if (desiredLabel !== label || currentOwner !== owner || !source || !gain) return;
+
+  const now = ctx.currentTime;
+  const outgoingSource = source;
+  const outgoingGain = gain;
+
+  const node = ctx.createBufferSource();
+  node.buffer = buffer;
+  node.loop = true;
+  node.playbackRate.value = voice.playbackRate;
+
+  const envelope = ctx.createGain();
+  envelope.gain.setValueAtTime(0, now);
+  envelope.gain.linearRampToValueAtTime(1, now + RETUNE_FADE_S);
+  node.connect(envelope).connect(ctx.destination);
+  node.start();
+
+  outgoingGain.gain.cancelScheduledValues(now);
+  outgoingGain.gain.setValueAtTime(outgoingGain.gain.value, now);
+  outgoingGain.gain.linearRampToValueAtTime(0, now + RETUNE_FADE_S);
+  try {
+    outgoingSource.stop(now + RETUNE_FADE_S);
+  } catch {
+    // Already stopped; the fade is all that was needed.
+  }
+  outgoingSource.onended = () => outgoingSource.disconnect();
+
+  source = node;
+  gain = envelope;
+  currentLabel = label;
+  currentSrc = voice.src;
   emit();
 }
 
@@ -246,9 +385,12 @@ export function __resetForTests(): void {
   gain = null;
   context = null;
   currentLabel = null;
+  currentSrc = null;
+  currentOwner = null;
+  desiredLabel = null;
   loadingLabel = null;
   lastError = null;
-  snapshot = { label: null, loading: false, error: null };
+  snapshot = { label: null, owner: null, loading: false, error: null };
   buffers.clear();
   pending.clear();
   listeners.clear();
@@ -256,9 +398,15 @@ export function __resetForTests(): void {
 
 /** Test seam: drive the store without a browser. Not used by the app. */
 export function __setStateForTests(
-  next: Partial<{ label: string | null; loading: string | null; error: string | null }>,
+  next: Partial<{
+    label: string | null;
+    owner: string | null;
+    loading: string | null;
+    error: string | null;
+  }>,
 ): void {
   if ('label' in next) currentLabel = next.label ?? null;
+  if ('owner' in next) currentOwner = next.owner ?? null;
   if ('loading' in next) loadingLabel = next.loading ?? null;
   if ('error' in next) lastError = next.error ?? null;
   emit();

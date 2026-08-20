@@ -227,3 +227,44 @@ describe('bare notes, as programmes write them', () => {
     }
   });
 });
+
+describe('what a one-semitone nudge does to playback', () => {
+  /**
+   * Nudging moves the label by a semitone while the drone is running. Whether
+   * that can glide (same recording, ramp the rate) or must crossfade (a
+   * different recording) falls out of where the base notes sit. Documented
+   * because it is the difference between one continuous sound and two
+   * overlapping ones, and the engine picks between them on this basis alone.
+   */
+  it('mostly glides, and crosses recordings only at the boundaries', () => {
+    const glides: string[] = [];
+    const crossings: string[] = [];
+
+    for (let semitone = 0; semitone < 12; semitone++) {
+      const from = tanpuraVoice(NOTE_NAMES[semitone])!;
+      const to = tanpuraVoice(NOTE_NAMES[(semitone + 1) % 12])!;
+      (from.src === to.src ? glides : crossings).push(
+        `${NOTE_NAMES[semitone]}->${NOTE_NAMES[(semitone + 1) % 12]}`,
+      );
+    }
+
+    // Four recordings across twelve semitones: four steps must cross, and they
+    // are the ones that land on a new nearest recording.
+    expect(glides.length + crossings.length).toBe(12);
+    expect(crossings.length).toBe(4);
+    expect(glides.length).toBe(8);
+  });
+
+  it('never crosses recordings when it does not have to', () => {
+    // Any step landing on a note whose nearest recording is unchanged must
+    // glide — a crossfade there would be two sounds where one would do.
+    for (let semitone = 0; semitone < 12; semitone++) {
+      const a = NOTE_NAMES[semitone];
+      const b = NOTE_NAMES[(semitone + 1) % 12];
+      const from = nearestSample('Pancham', semitone)!;
+      const to = nearestSample('Pancham', (semitone + 1) % 12)!;
+      const sameRecording = tanpuraVoice(a)!.src === tanpuraVoice(b)!.src;
+      expect(sameRecording, `${a}->${b}`).toBe(from.note === to.note);
+    }
+  });
+});

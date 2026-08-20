@@ -44,6 +44,15 @@ page.on("pageerror", (e) => failures.push("uncaught: " + e.message.split("\n")[0
 // it is the whole retuning calculation, observed at the point of use.
 await page.addInitScript(() => {
   window.__rates = [];
+  window.__ramps = [];
+  // A retune onto the same recording GLIDES: it ramps playbackRate on the node
+  // already running rather than starting a new one, so watching starts alone
+  // would miss it entirely.
+  const ramp = AudioParam.prototype.linearRampToValueAtTime;
+  AudioParam.prototype.linearRampToValueAtTime = function (value, time) {
+    window.__ramps.push(value);
+    return ramp.call(this, value, time);
+  };
   const Ctx = window.AudioContext;
   window.AudioContext = class extends Ctx {
     createBufferSource() {
@@ -60,6 +69,10 @@ await page.addInitScript(() => {
 
 await page.goto(url, { waitUntil: "networkidle", timeout: 60000 });
 await page.waitForTimeout(1500);
+
+// The nudge controls only render for an editor. Pass ?k=<EDITOR_KEY> on the
+// URL and the middleware sets the role cookie, so the whole editable grid —
+// the case this script most needs to cover — is reachable without signing in.
 
 const body = (await page.textContent("body")) || "";
 if (body.includes("Application error")) failures.push("the page crashed on load");
@@ -85,6 +98,47 @@ if (count > 1) {
     failures.push("switching to a second control did not leave it playing");
   if ((await buttons.first().getAttribute("aria-pressed")) !== "false")
     failures.push("the first control still claims to be playing");
+}
+
+// Nudging the shruti up or down must retune the running drone rather than
+// leave it on the pitch it started at. Only the editable roster grid has these
+// controls, which is why the URL wants ?k=<EDITOR_KEY>.
+//
+// Five steps, because the two routes must both be exercised: a step that stays
+// on one recording GLIDES (a playbackRate ramp, no new source) and a step onto
+// the next recording CROSSFADES (a new source). Four of the twelve semitone
+// steps cross, so five nudges are certain to meet at least one of each.
+const nudge = page.locator('button[aria-label="Shruti up one semitone"]');
+if (count > 0 && (await nudge.count()) > 0) {
+  await buttons.first().click();
+  await page.waitForTimeout(2000);
+
+  let glides = 0;
+  let crossfades = 0;
+  let stopped = false;
+
+  for (let step = 0; step < 5; step++) {
+    const starts = await page.evaluate(() => window.__rates.length);
+    const ramps = await page.evaluate(() => window.__ramps.length);
+
+    await nudge.first().click();
+    await page.waitForTimeout(1400);
+
+    const startsNow = await page.evaluate(() => window.__rates.length);
+    const rampsNow = await page.evaluate(() => window.__ramps.length);
+
+    if (startsNow > starts) crossfades++;
+    else if (rampsNow > ramps) glides++;
+    else failures.push(`nudge ${step + 1} did not retune the drone at all`);
+
+    if ((await buttons.first().getAttribute("aria-pressed")) !== "true") stopped = true;
+  }
+
+  console.log(`nudges: ${glides} glided, ${crossfades} crossfaded`);
+  if (stopped) failures.push("the drone stopped part-way through nudging");
+  if (glides === 0) failures.push("no nudge glided — every step started a new recording");
+  if (crossfades === 0)
+    failures.push("no nudge crossfaded — five steps should cross a recording boundary");
 }
 
 const rates = await page.evaluate(() => window.__rates);

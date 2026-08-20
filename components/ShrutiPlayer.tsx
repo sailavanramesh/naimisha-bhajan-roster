@@ -13,12 +13,12 @@
  * about the page rather than about this button.
  */
 
-import { useEffect, useRef, useSyncExternalStore } from "react";
+import { useEffect, useId, useRef, useSyncExternalStore } from "react";
 import { tanpuraVoice } from "@/lib/tanpura";
-import { getState, play, stop, subscribe, type PlayingState } from "@/lib/tanpuraEngine";
+import { getState, play, retune, stop, subscribe, type PlayingState } from "@/lib/tanpuraEngine";
 import { cn } from "@/components/ui";
 
-const SERVER_STATE: PlayingState = { label: null, loading: false, error: null };
+const SERVER_STATE: PlayingState = { label: null, owner: null, loading: false, error: null };
 
 function usePlaying(): PlayingState {
   // getState is a live read of module state, so it is already the "current"
@@ -40,7 +40,20 @@ export function ShrutiPlayer({
   const voice = tanpuraVoice(label);
   const playing = usePlaying();
 
-  const isThis = voice !== null && playing.label === label;
+  // Identity is this BUTTON, not the pitch on it. The label changes under us
+  // when somebody nudges the shruti up or down, and identity keyed on the label
+  // would have the button conclude it had stopped mid-drone. It also keeps two
+  // rows showing the same pitch apart.
+  const ownerId = useId();
+  const isThis = voice !== null && playing.owner === ownerId;
+
+  // Follow the pitch while we are the one sounding, so nudging retunes the
+  // drone instead of leaving it on the note that was there when it started.
+  const lastLabel = useRef(label);
+  useEffect(() => {
+    if (isThis && label && label !== lastLabel.current) void retune(label, ownerId);
+    lastLabel.current = label;
+  }, [label, isThis, ownerId]);
 
   // A drone left sounding after the control leaves the screen has no way to be
   // stopped — the button that owns it is gone. So unmounting while playing
@@ -73,7 +86,7 @@ export function ShrutiPlayer({
   return (
     <button
       type="button"
-      onClick={() => void play(label)}
+      onClick={() => void play(label, ownerId)}
       aria-pressed={isThis}
       aria-label={
         isThis
