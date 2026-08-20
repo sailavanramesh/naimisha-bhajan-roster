@@ -17,7 +17,8 @@ import { DeleteSessionButton } from "./DeleteSessionButton";
 import { NotifyPanel } from "./NotifyPanel";
 import { melbourneTodayISO } from "@/lib/dates";
 import { cushionsForSession } from "@/lib/sessionDesk";
-import { sortByStart, sessionLabel, hasSeveral } from "@/lib/sessionsOfDay";
+import { sortByStart, sessionLabel, hasSeveral, startMinutes, USUAL_START } from "@/lib/sessionsOfDay";
+import { DayPanel } from "./DayPanel";
 import { resolveSessionView, jobBanner, jobsOf } from "@/lib/sessionView";
 import { missingParts } from "@/lib/notify";
 import type { NotifyPerson } from "./NotifyPanel";
@@ -360,6 +361,15 @@ export default async function RosterSessionPage({
    * sing and never why.
    */
   const sessionISO = session.date.toISOString().slice(0, 10);
+
+  /*
+   * A start time for a second session that is not already taken.
+   *
+   * An hour after the latest one that day, so "add another" lands on something
+   * plausible rather than colliding with the session being looked at.
+   */
+  const latestStart = Math.max(...sameDay.map((x) => startMinutes(x.startsAt)), startMinutes(USUAL_START));
+  const suggestedStart = `${String(Math.min(23, Math.floor(latestStart / 60) + 1)).padStart(2, "0")}:${String(latestStart % 60).padStart(2, "0")}`;
   const unavailableIds = new Set(
     (await rosterAvailability(sessionISO, sessionISO)).map((a) => a.singerId),
   );
@@ -795,6 +805,23 @@ export default async function RosterSessionPage({
               )}
             </div>
           </details>
+
+          {/*
+            Splitting a day, and adding a second session to it. Above the
+            delete button and below the notes: it belongs with the things that
+            change the shape of a session rather than its contents.
+          */}
+          {can(role, "buildSessions") ? (
+            <DayPanel
+              sessionId={sessionId}
+              suggestedTime={suggestedStart}
+              rows={session.slots.map((sl) => ({
+                slotId: sl.id,
+                singerName: sl.singer?.name ?? null,
+                bhajanTitle: sl.bhajan?.title ?? sl.bhajanTitle ?? null,
+              }))}
+            />
+          ) : null}
 
           {/* Last on the page, and quiet. See DeleteSessionButton. */}
           {can(role, "buildSessions") ? (
