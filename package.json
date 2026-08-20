@@ -21,7 +21,8 @@
     "check:tanpura": "node scripts/checkTanpuraAssets.mjs",
     "check:tanpura-tuning": "python3 scripts/verifyTanpuraTuning.py",
     "smoke:shruti": "node scripts/smokeShrutiPlayer.mjs",
-    "db:guide-order": "node scripts/alignGuideOrder.mjs"
+    "db:guide-order": "node scripts/alignGuideOrder.mjs",
+    "db:fake-availability": "node scripts/seedFakeAvailability.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",
