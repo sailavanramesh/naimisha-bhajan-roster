@@ -64,6 +64,17 @@ export type PlayingState = {
 };
 
 let context: AudioContext | null = null;
+/**
+ * Has this page ever started a sound inside a user gesture?
+ *
+ * Safari does not consider an AudioContext usable just because `resume()` was
+ * called on it. It wants a source actually STARTED while a gesture is in
+ * flight; until that happens the context can report itself as running and
+ * still put out silence. Resuming and then awaiting a download before starting
+ * anything — which is what this does on the first press — lands exactly in that
+ * hole, so the button showed itself playing with nothing coming out.
+ */
+let primed = false;
 let source: AudioBufferSourceNode | null = null;
 let gain: GainNode | null = null;
 let currentLabel: string | null = null;
@@ -156,6 +167,31 @@ function audioContext(): AudioContext | null {
   return context;
 }
 
+/**
+ * Start and stop one silent sample, synchronously, to open the audio output.
+ *
+ * A one-frame buffer is over before it begins, so this is inaudible; what
+ * matters to the browser is only that a source was started while the user's
+ * press was still in flight. Stopped explicitly rather than left to expire so
+ * nothing counts it as a drone still running.
+ *
+ * Once per page — after the first press the output stays open.
+ */
+function primeOutput(ctx: AudioContext): void {
+  if (primed) return;
+  try {
+    const node = ctx.createBufferSource();
+    node.buffer = ctx.createBuffer(1, 1, 22050);
+    node.connect(ctx.destination);
+    node.start(0);
+    node.stop(ctx.currentTime + 0.01);
+    node.onended = () => node.disconnect();
+    primed = true;
+  } catch {
+    // Nothing to recover: if this fails the real source is still attempted.
+  }
+}
+
 async function load(ctx: AudioContext, src: string): Promise<AudioBuffer> {
   const cached = buffers.get(src);
   if (cached) return cached;
@@ -241,9 +277,12 @@ export async function play(label: string, owner: string = label): Promise<void> 
     return;
   }
 
-  // Safari suspends the context whenever it loses a gesture; resuming inside
-  // the click keeps the gesture credit that a later resume would have lost.
-  if (ctx.state === 'suspended') await ctx.resume();
+  // Everything the browser wants from the gesture has to happen in the SAME
+  // TICK as the click. `resume()` is kicked off but deliberately NOT awaited
+  // yet, because the first `await` ends the gesture — the promise is picked up
+  // further down, once the synchronous work is done.
+  const resuming = ctx.state === 'suspended' ? ctx.resume() : null;
+  primeOutput(ctx);
 
   stop();
   lastError = null;
@@ -251,6 +290,8 @@ export async function play(label: string, owner: string = label): Promise<void> 
   desiredLabel = label;
   currentOwner = owner;
   emit();
+
+  if (resuming) await resuming;
 
   let buffer: AudioBuffer;
   try {
@@ -281,6 +322,12 @@ export async function play(label: string, owner: string = label): Promise<void> 
 
   node.connect(envelope).connect(ctx.destination);
   node.start();
+
+  // The recording can arrive long after the press, and Safari may have put the
+  // context back to sleep in between. Ask again now that something is connected
+  // and playing — by this point the page has a gesture on record, so it is
+  // allowed to.
+  if (ctx.state !== 'running') void ctx.resume();
 
   source = node;
   gain = envelope;
@@ -384,6 +431,7 @@ export function __resetForTests(): void {
   source = null;
   gain = null;
   context = null;
+  primed = false;
   currentLabel = null;
   currentSrc = null;
   currentOwner = null;
