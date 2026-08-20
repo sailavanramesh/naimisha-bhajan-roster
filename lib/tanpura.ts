@@ -5,19 +5,39 @@
  * Pure. No Web Audio, no DOM, no I/O — so the maths is testable without a
  * browser and the engine in `components/ShrutiPlayer.tsx` stays a thin shell.
  *
- * ## How this sits with the pitch model
+ * ## What the written note means, which is not what saOf assumes
  *
- * CLAUDE.md rule 2 says Madhyam vs Pancham is display metadata and does not
- * change the pitch. That stays exactly true here: Sa is read by `saOf`, from
- * the note after the slash, and nothing else. `1 Madhyam / F` and
- * `4 Pancham / F` sound at the same Sa, as they must.
+ * A label names the note the DRONE sounds, and which drone that is depends on
+ * the series:
  *
- * What the series DOES pick is which accompanying string the tanpura sounds
- * against that Sa — Ma in the Madhyam tuning, Pa in the Pancham tuning. That
- * is what the shruti box does with the same setting, and it is the whole
- * reason the group writes the series down. So the series selects the
- * RECORDING; the note selects the PITCH. Rule 2 is untouched: no label is ever
- * converted to the other series, and the two series never disagree about Sa.
+ *   Pancham — the written note is Sa. `4.5 Pancham / F#` is Sa F#, with Pa
+ *             (C#) droning against it.
+ *   Madhyam — the written note is MA, a perfect fourth above Sa.
+ *             `4.5 Madhyam / B` is Sa F#, with Ma (B) droning against it.
+ *
+ * The group's own table bears this out: for every step number the Madhyam note
+ * is exactly five semitones above the Pancham note, which is what Ma is. The
+ * step number alone gives Sa, identically in both series.
+ *
+ * Sailavan, 2026-08-20, on hearing 4.5 Madhyam / B come out as B: "the 4.5
+ * madhyam /B is misleading, the 4.5 madhyam means Sa is F# (4.5) and B is the
+ * Ma", and "4.5 pancham would be Sa is F# and Pa is C#".
+ *
+ * ## Why this correction lives HERE and not in lib/pitch.ts
+ *
+ * `saOf` still reads the written note as Sa, and the rest of the app still
+ * compares pitches that way. Applying this correction there instead was tried
+ * and measured against the group's own singing history: it makes each singer's
+ * offsets from their reference markedly WORSE — spread 1.02 to 1.59 semitones,
+ * and rows where somebody supposedly sang more than three semitones from their
+ * reference going from 12 to 59 out of 669. The sung-pitch records therefore
+ * behave as though the written note were the pitch, whatever the shruti box
+ * does with the same words.
+ *
+ * Both can be true at once: the sheet compares letters, and the box sounds a
+ * fourth below on Madhyam. Only playback has to agree with the box, so only
+ * playback is corrected. Widening it is a decision about 709 rows of history
+ * and is Sailavan's to make with those numbers in front of him.
  *
  * ## Why nearest-sample-plus-detune
  *
@@ -33,6 +53,33 @@
  */
 
 import { saOf, PITCH_CLASS, NOTE_NAMES, type NoteName, type Series } from './pitch';
+
+/**
+ * How far the written note sits above Sa, per series. See the note above.
+ *
+ * Pancham writes Sa itself; Madhyam writes Ma, a perfect fourth up. To sound a
+ * Madhyam label the drone therefore has to start five semitones BELOW the note
+ * printed on it.
+ */
+export const NOTE_ABOVE_SA: Readonly<Record<Series, number>> = {
+  Pancham: 0,
+  Madhyam: 5,
+};
+
+/**
+ * The Sa a label should actually be sounded at.
+ *
+ * Deliberately NOT `saOf`: that answers the question the rest of the app asks,
+ * which is "what note is written here". This answers "what note should the
+ * drone be tuned to", and for Madhyam they differ by a fourth.
+ */
+export function soundingSa(label?: string | null): number | null {
+  const written = saOfAnyPitch(label);
+  if (written === null) return null;
+  // A bare programme note has no series and is taken at face value.
+  const series: Series = /madhyam/i.test(label ?? '') ? 'Madhyam' : 'Pancham';
+  return (((written - NOTE_ABOVE_SA[series]) % 12) + 12) % 12;
+}
 
 /**
  * The Sa notes we hold recordings at, per series.
@@ -202,7 +249,7 @@ export function nearestSample(
  * tuning.
  */
 export function tanpuraVoice(label?: string | null): TanpuraVoice | null {
-  const semitone = saOfAnyPitch(label);
+  const semitone = soundingSa(label);
   if (semitone === null) return null;
 
   const series: Series = /madhyam/i.test(label ?? '') ? 'Madhyam' : 'Pancham';

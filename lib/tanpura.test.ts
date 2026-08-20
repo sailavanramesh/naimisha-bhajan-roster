@@ -8,6 +8,7 @@ import {
   nearestSample,
   tanpuraVoice,
   saOfAnyPitch,
+  soundingSa,
 } from './tanpura';
 import { NOTE_NAMES, saOf } from './pitch';
 
@@ -17,11 +18,11 @@ import { NOTE_NAMES, saOf } from './pitch';
  */
 const ALL_LABELS = [
   '1 Madhyam / F', '1.5 Madhyam / F#', '2 Madhyam / G', '2.5 Madhyam / G#',
-  '3 Madhyam / A', '3.5 Madhyam / A#', '4 Madhyam / B', '4.5 Madhyam / C',
-  '5 Madhyam / C#', '5.5 Madhyam / D', '6 Madhyam / D#', '6.5 Madhyam / E',
+  '3 Madhyam / A', '4 Madhyam / A#', '4.5 Madhyam / B', '5 Madhyam / C',
+  '5.5 Madhyam / C#', '6 Madhyam / D', '6.5 Madhyam / D#', '7 Madhyam / E',
   '1 Pancham / C', '1.5 Pancham / C#', '2 Pancham / D', '2.5 Pancham / D#',
-  '3 Pancham / E', '3.5 Pancham / F', '4 Pancham / F#', '4.5 Pancham / G',
-  '5 Pancham / G#', '5.5 Pancham / A', '6 Pancham / A#', '6.5 Pancham / B',
+  '3 Pancham / E', '4 Pancham / F', '4.5 Pancham / F#', '5 Pancham / G',
+  '5.5 Pancham / G#', '6 Pancham / A', '6.5 Pancham / A#', '7 Pancham / B',
 ];
 
 describe('noteSlug / tanpuraSrc', () => {
@@ -138,25 +139,70 @@ describe('tanpuraVoice', () => {
     for (const label of ALL_LABELS) {
       const voice = tanpuraVoice(label);
       expect(voice, label).not.toBeNull();
-      expect(voice!.targetSemitone).toBe(saOf(label));
+      // Sa as SOUNDED, which for Madhyam is a fourth below the written note.
+      expect(voice!.targetSemitone).toBe(soundingSa(label));
       expect(voice!.src).toMatch(/^\/audio\/tanpura\/(madhyam|pancham)-/);
     }
   });
 
-  it('honours CLAUDE.md rule 2: the series never changes Sa', () => {
-    // Same note, two series. Same Sa, different recording.
-    const madhyam = tanpuraVoice('1 Madhyam / F')!;
-    const pancham = tanpuraVoice('3.5 Pancham / F')!;
-    expect(madhyam.targetSemitone).toBe(pancham.targetSemitone);
-    expect(madhyam.note).toBe(pancham.note);
-    expect(madhyam.series).toBe('Madhyam');
-    expect(pancham.series).toBe('Pancham');
-    expect(madhyam.src).not.toBe(pancham.src);
+  it('sounds the same Sa for the same STEP in either series', () => {
+    // The correction, stated as the group states it: a step number is one Sa,
+    // and the series only decides what drones against it.
+    for (const [madhyam, pancham] of [
+      ['1 Madhyam / F', '1 Pancham / C'],
+      ['4.5 Madhyam / B', '4.5 Pancham / F#'],
+      ['7 Madhyam / E', '7 Pancham / B'],
+      ['2.5 Madhyam / G#', '2.5 Pancham / D#'],
+    ]) {
+      const m = tanpuraVoice(madhyam)!;
+      const p = tanpuraVoice(pancham)!;
+      expect(m.targetSemitone, `${madhyam} vs ${pancham}`).toBe(p.targetSemitone);
+      expect(m.series).toBe('Madhyam');
+      expect(p.series).toBe('Pancham');
+    }
+  });
+
+  it('sounds 4.5 Madhyam / B at F#, with B as its Ma', () => {
+    // The case Sailavan reported: it used to sound B, a fourth too high.
+    const v = tanpuraVoice('4.5 Madhyam / B')!;
+    expect(v.note).toBe('F#');
+    expect(v.series).toBe('Madhyam');
+    // Ma is a perfect fourth above Sa, and is the note the label prints.
+    expect(NOTE_NAMES[(v.targetSemitone + 5) % 12]).toBe('B');
+  });
+
+  it('sounds 1.5 Madhyam / F# at C#, with F# as its Ma', () => {
+    const v = tanpuraVoice('1.5 Madhyam / F#')!;
+    expect(v.note).toBe('C#');
+    expect(NOTE_NAMES[(v.targetSemitone + 5) % 12]).toBe('F#');
+  });
+
+  it('leaves Pancham alone — the written note is already Sa', () => {
+    const v = tanpuraVoice('4.5 Pancham / F#')!;
+    expect(v.note).toBe('F#');
+    // Pa, a fifth above, is what drones against it.
+    expect(NOTE_NAMES[(v.targetSemitone + 7) % 12]).toBe('C#');
+  });
+
+  it('does not disturb how the rest of the app reads a label', () => {
+    // saOf still answers "what note is written", which is what the ladder,
+    // the deviation history and the tabla panel are built on. Only the drone
+    // is corrected.
+    expect(saOf('4.5 Madhyam / B')).toBe(NOTE_NAMES.indexOf('B'));
+    expect(soundingSa('4.5 Madhyam / B')).toBe(NOTE_NAMES.indexOf('F#'));
+    expect(saOf('4.5 Pancham / F#')).toBe(soundingSa('4.5 Pancham / F#'));
   });
 
   it('picks the series recording from the label', () => {
     expect(tanpuraVoice('1 Madhyam / F')!.src).toContain('madhyam-');
     expect(tanpuraVoice('2 Pancham / D')!.src).toContain('pancham-');
+  });
+
+  it('sounds every Madhyam label a fourth below the note printed on it', () => {
+    for (const label of ALL_LABELS.filter((l) => /madhyam/i.test(l))) {
+      const written = saOf(label)!;
+      expect(tanpuraVoice(label)!.targetSemitone, label).toBe((written - 5 + 12) % 12);
+    }
   });
 
   it('falls back to Pancham when the series is unreadable but the note is not', () => {
