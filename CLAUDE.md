@@ -36,7 +36,7 @@ rather than in the code.
 
 - **Two App Service plans**, both B1 Linux in Australia East.
   `asp-naimisha-roster` carries production alone, with Always On;
-  `asp-naimisha-roster-dev` carries dev, without. They shared ONE plan until
+  `asp-naimisha-roster-dev` carries dev, also with. They shared ONE plan until
   2026-08-21 — one vCPU and 1.75 GB between both apps — so dev waking up took
   CPU from production. A restart was measured answering in 6–18 seconds while
   the two booted together, settling to ~250 ms once warm. Keep them separate.
