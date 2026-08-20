@@ -236,6 +236,8 @@ model Singer {
   sharedItemChannels ProgramItemChannel[]    @relation("ItemChannelShare")
   /// Items where this person is on a strip that is not usually theirs.
   itemChannels       ProgramItemChannel[]
+  unavailability     SingerUnavailability[]
+  cycle              SingerCycle?
 }
 
 model Bhajan {
@@ -1479,4 +1481,62 @@ model GuideSection {
   updatedAt DateTime @updatedAt
 
   @@index([position])
+}
+
+/// A date a singer cannot be rostered, as they stated it themselves.
+///
+/// Deliberately holds no reason the roster can read. `note` is the singer's own
+/// words for their own reference and is never selected for anybody else — see
+/// the privacy note on SingerCycle and the types in lib/availability.ts.
+model SingerUnavailability {
+  id       String   @id @default(cuid())
+  singerId String
+  /// A Melbourne date, matching Session.date. Not a timestamp.
+  date     DateTime @db.Date
+  /// Theirs alone. Shown on their own availability page and nowhere else.
+  note     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  singer Singer @relation(fields: [singerId], references: [id], onDelete: Cascade)
+
+  @@unique([singerId, date])
+  @@index([date])
+}
+
+/// Opt-in cycle tracking, so predicted days off can be kept out of the roster.
+///
+/// ## Read this before writing a query against it
+///
+/// This is health information about a named person. **It is only ever read for
+/// the singer it belongs to.** Nothing that builds a roster, a suggestion or a
+/// report may select it — what the rosterer gets is an unlabelled date, via
+/// `forRoster` in lib/availability.ts, which cannot carry a reason.
+///
+/// It is a separate table rather than columns on Singer for exactly that
+/// reason: a `select` on Singer cannot reach it by accident, and a join has to
+/// be written on purpose.
+///
+/// Predicted dates are NOT stored. They are computed from these three fields
+/// when needed, so correcting the date corrects every projection at once and no
+/// stale prediction outlives it.
+///
+/// Sailavan was told plainly, before this was built, that none of this hides
+/// the row from somebody holding the database connection string.
+model SingerCycle {
+  id       String @id @default(cuid())
+  singerId String @unique
+
+  /// `Session.date`-style date of the most recent period start.
+  lastStart       DateTime @db.Date
+  /// Days from one start to the next.
+  cycleLengthDays Int      @default(28)
+  /// How many days out of action.
+  durationDays    Int      @default(4)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  singer Singer @relation(fields: [singerId], references: [id], onDelete: Cascade)
 }

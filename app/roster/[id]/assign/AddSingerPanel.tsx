@@ -72,7 +72,7 @@ export function AddSingerPanel({
   sessionDate,
 }: {
   sessionId: string;
-  singers: Array<{ id: string; name: string; gender: string | null }>;
+  singers: Array<{ id: string; name: string; gender: string | null; unavailable?: boolean }>;
   selected: { id: string; name: string } | null;
   groups: SuggestionGroup[];
   basePath: string;
@@ -547,7 +547,7 @@ function SingerChips({
   onAdd,
   busyKey,
 }: {
-  singers: Array<{ id: string; name: string; gender: string | null }>;
+  singers: Array<{ id: string; name: string; gender: string | null; unavailable?: boolean }>;
   basePath: string;
   openId: string | null;
   onAdd: (singerId: string, name: string) => void;
@@ -557,12 +557,24 @@ function SingerChips({
     <ul className="flex flex-wrap gap-1.5">
       {singers.map((s) => {
         const open = openId === s.id;
+        /*
+         * They have said they cannot sing on this date.
+         *
+         * Shown the same way whatever the reason, because the rosterer is not
+         * told the reason — a date somebody marked by hand and a date their
+         * cycle predicts are the same fact here. Dimmed rather than removed:
+         * plans change, and hiding somebody would leave the rosterer wondering
+         * where they went.
+         */
+        const away = s.unavailable === true;
         return (
           <li
             key={s.id}
+            title={away ? `${s.name} is not available on this date` : undefined}
             className={[
               "inline-flex items-stretch overflow-hidden rounded-full border",
               open ? "border-brass/60 bg-brass/[0.08]" : "border-rule-surface bg-field",
+              away ? "opacity-55" : "",
             ].join(" ")}
           >
             {/* Quick add — no expanding, no bhajan. */}
@@ -577,6 +589,11 @@ function SingerChips({
                 {busyKey === `add:${s.id}:` ? "…" : "+"}
               </span>
               {s.name}
+              {away ? (
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-on-surface-muted">
+                  away
+                </span>
+              ) : null}
             </button>
 
             <SongsLink

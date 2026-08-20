@@ -36,6 +36,7 @@ export type Capability =
   | "addBhajan"
   | "exploreBhajans" // browse a randomised slice of the masterlist
   | "manageOwnLearning" // keep a personal learning list
+  | "manageOwnAvailability" // say which dates you cannot be rostered
   | "setMicCushion" // mark which colour mic cushion a singer is on
   | "notifySingers" // send somebody a reminder about a session by hand
   | "manageNotificationRules" // owner only: when the day-of reminders go out
@@ -47,6 +48,7 @@ export type Capability =
   | "viewAllPages";
 
 const EDITOR_CAPABILITIES: Capability[] = [
+  "manageOwnAvailability",
   "buildSessions",
   "manageAllocations",
   "editSessionNotes",
@@ -93,6 +95,9 @@ const MATRIX: Record<Role, ReadonlySet<Capability>> = {
     "editSlotBhajan",
     "exploreBhajans",
     "manageOwnLearning",
+    // Everybody says when they cannot sing, and only ever for themselves —
+    // there is no capability for reading somebody else's reasons, on purpose.
+    "manageOwnAvailability",
     // Sailavan: any user sets this. It is live sound-desk state, not the
     // historical record, so it sits outside the editor-only allocation rules.
     "setMicCushion",

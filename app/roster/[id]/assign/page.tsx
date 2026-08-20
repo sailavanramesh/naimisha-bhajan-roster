@@ -7,6 +7,7 @@ import { applyAssignments, setAvailability } from "./actions";
 import { AddSingerPanel } from "./AddSingerPanel";
 import { buildSuggestions } from "./suggestions";
 import { getRole, can } from "@/lib/auth";
+import { rosterAvailability } from "@/lib/availabilityQueries";
 import { sortByStart, sessionLabel, hasSeveral } from "@/lib/sessionsOfDay";
 import { NoAccess } from "@/components/RequireRole";
 import { NOT_ARCHIVED } from "@/lib/archive";
@@ -191,6 +192,18 @@ export default async function AssignPage({
       }))
     : [];
 
+  /*
+   * Who has said they cannot sing on this date.
+   *
+   * Dates only — `rosterAvailability` returns a type with nowhere to put a
+   * reason, so a date somebody blocked by hand and one their cycle predicts
+   * arrive here identical, and are shown identically. That is the whole point:
+   * the rosterer needs to know not to put somebody down, and nothing else.
+   */
+  const unavailableOnDate = new Set(
+    (await rosterAvailability(dateKey, dateKey)).map((row) => row.singerId),
+  );
+
   return (
     <div className="grid gap-4">
       {hasSeveral(sameDay) ? (
@@ -232,7 +245,12 @@ export default async function AssignPage({
         <CardContent>
           <AddSingerPanel
             sessionId={sessionId}
-            singers={allSingers.map((s) => ({ id: s.id, name: s.name, gender: s.gender }))}
+            singers={allSingers.map((s) => ({
+              id: s.id,
+              name: s.name,
+              gender: s.gender,
+              unavailable: unavailableOnDate.has(s.id),
+            }))}
             selected={addSinger ? { id: addSinger.id, name: addSinger.name } : null}
             groups={suggestionGroups}
             basePath={`/roster/${sessionId}/assign`}

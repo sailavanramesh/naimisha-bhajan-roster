@@ -11,15 +11,37 @@
 /** Days of the week as `getUTCDay` numbers it. */
 export const THURSDAY = 4;
 
-/** Parse `YYYY-MM-DD` into a UTC-anchored Date. Noon avoids any DST edge. */
-function parseISO(iso: string): Date | null {
+/**
+ * Parse `YYYY-MM-DD` into a UTC-anchored Date. Noon avoids any DST edge.
+ *
+ * Exported so lib/availability.ts can do its own arithmetic on the same
+ * footing. A second copy of this in another file is how two parts of an app
+ * start disagreeing about what day it is.
+ */
+export function parseISO(iso: string): Date | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null;
   const d = new Date(`${iso}T12:00:00.000Z`);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function toISO(d: Date): string {
+export function toISO(d: Date): string {
   return d.toISOString().slice(0, 10);
+}
+
+/** `iso` moved by whole days. Returns null for an unparseable date. */
+export function addDaysISO(iso: string, days: number): string | null {
+  const d = parseISO(iso);
+  if (!d) return null;
+  d.setUTCDate(d.getUTCDate() + days);
+  return toISO(d);
+}
+
+/** Whole days from `fromISO` to `toISO`, negative when the second is earlier. */
+export function daysBetweenISO(fromISO: string, toISODate: string): number | null {
+  const a = parseISO(fromISO);
+  const b = parseISO(toISODate);
+  if (!a || !b) return null;
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
 }
 
 /**
