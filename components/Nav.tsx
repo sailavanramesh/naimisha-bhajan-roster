@@ -6,6 +6,8 @@ import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 
+import { MEMBER_NAV } from "@/lib/nav";
+
 type NavItem = {
   href: string;
   label: string;
@@ -25,6 +27,9 @@ const ITEMS: NavItem[] = [
   { href: "/my-list", label: "My list", short: "♪" },
   { href: "/find-my-pitch", label: "My pitch", short: "♯" },
   { href: "/availability", label: "When I can't", short: "✗" },
+  // Coordinators only, by omission from MEMBER_NAV. A planning view reached
+  // solely by a link from another page is a planning view nobody finds.
+  { href: "/availability/team", label: "Who's around", short: "◫" },
   { href: "/notifications", label: "Alerts", short: "!" },
   { href: "/singers", label: "Singers", short: "S" },
   { href: "/fairness", label: "Fairness", short: "≡" },
@@ -87,27 +92,7 @@ export function Nav({ role = "viewer", isDev = false }: { role?: string; isDev?:
    * they live: the desk picker and Update from the desk on `canSetUpDesk`, and
    * the running order's own editing on `editPrograms`.
    */
-  const visible =
-    role === "editor" || role === "owner"
-      ? ITEMS
-      : // No Dashboard for a member: it is a coordinator's overview — session
-        // counts, fairness loads, what needs building — and none of it is a
-        // member's to act on. They start at the roster.
-        ITEMS.filter((i) =>
-          [
-            "/roster",
-            "/program",
-            "/songs",
-            "/bhajans",
-            "/singers",
-            "/explore",
-            "/my-list",
-            "/notifications",
-            "/guide",
-          ].includes(
-            i.href,
-          ),
-        );
+  const visible = role === "editor" || role === "owner" ? ITEMS : ITEMS.filter((i) => MEMBER_NAV.includes(i.href));
 
   const NavLinks = ({ collapsed }: { collapsed: boolean }) => (
     <nav className="grid gap-1">
