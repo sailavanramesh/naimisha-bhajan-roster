@@ -93,7 +93,7 @@ export default async function AssignPage({
         bhajanTitle: true,
         confirmedPitch: true,
         bhajan: { select: { title: true } },
-        singer: { select: { name: true } },
+        singer: { select: { id: true, name: true } },
       },
     }),
   ]);
@@ -133,6 +133,7 @@ export default async function AssignPage({
     .map((x) => ({
       slotId: x.id,
       position: x.position,
+      singerId: x.singer!.id,
       singerName: x.singer!.name,
       bhajanTitle: x.bhajan?.title ?? x.bhajanTitle ?? null,
       hasConfirmedPitch: Boolean(x.confirmedPitch),

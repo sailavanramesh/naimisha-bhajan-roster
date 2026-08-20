@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireCapability, getSignedInSinger } from "@/lib/auth";
 import { expandRange, validateCycle, type CycleInput } from "@/lib/availability";
+import { notifyEditorsOfClashes } from "@/lib/notifyUnavailable";
 
 /**
  * Everything a singer can change about their own availability.
@@ -41,7 +42,7 @@ export async function blockDate(input: {
   date: string;
   until?: string;
   note?: string;
-}): Promise<{ ok: boolean; error?: string; added?: number }> {
+}): Promise<{ ok: boolean; error?: string; added?: number; clashes?: number }> {
   const singer = await me();
   if (!singer) return { ok: false, error: "Sign in as yourself first." };
 
@@ -63,8 +64,17 @@ export async function blockDate(input: {
     });
   }
 
+  /*
+   * If any of those nights already has them on it, the coordinators need to
+   * know now rather than on the night. Awaited so the push is on its way before
+   * the page revalidates, but it can never fail the save — see the try/catch in
+   * notifyEditorsOfClashes.
+   */
+  const notified = await notifyEditorsOfClashes(singer.id, dates.dates);
+
   revalidatePath("/availability");
-  return { ok: true, added: dates.dates.length };
+  revalidatePath("/availability/team");
+  return { ok: true, added: dates.dates.length, clashes: notified.clashes };
 }
 
 /** Clear a run of dates in one go — the counterpart to blocking one. */

@@ -39,6 +39,8 @@ const VISIBLE = 12;
 export type LineupEntry = {
   slotId: string;
   position: number;
+  /** Who holds the slot, so the panel can offer to pick them a bhajan. */
+  singerId: string | null;
   singerName: string;
   bhajanTitle: string | null;
   /** Real history. Such a slot cannot be removed from here — see the action. */
@@ -99,6 +101,8 @@ export function AddSingerPanel({
             {
               slotId: `pending-${change.name}-${current.length}`,
               position: current.length + 1,
+              // No id until the server answers; the songs link waits for it.
+              singerId: null,
               singerName: change.name,
               bhajanTitle: null,
               hasConfirmedPitch: false,
@@ -282,6 +286,25 @@ export function AddSingerPanel({
                   {l.singerName}
                   {l.bhajanTitle ? "" : " · no bhajan"}
                   {isNew ? <span className="text-[10px] font-normal text-brass-ink">just added</span> : null}
+                  {/*
+                    Pick them a song from here.
+                    Sailavan: "when they are added by fairness, there should be a
+                    way to select a song for them like in the gents and ladies
+                    dropdowns where there is the songs option." Fairness leaves
+                    the bhajan blank on purpose — who sings and what they sing
+                    are separate decisions — so without this the only route to
+                    the second was to find the same person again further down
+                    the page. Same link, same panel.
+                  */}
+                  {l.singerId && !l.bhajanTitle ? (
+                    <Link
+                      href={`${basePath}?add=${l.singerId}`}
+                      title={`Choose a bhajan for ${l.singerName}`}
+                      className="rounded-full px-1 text-[10px] font-semibold text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+                    >
+                      songs
+                    </Link>
+                  ) : null}
                   <button
                       type="button"
                       onClick={() => remove(l.slotId)}
@@ -553,6 +576,21 @@ function SingerChips({
   onAdd: (singerId: string, name: string) => void;
   busyKey: string | null;
 }) {
+  /*
+   * Adding somebody who has said they cannot sing takes two presses.
+   *
+   * Not a refusal. Only the singer can clear their own dates, so a hard block
+   * would leave a coordinator unable to roster somebody who has just told them
+   * in person that their plans changed — with no way out but to wait for that
+   * person to log in. That is a worse failure than the one it prevents.
+   *
+   * So the first press asks, inline rather than in a dialog, and the second
+   * goes ahead. It costs nothing when the coordinator means it and stops the
+   * accidental add, which is what actually happened: three people were added to
+   * the 27th while marked away, without the app saying a word.
+   */
+  const [confirming, setConfirming] = useState<string | null>(null);
+
   return (
     <ul className="flex flex-wrap gap-1.5">
       {singers.map((s) => {
@@ -574,15 +612,28 @@ function SingerChips({
             className={[
               "inline-flex items-stretch overflow-hidden rounded-full border",
               open ? "border-brass/60 bg-brass/[0.08]" : "border-rule-surface bg-field",
-              away ? "opacity-55" : "",
+              away && confirming !== s.id ? "opacity-55" : "",
+              confirming === s.id ? "border-kumkum" : "",
             ].join(" ")}
+            onMouseLeave={() => confirming === s.id && setConfirming(null)}
           >
             {/* Quick add — no expanding, no bhajan. */}
             <button
               type="button"
-              onClick={() => onAdd(s.id, s.name)}
+              onClick={() => {
+                if (away && confirming !== s.id) {
+                  setConfirming(s.id);
+                  return;
+                }
+                setConfirming(null);
+                onAdd(s.id, s.name);
+              }}
               disabled={busyKey === `add:${s.id}:`}
-              title={`Add ${s.name} now, without choosing a bhajan`}
+              title={
+                away
+                  ? `${s.name} is not available on this date`
+                  : `Add ${s.name} now, without choosing a bhajan`
+              }
               className="inline-flex h-8 items-center gap-1.5 pl-3 pr-2 text-sm hover:bg-panel-hover disabled:opacity-70"
             >
               <span aria-hidden className="text-brass-ink">
@@ -590,8 +641,11 @@ function SingerChips({
               </span>
               {s.name}
               {away ? (
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-on-surface-muted">
-                  away
+                <span
+                  className="text-[10px] font-semibold uppercase tracking-wide"
+                  style={confirming === s.id ? { color: "rgb(var(--kumkum))" } : undefined}
+                >
+                  {confirming === s.id ? "add anyway?" : "away"}
                 </span>
               ) : null}
             </button>

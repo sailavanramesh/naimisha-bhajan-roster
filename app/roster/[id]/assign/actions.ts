@@ -339,6 +339,11 @@ const AutoAdd = z.object({
  *
  * Anybody already on the session is skipped rather than doubled up, so pressing
  * it twice tops up rather than duplicating.
+ *
+ * SO IS ANYBODY WHO HAS SAID THEY CANNOT SING THAT NIGHT. "Give me three who
+ * are owed a turn" cannot sensibly mean three who are not coming, and unlike
+ * the hand-picking above there is no coordinator looking at a name and deciding
+ * — the app is choosing, so the app has to take the dates into account.
  */
 export async function autoAddFairestSingers(input: {
   sessionId: string;
@@ -368,10 +373,17 @@ export async function autoAddFairestSingers(input: {
     select: { singerId: true, position: true, singer: { select: { gender: true } } },
   });
 
+  const { rosterAvailability } = await import("@/lib/availabilityQueries");
+  const sessionISO = session.date.toISOString().slice(0, 10);
+  const unavailable = (await rosterAvailability(sessionISO, sessionISO)).map((a) => a.singerId);
+
   const singers = await getSingerContexts(session.date);
   const picks = fairestSingers(singers, {
     count,
-    exclude: new Set(existing.map((e) => e.singerId).filter(Boolean) as string[]),
+    exclude: new Set([
+      ...(existing.map((e) => e.singerId).filter(Boolean) as string[]),
+      ...unavailable,
+    ]),
     // Continue the voice pattern already on the session rather than starting
     // afresh, so topping up does not create a run of three.
     startingGenders: existing.map((e) => e.singer?.gender ?? null),
@@ -380,7 +392,10 @@ export async function autoAddFairestSingers(input: {
   if (picks.length === 0) {
     return {
       ok: false,
-      error: "Nobody left to add — everybody available is already on this session.",
+      error:
+        unavailable.length > 0
+          ? "Nobody left to add — everybody else is either on this session already or unavailable that night."
+          : "Nobody left to add — everybody available is already on this session.",
     };
   }
 
