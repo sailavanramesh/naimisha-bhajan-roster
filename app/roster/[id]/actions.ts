@@ -134,8 +134,20 @@ export async function upsertSessionSingerRows(
     });
     const byId = new Map(existing.map((e) => [e.id, e]));
 
-    // Anything a member is not allowed to change is taken from the database,
-    // not from what they sent.
+    /*
+     * Anything they are not allowed to change is taken from the database rather
+     * than from what they sent — but per FIELD, not in a lump.
+     *
+     * `confirmedPitch` used to be reverted here for everybody without
+     * `assignSingers`, which silently threw away a member's edit while the grid
+     * happily offered them the field and reported a successful save. It is now
+     * asked about on its own terms, so the rule in lib/capabilities.ts is the
+     * only place the answer lives.
+     *
+     * The two still reverted are controls the grid does not render for a
+     * member, so nothing they can see is being discarded.
+     */
+    const mayEditPitch = can(role, "editConfirmedPitch");
     rows = rows
       .filter((r) => r.id && byId.has(r.id))
       .map((r) => {
@@ -143,7 +155,7 @@ export async function upsertSessionSingerRows(
         return {
           ...r,
           singerId: current.singerId ?? "",
-          confirmedPitch: current.confirmedPitch,
+          confirmedPitch: mayEditPitch ? r.confirmedPitch : current.confirmedPitch,
           alternativeTablaPitch: current.alternativeTablaPitch,
         };
       });
