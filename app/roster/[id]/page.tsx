@@ -8,6 +8,7 @@ import { getPitchSuggestions } from "@/lib/pitchSuggestions";
 import { computeRecommendedPitch } from "@/lib/computeRecommendedPitch";
 import { deleteInstrumentRow, updateSessionNotes } from "./actions";
 import { getRole, can, getSignedInSinger, canWithGrantsFor } from "@/lib/auth";
+import { rosterAvailability } from "@/lib/availabilityQueries";
 import { planTablas } from "@/lib/tablaPlan";
 import { TablaPanel } from "./TablaPanel";
 import { CopyRowsPanel } from "./CopyRowsPanel";
@@ -347,6 +348,29 @@ export default async function RosterSessionPage({
       ? await prisma.singer.findMany({ where: { gender: { not: null } }, orderBy: { name: "asc" } })
       : [];
 
+  /*
+   * Anybody on this roster who has since said they cannot sing that night.
+   *
+   * The coordinators are pushed a notification the moment somebody marks it,
+   * but a notification is a thing that can be missed, dismissed on a locked
+   * phone, or sent before a person was rostered at all. So the session says it
+   * too, every time it is opened, which is the surface nobody can miss.
+   *
+   * Dates only, as everywhere else — the roster is told THAT somebody cannot
+   * sing and never why.
+   */
+  const sessionISO = session.date.toISOString().slice(0, 10);
+  const unavailableIds = new Set(
+    (await rosterAvailability(sessionISO, sessionISO)).map((a) => a.singerId),
+  );
+  const droppedOut = [
+    ...new Map(
+      session.slots
+        .filter((x) => x.singerId && unavailableIds.has(x.singerId))
+        .map((x) => [x.singerId as string, x.singer?.name ?? "Somebody"]),
+    ).values(),
+  ];
+
   const initialRows = session.slots.map((x) => ({
     id: x.id,
     singerId: x.singerId ?? "",
@@ -465,6 +489,31 @@ export default async function RosterSessionPage({
           alternatives: sl.choice.alternativesIfNone,
         }))}
         />
+      ) : null}
+
+      {droppedOut.length > 0 ? (
+        <div
+          role="status"
+          className="rounded-[12px] border px-3 py-2 text-sm"
+          style={{ borderColor: "rgb(var(--kumkum))", background: "rgb(var(--field))" }}
+        >
+          <strong className="font-semibold">
+            {droppedOut.length === 1
+              ? `${droppedOut[0]} cannot sing on this date.`
+              : `${droppedOut.slice(0, -1).join(", ")} and ${droppedOut[droppedOut.length - 1]} cannot sing on this date.`}
+          </strong>{" "}
+          <span className="text-on-surface-muted">
+            They are still on this roster.{" "}
+            {canAssign ? (
+              <Link href={`/roster/${sessionId}/assign`} className="underline">
+                Find somebody else
+              </Link>
+            ) : (
+              "A coordinator will need to find somebody else."
+            )}
+            .
+          </span>
+        </div>
       ) : null}
 
       <Card>

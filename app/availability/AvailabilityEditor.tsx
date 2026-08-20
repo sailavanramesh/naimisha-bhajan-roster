@@ -46,6 +46,7 @@ export function AvailabilityEditor({
   const [until, setUntil] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const [cycleOpen, setCycleOpen] = useState(cycle !== null);
   const [lastStart, setLastStart] = useState(cycle?.lastStart ?? "");
@@ -64,6 +65,19 @@ export function AvailabilityEditor({
         setDate("");
         setUntil("");
         setNote("");
+        /*
+         * Say it plainly when they have just dropped out of a roster. They may
+         * not know they were on it — and the coordinators have been told, so
+         * the person marking the date should know that too rather than wonder
+         * whether anybody noticed.
+         */
+        setNotice(
+          r.clashes
+            ? r.clashes === 1
+              ? "You were on the roster for one of those nights. The coordinators have been told."
+              : `You were on the roster for ${r.clashes} of those nights. The coordinators have been told.`
+            : null,
+        );
       } else setError(r.error ?? "Could not save that.");
     });
   }
@@ -304,6 +318,9 @@ export function AvailabilityEditor({
       </Card>
       ) : null}
 
+      {notice ? (
+        <p className="rounded-[10px] border border-rule-surface bg-field px-3 py-2 text-sm">{notice}</p>
+      ) : null}
       {error ? <p className="text-sm text-kumkum">{error}</p> : null}
     </div>
   );

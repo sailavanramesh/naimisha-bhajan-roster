@@ -286,3 +286,30 @@ export function removedNotification(input: {
     alert: true,
   };
 }
+
+/**
+ * Somebody who is on a roster has said they cannot make it.
+ *
+ * Goes to the coordinators, not to the singer: they already know. The point is
+ * that a slot has quietly become empty and nobody would otherwise find out
+ * until the night.
+ *
+ * `alert: true` because this one needs acting on — a session with a singer who
+ * is not coming is worse than a session with an obvious gap.
+ *
+ * The date is in the tag as well as the session, so two people dropping out of
+ * the same night raise two notifications rather than replacing one another.
+ */
+export function unavailableWhileRosteredNotification(input: {
+  singerName: string;
+  sessionId: string;
+  dateISO: string;
+}): Notification {
+  return {
+    title: "Someone has dropped out",
+    body: `${input.singerName} is not available on ${formatSessionDate(input.dateISO)} and is on that roster. Somebody else will be needed.`,
+    url: `/roster/${input.sessionId}/assign`,
+    tag: `unavailable-${input.sessionId}-${input.singerName}`,
+    alert: true,
+  };
+}

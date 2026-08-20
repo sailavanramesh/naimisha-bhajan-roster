@@ -4,6 +4,7 @@ import {
   publishedNotification,
   shouldNotifyForSession,
   formatSessionDate,
+  unavailableWhileRosteredNotification,
 } from './notify';
 
 describe('formatSessionDate', () => {
@@ -98,3 +99,28 @@ describe('shouldNotifyForSession', () => {
     expect(shouldNotifyForSession('2025-01-01', '2026-08-11')).toBe(false);
   });
 });
+
+describe('unavailableWhileRosteredNotification', () => {
+  const input = { singerName: 'Rhuben', sessionId: 'sess-1', dateISO: '2026-08-27' };
+
+  it('names the person and the night, and says what is needed', () => {
+    const n = unavailableWhileRosteredNotification(input);
+    expect(n.body).toContain('Rhuben');
+    expect(n.body).toMatch(/27 August|August 27|Thursday/);
+    expect(n.body).toMatch(/somebody else|someone else/i);
+  });
+
+  it('lands on the assign page, which is where the gap gets filled', () => {
+    expect(unavailableWhileRosteredNotification(input).url).toBe('/roster/sess-1/assign');
+  });
+
+  it('is an alert, because a silent empty slot is worse than an obvious one', () => {
+    expect(unavailableWhileRosteredNotification(input).alert).toBe(true);
+  });
+
+  it('does not let two people dropping out of one night collapse into one', () => {
+    const a = unavailableWhileRosteredNotification(input);
+    const b = unavailableWhileRosteredNotification({ ...input, singerName: 'Sriraag' });
+    expect(a.tag).not.toBe(b.tag);
+  });
+})
