@@ -11,7 +11,7 @@ Six files. The two tunings do **not** cover the same pitches — see below.
 | Series  | Sa | File | Source sound |
 |---------|----|------|--------------|
 | Pancham | A  | `pancham-a.wav` | [155494](https://freesound.org/people/sankalp/sounds/155494/) |
-| Pancham | C  | `pancham-c.wav` | [155498](https://freesound.org/people/sankalp/sounds/155498/) |
+| Pancham | C  | `pancham-c.wav` | [155491](https://freesound.org/people/sankalp/sounds/155491/) |
 | Pancham | E  | `pancham-e.wav` | [155485](https://freesound.org/people/sankalp/sounds/155485/) |
 | Pancham | F# | `pancham-f-sharp.wav` | [155489](https://freesound.org/people/sankalp/sounds/155489/) |
 | Madhyam | F# | `madhyam-f-sharp.wav` | [155493](https://freesound.org/people/sankalp/sounds/155493/) |
@@ -56,6 +56,34 @@ circle still sounds the right Sa — it just sounds more obviously stretched.
 Recording the centre's own box in Madhyam near **C** and **D#** would bring that
 series to 2 semitones as well. It is a one-line change to `TANPURA_BASE_NOTES`
 plus the files, and the bound asserted in `lib/tanpura.test.ts`.
+
+## Choosing between takes: Sa has to be the loudest thing in it
+
+The pack holds several takes at some pitches, recorded with the box's equaliser
+in different positions, and they are NOT interchangeable. A drone whose
+companion string outweighs Sa does not sound like the pitch it claims — the ear
+takes the loudest note as the tonic.
+
+Measured as total energy at Sa against total energy at the companion drone,
+summed across octaves (`scripts/verifyTanpuraTuning.py` does the tuning check;
+the ratio below was measured the same way):
+
+| take | setting | Sa / drone |
+|---|---|---:|
+| 155491 | equaliser fully towards gents, high bass | **3.12** |
+| 155497 | middle | 1.80 |
+| 155499 | middle | 1.48 (very quiet overall) |
+| 155498 | middle | 0.96 — **Pa louder than Sa** |
+| 155500 | fully towards ladies, high treble | 0.64 |
+
+`pancham-c.wav` was 155498 until 2026-08-20, which is why C sounded more like
+G than C. It is now 155491. The high-bass setting favours the fundamental,
+which is exactly what a reference pitch needs.
+
+The other five files have only one take each at their pitch and tuning, so
+there was nothing to choose between. `madhyam-a.wav` is the weakest of them —
+its Ma sits close under its Sa — and would be the one to replace first if
+better material turns up.
 
 ## How these were prepared
 
