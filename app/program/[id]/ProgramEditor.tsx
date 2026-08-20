@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 import { Button, Card, CardContent, Input } from "@/components/ui";
 import { ShrutiPlayer } from "@/components/ShrutiPlayer";
-import { TrackControl } from "@/components/TrackControl";
+import { TrackControl, InlineTrack } from "@/components/TrackControl";
 import { NOTE_NAMES } from "@/lib/pitch";
 import { instrumentsLabel, performersLabel, runningOrderLabel, songNumbers } from "@/lib/program";
 import {
@@ -256,6 +256,12 @@ function ItemCard({
                   {draft.pitchNote}
                   <ShrutiPlayer label={draft.pitchNote} />
                 </span>
+              ) : null}
+              {/* The recording, playable without opening the item — the running
+                  order is read on the night, and opening each song to reach its
+                  track is a hop nobody wants mid-programme. */}
+              {draft.track.file ? (
+                <InlineTrack file={draft.track.file} name={draft.track.name} />
               ) : null}
             </span>
             <span className="block truncate text-sm text-on-surface-muted">

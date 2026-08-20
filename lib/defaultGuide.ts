@@ -78,8 +78,53 @@ export const DEFAULT_GUIDE: DefaultGuideSection[] = [
 > Your list lives on your singer page, under your pitch profile and your history.`,
   },
   {
-    key: "bhajans-and-explore",
+    key: "find-your-pitch",
     position: 4,
+    title: "Find your pitch",
+    href: "/find-my-pitch",
+    blurb: "Work out what you sing something at, by ear.",
+    coordinatorOnly: false,
+    body: `You do not need a roster to find your pitch. Open a bhajan, or go to [My pitch](/find-my-pitch), and the app starts from its best guess — what you usually sing, if it has enough of your history, otherwise the reference for your side. It says which.
+
+- Play it, step it up or down until it sits where you sing, then keep it.
+- What you keep is what whoever is rostering sees against your name, marked **saved**. Nobody has to copy it across.
+- **My pitch** also lists everything you have kept, each with its own play button, so you can check yourself before a session.
+
+> Keeping a pitch adds the bhajan to your list, because that is where a pitch lives. The page says so before it does it.`,
+  },
+  {
+    key: "hearing-a-shruti",
+    position: 5,
+    title: "Hearing a shruti",
+    href: null,
+    blurb: "The small speaker beside a pitch.",
+    coordinatorOnly: false,
+    body: `Anywhere the app shows a shruti — a roster row, a bhajan's reference pitches, a song in a programme — a small speaker sits beside it. Press it and a tanpura drones at that pitch. Press it again to stop.
+
+- Only one plays at a time. Pressing another moves the drone to it rather than starting a second one.
+- On a roster row, stepping the shruti up or down with **−** and **+** retunes the drone as it plays, so you can find the pitch by ear instead of by name.
+- Clearing the pitch stops it.
+
+> A label names its drone, not always its Sa. **4.5 Pancham / F#** is Sa F# with Pa droning against it; **4.5 Madhyam / B** is the same Sa, F#, with Ma — the B — droning instead. The number is the Sa in both.`,
+  },
+  {
+    key: "when-you-cannot-sing",
+    position: 6,
+    title: "When you cannot sing",
+    href: "/availability",
+    blurb: "Dates you are away, so you are not rostered on them.",
+    coordinatorOnly: false,
+    body: `Mark the dates you cannot sing on [your availability page](/availability) and you will not be put down for them. One day, or a run of them — fill in **Until** for a trip and it marks the whole stretch, and you can still take a single day back out of the middle afterwards.
+
+- A note beside a date is **yours alone**. Whoever builds the roster sees the date and never the reason.
+- Singers recorded as Ladies can also let the app predict days off from a cycle, if they want to. It is entirely optional, and marking dates by hand works just as well.
+- Predicted days reach the roster as ordinary unavailable dates — nothing marks them out as predicted, and nothing says why.
+
+> None of this is hidden from somebody with direct access to the database, and the page says so rather than implying otherwise.`,
+  },
+  {
+    key: "bhajans-and-explore",
+    position: 7,
     title: "Bhajans and Explore",
     href: "/bhajans",
     blurb: "The 3,600-bhajan masterlist, and a way into it.",
@@ -92,7 +137,7 @@ export const DEFAULT_GUIDE: DefaultGuideSection[] = [
   },
   {
     key: "singers",
-    position: 5,
+    position: 8,
     title: "Singers",
     href: "/singers",
     blurb: "Everybody's pitch profile, history and list.",
@@ -101,7 +146,7 @@ export const DEFAULT_GUIDE: DefaultGuideSection[] = [
   },
   {
     key: "live-view",
-    position: 6,
+    position: 9,
     title: "The live view",
     href: "/roster",
     blurb: "The screen on the stand during a session.",
@@ -123,7 +168,7 @@ The button under the × switches to the **mic view**: the desk drawn as strips, 
   },
   {
     key: "programmes",
-    position: 7,
+    position: 10,
     title: "Music programmes",
     href: "/program",
     blurb:
@@ -137,8 +182,23 @@ The button under the × switches to the **mic view**: the desk drawn as strips, 
 - **Printable sheet** for the folder on the night.`,
   },
   {
+    key: "programme-tracks",
+    position: 11,
+    title: "Tracks on a programme",
+    href: "/program",
+    blurb: "A recording against a song, playable from the running order.",
+    coordinatorOnly: false,
+    body: `A song in a music programme can carry a recording. A coordinator adds it with **Add a track** on the song; anybody who can see the programme can play it.
+
+- It plays from the running order without opening the song — the small play button and bar on the line are the whole control, and dragging the bar seeks.
+- Open the song for the full player.
+- MP3, M4A, OGG or WAV, up to 30 MB. Replacing a track removes the old one.
+
+> Tracks live on the app's own storage, which has no automatic backup. Keep the original somewhere — a track can be uploaded again, but it cannot be recovered.`,
+  },
+  {
     key: "desk-view",
-    position: 8,
+    position: 12,
     title: "The desk view",
     href: "/program",
     blurb: "For the night itself — the sound desk, the running order and the words on one screen.",
@@ -153,7 +213,7 @@ The button under the × switches to the **mic view**: the desk drawn as strips, 
   },
   {
     key: "alerts",
-    position: 9,
+    position: 13,
     title: "Alerts",
     href: "/notifications",
     blurb: "Being told, rather than remembering to look.",
@@ -165,8 +225,22 @@ The button under the × switches to the **mic view**: the desk drawn as strips, 
 - if you play harmonium: when every bhajan and shruti for a rostered day is set, and about each change after that.`,
   },
   {
+    key: "who-is-around",
+    position: 14,
+    title: "Who is around",
+    href: "/availability/team",
+    blurb: "Two or three months of availability, for planning.",
+    coordinatorOnly: true,
+    body: `[Who is around](/availability/team) is a grid: a row per singer, and a column for every date that could carry a session — the ones already in the diary, plus the coming Thursdays. A marked cell means that person has said they cannot sing.
+
+- A dot under a date means a session already exists on it. No dot means it is a Thursday nobody has built yet, which is exactly when it helps to know four people are away.
+- The row of numbers along the bottom is how many are away that night. The column on the right is how many nights each singer is away.
+
+> Reasons are not shown here, and there is no way to ask for them. A date somebody marked by hand and a date the app predicted look identical, on purpose.`,
+  },
+  {
     key: "for-coordinators",
-    position: 10,
+    position: 15,
     title: "For coordinators",
     href: "/build",
     blurb: "Building sessions, fairness, and the admin lists.",
@@ -182,7 +256,7 @@ Removing a session or a programme does not delete it. It goes out of every list,
   },
   {
     key: "something-wrong",
-    position: 11,
+    position: 16,
     title: "If something looks wrong",
     href: null,
     blurb: null,

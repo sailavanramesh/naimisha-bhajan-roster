@@ -17,6 +17,7 @@ import { Card, CardContent, CardHeader, CardTitle, Input, cn } from "@/component
 import {
   MAX_CYCLE_DAYS,
   MAX_DURATION_DAYS,
+  MAX_RANGE_DAYS,
   MIN_CYCLE_DAYS,
   MIN_DURATION_DAYS,
   type OwnBlock,
@@ -29,13 +30,20 @@ export function AvailabilityEditor({
   blocks,
   cycle,
   today,
+  showCycle,
+  cycleIsPreview,
 }: {
   blocks: OwnBlock[];
   cycle: CycleView;
   today: string;
+  /** Whether the cycle section applies to this person at all. */
+  showCycle: boolean;
+  /** True when they are only seeing it to try it out, not because it is theirs. */
+  cycleIsPreview: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [date, setDate] = useState("");
+  const [until, setUntil] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
 
@@ -51,9 +59,10 @@ export function AvailabilityEditor({
     if (!date) return;
     setError(null);
     startTransition(async () => {
-      const r = await blockDate({ date, note });
+      const r = await blockDate({ date, until: until || undefined, note });
       if (r.ok) {
         setDate("");
+        setUntil("");
         setNote("");
       } else setError(r.error ?? "Could not save that.");
     });
@@ -95,10 +104,21 @@ export function AvailabilityEditor({
           <CardTitle>Dates you cannot sing</CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3">
-          <div className="grid gap-2 sm:grid-cols-[auto_1fr_auto] sm:items-end">
+          <div className="grid gap-2 sm:grid-cols-[auto_auto_1fr_auto] sm:items-end">
             <label className="grid gap-1 text-xs text-on-surface-muted">
-              Date
+              From
               <Input type="date" value={date} min={today} onChange={(e) => setDate(e.target.value)} />
+            </label>
+            {/* Optional second date: "away the 3rd to the 17th" is one action,
+                not fifteen. Left blank it marks the single day. */}
+            <label className="grid gap-1 text-xs text-on-surface-muted">
+              Until (optional)
+              <Input
+                type="date"
+                value={until}
+                min={date || today}
+                onChange={(e) => setUntil(e.target.value)}
+              />
             </label>
             <label className="grid gap-1 text-xs text-on-surface-muted">
               Note, just for you (optional)
@@ -116,9 +136,14 @@ export function AvailabilityEditor({
               className="inline-flex h-9 items-center rounded-[10px] border border-transparent px-3 text-sm font-semibold disabled:cursor-not-allowed disabled:border-rule-surface disabled:bg-transparent disabled:text-on-surface-muted"
               style={date && !pending ? { background: "rgb(var(--brass))", color: "rgb(var(--brass-ink))" } : undefined}
             >
-              Add
+              {until && until !== date ? "Add these days" : "Add"}
             </button>
           </div>
+
+          <p className="text-[11px] text-on-surface-muted">
+            Leave <em>Until</em> blank for a single day. A run of up to {MAX_RANGE_DAYS} days can be
+            marked at once, and any one day of it can be removed on its own afterwards.
+          </p>
 
           {manual.length === 0 ? (
             <p className="text-sm text-on-surface-muted">
@@ -148,6 +173,7 @@ export function AvailabilityEditor({
         </CardContent>
       </Card>
 
+      {showCycle ? (
       <Card>
         <CardHeader>
           <CardTitle>Predicted days off</CardTitle>
@@ -248,6 +274,13 @@ export function AvailabilityEditor({
             </>
           )}
 
+          {cycleIsPreview ? (
+            <p className="rounded-[10px] border border-rule-surface bg-field px-2 py-1.5 text-[11px] text-on-surface-muted">
+              You are seeing this because you are an owner and asked to try it. It is otherwise
+              shown only to singers recorded as Ladies.
+            </p>
+          ) : null}
+
           {cycle && predicted.length > 0 ? (
             <div className="grid gap-1">
               <span className="text-xs text-on-surface-muted">
@@ -269,6 +302,7 @@ export function AvailabilityEditor({
           ) : null}
         </CardContent>
       </Card>
+      ) : null}
 
       {error ? <p className="text-sm text-kumkum">{error}</p> : null}
     </div>

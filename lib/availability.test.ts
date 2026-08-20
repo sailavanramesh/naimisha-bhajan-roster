@@ -7,6 +7,8 @@ import {
   isBlockedOn,
   blockedIndex,
   MIN_CYCLE_DAYS,
+  MAX_RANGE_DAYS,
+  expandRange,
   MAX_CYCLE_DAYS,
   PREDICT_HORIZON_DAYS,
   type CycleInput,
@@ -147,5 +149,48 @@ describe('what she sees versus what the rosterer sees', () => {
     expect(index.get('b')!.has('2026-08-21')).toBe(true);
     expect(index.get('a')!.has('2026-08-21')).toBe(false);
     expect(index.get('c')).toBeUndefined();
+  });
+});
+
+describe('blocking a range of dates', () => {
+  it('includes both ends', () => {
+    const r = expandRange('2026-09-01', '2026-09-04');
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.dates).toEqual(['2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04']);
+  });
+
+  it('handles a single day', () => {
+    const r = expandRange('2026-09-01', '2026-09-01');
+    if (r.ok) expect(r.dates).toEqual(['2026-09-01']);
+  });
+
+  it('crosses a month and a year end', () => {
+    const a = expandRange('2026-08-30', '2026-09-02');
+    if (a.ok) expect(a.dates).toEqual(['2026-08-30', '2026-08-31', '2026-09-01', '2026-09-02']);
+    const b = expandRange('2026-12-31', '2027-01-02');
+    if (b.ok) expect(b.dates).toEqual(['2026-12-31', '2027-01-01', '2027-01-02']);
+  });
+
+  it('refuses a backwards range rather than silently swapping it', () => {
+    const r = expandRange('2026-09-10', '2026-09-01');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toMatch(/before/);
+  });
+
+  it('refuses an over-long span rather than truncating it', () => {
+    // Truncating would have somebody believe they were marked away for dates
+    // that were quietly dropped.
+    const r = expandRange('2026-01-01', '2026-12-31');
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.reason).toContain(String(MAX_RANGE_DAYS));
+  });
+
+  it('accepts exactly the maximum', () => {
+    const end = new Date(Date.UTC(2026, 8, 1) + (MAX_RANGE_DAYS - 1) * 86400000)
+      .toISOString()
+      .slice(0, 10);
+    const r = expandRange('2026-09-01', end);
+    expect(r.ok).toBe(true);
+    if (r.ok) expect(r.dates).toHaveLength(MAX_RANGE_DAYS);
   });
 });

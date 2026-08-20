@@ -81,6 +81,44 @@ export const MAX_DURATION_DAYS = 10;
  */
 export const PREDICT_HORIZON_DAYS = 183;
 
+/**
+ * The longest run of dates that can be blocked in one go.
+ *
+ * Somebody away for a term is a real case; somebody who has fat-fingered a year
+ * into the second date box is more likely. Thirteen weeks covers a holiday or a
+ * trip home and makes the mistake visible instead of silently writing hundreds
+ * of rows.
+ */
+export const MAX_RANGE_DAYS = 92;
+
+/**
+ * Every date from `fromISO` to `toISODate` inclusive.
+ *
+ * Returns an error rather than a truncated list when the span is too long: a
+ * range quietly cut short would have somebody believe they were marked away for
+ * dates they are not.
+ */
+export function expandRange(
+  fromISO: string,
+  toISODate: string,
+): { ok: true; dates: string[] } | { ok: false; reason: string } {
+  const span = daysBetweenISO(fromISO, toISODate);
+  if (span === null) return { ok: false, reason: 'Those are not both dates.' };
+  if (span < 0) return { ok: false, reason: 'The second date is before the first.' };
+  if (span + 1 > MAX_RANGE_DAYS) {
+    return {
+      ok: false,
+      reason: `That is ${span + 1} days. Mark at most ${MAX_RANGE_DAYS} at a time.`,
+    };
+  }
+  const dates: string[] = [];
+  for (let i = 0; i <= span; i++) {
+    const d = addDaysISO(fromISO, i);
+    if (d) dates.push(d);
+  }
+  return { ok: true, dates };
+}
+
 export type CycleProblem = { field: keyof CycleInput; message: string };
 
 /** Check a cycle before it is stored, with a message that says what to do. */

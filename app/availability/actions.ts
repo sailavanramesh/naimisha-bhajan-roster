@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/db";
 import { requireCapability, getSignedInSinger } from "@/lib/auth";
-import { validateCycle, type CycleInput } from "@/lib/availability";
+import { expandRange, validateCycle, type CycleInput } from "@/lib/availability";
 
 /**
  * Everything a singer can change about their own availability.
@@ -28,23 +28,65 @@ function asDate(iso: string): Date | null {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-export async function blockDate(input: { date: string; note?: string }): Promise<{ ok: boolean; error?: string }> {
+/**
+ * Mark one date, or a run of them.
+ *
+ * `until` is optional and inclusive, so "away 3rd to 17th" is one action rather
+ * than fifteen. It writes a row per date rather than a start and an end,
+ * because everything downstream asks "is this person free on this day" and a
+ * row per day answers that without unpacking anything — and because removing
+ * one day out of the middle of a trip then costs nothing.
+ */
+export async function blockDate(input: {
+  date: string;
+  until?: string;
+  note?: string;
+}): Promise<{ ok: boolean; error?: string; added?: number }> {
   const singer = await me();
   if (!singer) return { ok: false, error: "Sign in as yourself first." };
 
-  const date = asDate(input.date);
-  if (!date) return { ok: false, error: "That is not a date." };
-
   const note = (input.note ?? "").trim().slice(0, 200) || null;
+  const until = (input.until ?? "").trim();
 
-  await prisma.singerUnavailability.upsert({
-    where: { singerId_date: { singerId: singer.id, date } },
-    create: { singerId: singer.id, date, note },
-    update: { note },
+  const dates = until
+    ? expandRange(input.date, until)
+    : ({ ok: true, dates: [input.date] } as const);
+  if (!dates.ok) return { ok: false, error: dates.reason };
+
+  for (const iso of dates.dates) {
+    const date = asDate(iso);
+    if (!date) return { ok: false, error: "That is not a date." };
+    await prisma.singerUnavailability.upsert({
+      where: { singerId_date: { singerId: singer.id, date } },
+      create: { singerId: singer.id, date, note },
+      update: { note },
+    });
+  }
+
+  revalidatePath("/availability");
+  return { ok: true, added: dates.dates.length };
+}
+
+/** Clear a run of dates in one go — the counterpart to blocking one. */
+export async function unblockRange(input: {
+  date: string;
+  until: string;
+}): Promise<{ ok: boolean; error?: string; removed?: number }> {
+  const singer = await me();
+  if (!singer) return { ok: false, error: "Sign in as yourself first." };
+
+  const dates = expandRange(input.date, input.until);
+  if (!dates.ok) return { ok: false, error: dates.reason };
+
+  const result = await prisma.singerUnavailability.deleteMany({
+    where: {
+      singerId: singer.id,
+      date: { gte: asDate(input.date) ?? undefined, lte: asDate(input.until) ?? undefined },
+    },
   });
 
   revalidatePath("/availability");
-  return { ok: true };
+  return { ok: true, removed: result.count };
 }
 
 export async function unblockDate(input: { date: string }): Promise<{ ok: boolean; error?: string }> {

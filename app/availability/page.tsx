@@ -1,6 +1,8 @@
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { getRole, can, getSignedInSinger } from "@/lib/auth";
+import { prisma } from "@/lib/db";
+import { Gender } from "@prisma/client";
 import { melbourneTodayISO, addDaysISO } from "@/lib/dates";
 import { ownAvailability } from "@/lib/availabilityQueries";
 import { PREDICT_HORIZON_DAYS } from "@/lib/availability";
@@ -41,6 +43,22 @@ export default async function AvailabilityPage() {
     );
   }
 
+  /*
+   * Who the cycle section is for.
+   *
+   * Singers recorded as Ladies, which is whose it is. Plus an owner, because
+   * Sailavan asked to be able to try it — shown to them with a line saying
+   * that is why, so an owner does not think the app has guessed wrong about
+   * them.
+   */
+  const me = await prisma.singer.findUnique({
+    where: { id: signedIn.id },
+    select: { gender: true },
+  });
+  const isLadies = me?.gender === Gender.Ladies;
+  const showCycle = isLadies || role === "owner";
+  const cycleIsPreview = showCycle && !isLadies;
+
   const today = melbourneTodayISO();
   const horizon = addDaysISO(today, PREDICT_HORIZON_DAYS) ?? today;
   const { blocks, cycle } = await ownAvailability(signedIn.id, today, horizon);
@@ -55,7 +73,23 @@ export default async function AvailabilityPage() {
         </p>
       </div>
 
-      <AvailabilityEditor blocks={blocks} cycle={cycle} today={today} />
+      {can(role, "assignSingers") ? (
+        <p className="text-sm text-on-surface-muted">
+          Planning a roster?{" "}
+          <Link href="/availability/team" className="underline">
+            See who is around over the next few months
+          </Link>
+          .
+        </p>
+      ) : null}
+
+      <AvailabilityEditor
+        blocks={blocks}
+        cycle={cycle}
+        today={today}
+        showCycle={showCycle}
+        cycleIsPreview={cycleIsPreview}
+      />
     </div>
   );
 }

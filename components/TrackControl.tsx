@@ -17,7 +17,7 @@
  * between waiting and refreshing.
  */
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "@/components/ui";
 
 export type TrackInfo = {
@@ -31,6 +31,114 @@ function humanSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function mmss(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+/**
+ * The track on one line, for a running order that has not been opened.
+ *
+ * Sailavan: "can the uploaded recording show up here inline with the thing, so
+ * don't have to open it to open the recording?"
+ *
+ * A hand-built control rather than <audio controls> here, which is the opposite
+ * of the choice made below and for the opposite reason: the browser's own player
+ * is about 32 pixels tall and 300 wide with its own padding, and a row of a
+ * running order has neither. This is a button, a slim bar and a time — and the
+ * bar is a real range input, so dragging it still seeks, which is the point.
+ *
+ * The full player is still there when the item is opened. This is the shortcut,
+ * not a replacement.
+ */
+export function InlineTrack({ file, name }: { file: string; name: string | null }) {
+  const audio = useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [at, setAt] = useState(0);
+  const [length, setLength] = useState(0);
+
+  useEffect(() => {
+    const el = audio.current;
+    if (!el) return;
+    const onTime = () => setAt(el.currentTime);
+    const onMeta = () => setLength(Number.isFinite(el.duration) ? el.duration : 0);
+    const onEnd = () => {
+      setPlaying(false);
+      setAt(0);
+    };
+    el.addEventListener("timeupdate", onTime);
+    el.addEventListener("loadedmetadata", onMeta);
+    el.addEventListener("ended", onEnd);
+    el.addEventListener("pause", () => setPlaying(false));
+    el.addEventListener("play", () => setPlaying(true));
+    return () => {
+      el.removeEventListener("timeupdate", onTime);
+      el.removeEventListener("loadedmetadata", onMeta);
+      el.removeEventListener("ended", onEnd);
+    };
+  }, []);
+
+  function toggle() {
+    const el = audio.current;
+    if (!el) return;
+    if (el.paused) void el.play();
+    else el.pause();
+  }
+
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1.5 align-middle">
+      {/* preload=metadata so the bar knows how long the track is before anybody
+          presses play, without pulling the audio down on page load — a running
+          order can carry a dozen of these. */}
+      <audio ref={audio} src={`/api/program/track/${file}`} preload="metadata" className="hidden" />
+
+      <button
+        type="button"
+        onClick={toggle}
+        aria-label={playing ? `Pause ${name ?? "the track"}` : `Play ${name ?? "the track"}`}
+        title={name ?? "track"}
+        className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-rule-surface text-on-surface-muted transition hover:bg-panel-hover"
+      >
+        {playing ? (
+          <svg viewBox="0 0 16 16" className="h-3 w-3" aria-hidden="true" fill="currentColor">
+            <rect x="4" y="3.5" width="2.6" height="9" rx="0.6" />
+            <rect x="9.4" y="3.5" width="2.6" height="9" rx="0.6" />
+          </svg>
+        ) : (
+          <svg viewBox="0 0 16 16" className="h-3 w-3" aria-hidden="true" fill="currentColor">
+            <path d="M5 3.6l7 4.4-7 4.4z" />
+          </svg>
+        )}
+      </button>
+
+      <input
+        type="range"
+        min={0}
+        max={length || 0}
+        step={0.1}
+        value={Math.min(at, length || 0)}
+        disabled={!length}
+        aria-label="Position in the track"
+        onChange={(e) => {
+          const el = audio.current;
+          if (!el) return;
+          const t = Number(e.target.value);
+          el.currentTime = t;
+          setAt(t);
+        }}
+        className="h-1 w-20 cursor-pointer accent-brass disabled:cursor-not-allowed sm:w-28"
+      />
+
+      <span className="font-mono text-[10px] tabular-nums text-on-surface-muted">
+        {mmss(at)}
+        {length ? `/${mmss(length)}` : ""}
+      </span>
+    </span>
+  );
 }
 
 export function TrackControl({
