@@ -4,15 +4,9 @@ import { Card, CardContent, CardHeader, CardTitle, cn } from "@/components/ui";
 import { getRole, can } from "@/lib/auth";
 import { melbourneTodayISO, addDaysISO } from "@/lib/dates";
 import { rosterAvailability } from "@/lib/availabilityQueries";
-import {
-  boardColumns,
-  boardTotals,
-  byMonth,
-  columnLabel,
-  monthLabel,
-  type BoardRow,
-} from "@/lib/availabilityBoard";
+import { boardColumns, boardTotals, byMonth, type BoardRow } from "@/lib/availabilityBoard";
 import { LIVE_SESSION } from "@/lib/archive";
+import { Board } from "./Board";
 
 export const dynamic = "force-dynamic";
 
@@ -137,128 +131,19 @@ export default async function TeamAvailabilityPage({
       </div>
 
       <Card>
-        <CardContent className="p-0">
-          {/* The table scrolls sideways on its own; the page never does. */}
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr>
-                  <th
-                    className="sticky left-0 z-20 min-w-[9rem] border-b border-rule-surface bg-panel px-3 py-2 text-left text-xs font-semibold"
-                    rowSpan={2}
-                  >
-                    Singer
-                  </th>
-                  {groups.map((g) => (
-                    <th
-                      key={g.month}
-                      colSpan={g.columns.length}
-                      className="border-b border-l border-rule-surface px-2 py-1 text-center text-[11px] font-semibold text-on-surface-muted"
-                    >
-                      {monthLabel(g.month)}
-                    </th>
-                  ))}
-                  <th
-                    className="border-b border-l border-rule-surface px-2 py-2 text-center text-[11px] font-semibold text-on-surface-muted"
-                    rowSpan={2}
-                  >
-                    away
-                  </th>
-                </tr>
-                <tr>
-                  {columns.map((c) => {
-                    const l = columnLabel(c.date);
-                    return (
-                      <th
-                        key={c.date}
-                        title={`${c.date}${c.scheduled ? " — session in the diary" : " — no session yet"}`}
-                        className={cn(
-                          "w-9 border-b border-rule-surface px-0 py-1 text-center text-[10px] font-normal leading-tight",
-                          c.scheduled ? "font-semibold" : "text-on-surface-muted",
-                        )}
-                      >
-                        <div>{l.weekday}</div>
-                        <div className="tabular-nums">{l.day}</div>
-                        {/* A dot marks a date that is already a session, so a
-                            coordinator can tell a real night from a possible one. */}
-                        <div aria-hidden className="text-brass">
-                          {c.scheduled ? "•" : " "}
-                        </div>
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-
-              <tbody>
-                {rows.map((r) => {
-                  const total = awayPerSinger.get(r.singerId) ?? 0;
-                  return (
-                    <tr key={r.singerId} className="odd:bg-surface-sunk/40">
-                      <th
-                        scope="row"
-                        className="sticky left-0 z-10 border-b border-rule-surface bg-panel px-3 py-1.5 text-left font-normal"
-                      >
-                        <Link href={`/singers/${r.singerId}`} className="hover:underline">
-                          {r.name}
-                        </Link>
-                      </th>
-                      {columns.map((c) => {
-                        const isAway = r.awayOn.has(c.date);
-                        return (
-                          <td
-                            key={c.date}
-                            className="border-b border-rule-surface p-0 text-center align-middle"
-                          >
-                            <span
-                              title={isAway ? `${r.name} cannot sing on ${c.date}` : undefined}
-                              className={cn(
-                                "mx-auto block h-5 w-5 rounded-[6px]",
-                                isAway ? "bg-kumkum/70" : "bg-transparent",
-                              )}
-                            >
-                              <span className="sr-only">
-                                {isAway ? `${r.name} away ${c.date}` : `${r.name} available ${c.date}`}
-                              </span>
-                            </span>
-                          </td>
-                        );
-                      })}
-                      <td className="border-b border-l border-rule-surface px-2 py-1.5 text-center text-xs tabular-nums text-on-surface-muted">
-                        {total || ""}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-
-              <tfoot>
-                <tr>
-                  <th
-                    scope="row"
-                    className="sticky left-0 z-10 bg-panel px-3 py-1.5 text-left text-xs font-semibold"
-                  >
-                    away that night
-                  </th>
-                  {columns.map((c) => {
-                    const n = awayPerDate.get(c.date) ?? 0;
-                    return (
-                      <td
-                        key={c.date}
-                        className={cn(
-                          "px-0 py-1.5 text-center text-xs tabular-nums",
-                          n === 0 ? "text-on-surface-muted" : "font-semibold",
-                        )}
-                      >
-                        {n || ""}
-                      </td>
-                    );
-                  })}
-                  <td />
-                </tr>
-              </tfoot>
-            </table>
-          </div>
+        <CardContent className="p-0 pb-3">
+          <Board
+            columns={columns}
+            groups={groups}
+            rows={rows.map((r) => ({
+              singerId: r.singerId,
+              name: r.name,
+              gender: r.gender,
+              awayOn: [...r.awayOn],
+            }))}
+            awayPerDate={Object.fromEntries(awayPerDate)}
+            canRoster={can(role, "assignSingers")}
+          />
         </CardContent>
       </Card>
 
@@ -268,6 +153,9 @@ export default async function TeamAvailabilityPage({
         </span>
         <span className="flex items-center gap-1.5">
           <span className="text-brass">•</span> session already in the diary
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-3 w-3 rounded-[4px]" style={{ background: "rgb(var(--brass))" }} /> picked
         </span>
         <span>{rows.length} singers</span>
       </div>
