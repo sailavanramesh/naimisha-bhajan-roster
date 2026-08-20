@@ -53,14 +53,26 @@ await page.addInitScript(() => {
     window.__ramps.push(value);
     return ramp.call(this, value, time);
   };
+  // How many drones are actually running. A control disappearing from the page
+  // is NOT evidence of silence — when a pitch is cleared the button unrenders
+  // while the sound carries on, which is the exact bug this script exists to
+  // catch. Count sources that have been started and not yet told to stop.
+  window.__active = 0;
   const Ctx = window.AudioContext;
   window.AudioContext = class extends Ctx {
     createBufferSource() {
       const node = super.createBufferSource();
       const start = node.start.bind(node);
+      const stop = node.stop.bind(node);
+      let live = false;
       node.start = (...a) => {
         window.__rates.push(node.playbackRate.value);
+        if (!live) { live = true; window.__active++; }
         return start(...a);
+      };
+      node.stop = (...a) => {
+        if (live) { live = false; window.__active--; }
+        return stop(...a);
       };
       return node;
     }
@@ -136,9 +148,37 @@ if (count > 0 && (await nudge.count()) > 0) {
 
   console.log(`nudges: ${glides} glided, ${crossfades} crossfaded`);
   if (stopped) failures.push("the drone stopped part-way through nudging");
+  const activeAfterNudges = await page.evaluate(() => window.__active);
+  if (activeAfterNudges !== 1)
+    failures.push(`nudging left ${activeAfterNudges} drones running, expected exactly 1`);
   if (glides === 0) failures.push("no nudge glided — every step started a new recording");
   if (crossfades === 0)
     failures.push("no nudge crossfaded — five steps should cross a recording boundary");
+}
+
+// Clearing the pitch must stop the drone. It used to keep sounding the last
+// saved pitch with no visible control left to switch it off, because the
+// player fell back to the stored value and a component that renders null has
+// not unmounted — so nothing ever told the engine to stop.
+const clear = page.locator('button[aria-label="Clear the confirmed pitch"]');
+const pressed = () => page.locator('button[aria-label*="tanpura"][aria-pressed="true"]').count();
+if (count > 0 && (await clear.count()) > 0) {
+  // The nudge block above may have left a drone running, and the control is a
+  // toggle — clicking it again would stop the very thing this needs playing.
+  if ((await pressed()) === 0) {
+    await buttons.first().click();
+    await page.waitForTimeout(1800);
+  }
+  const playingBefore = await page.evaluate(() => window.__active);
+  if (playingBefore === 0) failures.push("could not get a drone started to test clearing");
+
+  await clear.first().click();
+  await page.waitForTimeout(1800);
+
+  // Ask the audio graph, not the DOM.
+  const stillPlaying = await page.evaluate(() => window.__active);
+  if (stillPlaying > 0) failures.push("clearing the pitch left the drone playing");
+  console.log(`drones still running after clearing: ${stillPlaying}`);
 }
 
 const rates = await page.evaluate(() => window.__rates);

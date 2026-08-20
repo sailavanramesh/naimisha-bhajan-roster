@@ -45,30 +45,49 @@ export function ShrutiPlayer({
   // would have the button conclude it had stopped mid-drone. It also keeps two
   // rows showing the same pitch apart.
   const ownerId = useId();
-  const isThis = voice !== null && playing.owner === ownerId;
 
-  // Follow the pitch while we are the one sounding, so nudging retunes the
-  // drone instead of leaving it on the note that was there when it started.
+  /**
+   * Are we the control that is sounding? Asked WITHOUT reference to the current
+   * label, because the label can go away while the drone is still running —
+   * clearing the pitch field is exactly that case, and a check that folded in
+   * `voice` would answer "no" at the one moment we most need a "yes" in order
+   * to stop.
+   */
+  const isOwner = playing.owner === ownerId;
+  const isThis = voice !== null && isOwner;
+
+  // Follow the pitch while we are the one sounding: nudging retunes the drone
+  // rather than leaving it on the note that was there when it started, and
+  // clearing the field stops it rather than leaving the last pitch droning on
+  // with no visible control to switch it off.
+  const playable = voice !== null;
   const lastLabel = useRef(label);
   useEffect(() => {
-    if (isThis && label && label !== lastLabel.current) void retune(label, ownerId);
+    if (isOwner && label !== lastLabel.current) {
+      if (playable && label) void retune(label, ownerId);
+      else stop();
+    }
     lastLabel.current = label;
-  }, [label, isThis, ownerId]);
+  }, [label, isOwner, ownerId, playable]);
 
   // A drone left sounding after the control leaves the screen has no way to be
   // stopped — the button that owns it is gone. So unmounting while playing
   // stops it, and navigating away from a roster falls silent.
   //
   // Empty deps, with the current value read through a ref, and both halves
-  // matter. Depending on `isThis` would re-run the effect whenever this button
+  // matter. Depending on the value would re-run the effect whenever this button
   // stopped being the playing one — and its cleanup, closing over the previous
   // `true`, would call stop(). Switching from one shruti to another would then
   // silence the one just started, from the component that lost the race.
-  const isThisRef = useRef(isThis);
-  isThisRef.current = isThis;
+  //
+  // Keyed on ownership rather than on `isThis`, for the same reason as above: a
+  // control whose pitch was cleared still owns the drone until it says
+  // otherwise, and unmounting it must still stop the sound.
+  const isOwnerRef = useRef(isOwner);
+  isOwnerRef.current = isOwner;
   useEffect(() => {
     return () => {
-      if (isThisRef.current) stop();
+      if (isOwnerRef.current) stop();
     };
   }, []);
 

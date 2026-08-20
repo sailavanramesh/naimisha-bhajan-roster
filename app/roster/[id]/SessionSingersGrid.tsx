@@ -1663,10 +1663,15 @@ export function SessionSingersGrid(props: {
                           >
                             +
                           </button>
-                          {/* Hear it. Reads the value in the field, so it
-                              follows the nudges above rather than the last
-                              saved pitch. */}
-                          <ShrutiPlayer label={pu.q || r.confirmedPitch} />
+                          {/* Hear it. Reads the field verbatim, so it follows
+                              the nudges above rather than the last saved pitch
+                              — and so clearing the field really is empty.
+                              `pu.q` already falls back to the saved pitch when
+                              this row has not been touched (see where `pu` is
+                              built), so an `|| r.confirmedPitch` here would
+                              only ever fire for a pitch somebody had just
+                              deliberately cleared, and bring it back. */}
+                          <ShrutiPlayer label={pu.q} />
 
                           {r.recommendedPitch && r.confirmedPitch !== r.recommendedPitch ? (
                             <button
