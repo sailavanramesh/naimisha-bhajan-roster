@@ -5,19 +5,34 @@
  *
  * The ashram owns a small set of tablas. A bhajan's Sa may or may not be one of
  * them, so the player needs telling which drum to bring and where to tune it.
- * Today the app prints Sa + 7 — the fifth — which is the traditional second
- * choice but is only an answer when that fifth happens to be a drum they own.
  *
- * Measured over the 639 sung records in the seeded history, against the C, C#,
- * D and E the ashram holds:
+ * ## The order, and why Ma comes before Pa
  *
- *   Sa itself          49.9%
- *   the fifth (Pa)    +28.5%  ->  78.4%
- *   the fourth (Ma)   +11.9%  ->  90.3%
- *   a third            +3.9%  ->  94.2%
- *   nothing usable      5.8%
+ * Sa first, then Ma, then whatever the raga actually contains.
  *
- * and only four tonics ever get past Sa and Pa at all: G#, B, A# and D#.
+ * Sailavan, 2026-08-20: "4.5 madhyam should prioritise the Sa, then Ma, then it
+ * depends on the raga to decide which note is next best. Pa is an option if that
+ * raga has a Pa, but if it doesn't its not."
+ *
+ * The last part is why every degree below is checked against `ragaSemitones`
+ * rather than assumed: a raga without a Pa cannot have its tabla tuned to one,
+ * however conventional a choice that would otherwise be. Malkauns has no Pa;
+ * Hamsadhwani has no Ma. Where the raga's notes are unknown the answer is
+ * marked `assumed` rather than `certain`, so it can be shown as a guess.
+ *
+ * Measured over the 688 sung records, against the C, C#, D and E the ashram
+ * holds, under this order:
+ *
+ *   Sa itself          51.5%
+ *   the fourth (Ma)   +25.7%  ->  77.2%
+ *   the fifth (Pa)    +11.6%  ->  88.8%
+ *   a third            +2.6%  ->  91.4%
+ *   a sixth            +4.1%  ->  95.5%
+ *   a flat seventh     +1.5%  ->  96.9%
+ *   nothing usable      3.1%
+ *
+ * Ma carries more than twice the load Pa does, which is a consequence of which
+ * four drums the ashram happens to own rather than of the music.
  */
 
 import { saOf, NOTE_NAMES, type NoteName } from "./pitch";
@@ -83,8 +98,8 @@ export function tablaWithOverride(
  */
 export const DEGREE_PREFERENCE = [
   { key: "sa", label: "Sa", description: "the tonic", semitones: [0] },
-  { key: "pa", label: "Pa", description: "the fifth", semitones: [7] },
   { key: "ma", label: "Ma", description: "the fourth", semitones: [5] },
+  { key: "pa", label: "Pa", description: "the fifth", semitones: [7] },
   { key: "ga", label: "Ga", description: "the third", semitones: [4, 3] },
   { key: "dha", label: "Dha", description: "the sixth", semitones: [9, 8] },
   { key: "ni", label: "ni", description: "the flat seventh", semitones: [10] },

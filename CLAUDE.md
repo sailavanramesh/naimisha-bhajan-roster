@@ -94,13 +94,25 @@ This is the heart of the app. Get it wrong and everything downstream is wrong.
 2. **The series does not change Sa.** The same step number is the same Sa in
    both series; only the drone note differs. Preserve whichever series the
    source label used when rendering; never silently convert one to the other.
-3. **Tabla pitch = Sa + 7 semitones.** Derive it; do not store it per-row.
+3. **Tabla pitch is chosen, not computed.** The order is **Sa, then Ma, then
+   whatever the raga contains** — `recommendTabla` in `lib/tabla.ts`, against
+   the four drums the ashram owns (C, C#, D, E) and the raga's own notes. A
+   raga without a Pa cannot have its tabla tuned to one, so every degree is
+   checked against the scale rather than assumed. Where the raga is unknown the
+   answer is marked `assumed`.
 
-   The `PitchLabel.tablaPitch` column is the written note + 7 for all 24 rows,
-   which under rule 1 makes it wrong for the twelve Madhyam ones — there it
-   holds Sa itself. **Do not read that column.** `tablaPitchOf` derives the
-   right answer. Note this moved the displayed tabla pitch by a fourth for every
-   Madhyam session on 2026-08-20, and somebody tunes a real tabla to it.
+   Over the 688 sung records: Sa 51.5%, Ma 25.7%, Pa 11.6%, then thirds, sixths
+   and flat sevenths, with 3.1% that no drum they own fits.
+
+   `tablaPitchOf` in `lib/pitch.ts` still returns the bare fifth, Sa + 7. It is
+   the OLD rule and takes no account of the raga or of which drums exist —
+   `components/ShrutiLadder.tsx` and `lib/pitchSuggestions.ts` still call it.
+   Prefer `recommendTabla` for anything a player acts on.
+
+   Do not read `PitchLabel.tablaPitch` from the database. It is the written
+   note + 7 in all 24 rows, which under rule 1 is wrong for the twelve Madhyam
+   ones.
+
 4. **Deviation between two pitches** is the signed shortest distance mod 12,
    wrapped to `[-6, +6]`:
 
