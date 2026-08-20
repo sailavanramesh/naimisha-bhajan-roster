@@ -25,7 +25,21 @@ export default async function SingerPage({
 }) {
   const { id } = await params;
 
-  const singer = await prisma.singer.findUnique({ where: { id } });
+  /*
+   * Two rounds of queries, not four.
+   *
+   * This page is where /my-list lands, and on a Burstable database in
+   * australiaeast each sequential await is a visible pause with nothing on
+   * screen. Only two things genuinely depend on the singer — their profile and
+   * their history — so everything else goes in the first round alongside the
+   * lookup rather than waiting behind it.
+   */
+  const [singer, role, me, rungs] = await Promise.all([
+    prisma.singer.findUnique({ where: { id } }),
+    getRole(),
+    getSignedInSinger(),
+    getPitchLabels(),
+  ]);
   if (!singer) return <div>Not found</div>;
 
   /*
@@ -34,19 +48,16 @@ export default async function SingerPage({
    * An editor may keep anyone's, which is what the /my-list picker used to be
    * for — they just visit the person instead now.
    */
-  const [role, me] = await Promise.all([getRole(), getSignedInSinger()]);
   const canKeepList = me?.id === singer.id || can(role, "assignSingers");
 
-  const [{ profile, rows }, rungs] = await Promise.all([
+  const [{ profile, rows }, history] = await Promise.all([
     getSingerProfile(singer.id, singer.name),
-    getPitchLabels(),
+    prisma.sessionSlot.findMany({
+      where: { singerId: singer.id, session: LIVE_SESSION },
+      orderBy: { session: { date: "desc" } },
+      include: { session: true, bhajan: { select: { id: true, title: true } } },
+    }),
   ]);
-
-  const history = await prisma.sessionSlot.findMany({
-    where: { singerId: singer.id, session: LIVE_SESSION },
-    orderBy: { session: { date: "desc" } },
-    include: { session: true, bhajan: { select: { id: true, title: true } } },
-  });
 
   /*
    * Fold the history into one row per bhajan for the search below. Done here
