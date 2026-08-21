@@ -19,6 +19,7 @@ import { PitchFinder } from "@/components/PitchFinder";
 import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { rosterable } from "@/lib/rosterEligibility";
 import { EditBhajanPanel, EditedDot } from "./EditBhajanPanel";
+import { TrackControl } from "@/components/TrackControl";
 import { EDITABLE_FIELDS } from "@/lib/bhajanFields";
 
 export const dynamic = "force-dynamic";
@@ -132,6 +133,9 @@ export default async function BhajanPage({
    * list. Signed in as yourself, the server already knows whose list it is.
    */
   const canAddToList = can(role, "manageOwnLearning");
+  // The same permission that corrects a raga adds a recording: both change what
+  // the masterlist says about this bhajan.
+  const canEditBhajan = can(role, "addBhajan");
   const pickSinger = !signedIn || can(role, "assignSingers");
   const labelStrings = rungs.map((r) => r.label);
 
@@ -272,6 +276,48 @@ export default async function BhajanPage({
               bhajan, plus media for many — all of it was previously stored and
               never surfaced. Opened in a new tab so the roster is not lost. */}
           <ResourceLinks bhajan={bhajan} />
+
+          {/*
+            The group's OWN recording, to learn the bhajan from.
+            Sailavan, 2026-08-21: "so people can listen to it and learn the
+            bhajan."
+
+            Below the links rather than among them, and deliberately not one of
+            them: those go out to somebody else's site and can rot, this is a
+            file the centre holds. Anybody signed in may listen; adding one needs
+            the same permission as correcting anything else about a bhajan.
+
+            The whole block is hidden when there is no recording and you cannot
+            add one, so a member browsing the masterlist sees nothing about
+            uploads.
+          */}
+          {bhajan.trackFile || canEditBhajan ? (
+            <section className="grid gap-1.5 rounded-[12px] border border-rule-surface bg-panel p-3">
+              <h2 className="text-xs font-semibold text-on-surface-muted">
+                Recording
+                {bhajan.trackUploadedBy ? (
+                  <span className="ml-1 font-normal">· added by {bhajan.trackUploadedBy}</span>
+                ) : null}
+              </h2>
+              <TrackControl
+                endpoint={`/api/bhajans/${bhajan.id}/track`}
+                initial={{
+                  file: bhajan.trackFile,
+                  name: bhajan.trackName,
+                  bytes: bhajan.trackBytes,
+                  uploadedBy: bhajan.trackUploadedBy,
+                }}
+                canEdit={canEditBhajan}
+                addLabel="Add a recording"
+              />
+              {!bhajan.trackFile && canEditBhajan ? (
+                <p className="text-[11px] text-on-surface-muted">
+                  MP3, M4A, OGG or WAV, up to 30 MB. Kept on the app&rsquo;s own storage, which
+                  has no backup — keep your copy.
+                </p>
+              ) : null}
+            </section>
+          ) : null}
 
           <div className="grid gap-2 sm:grid-cols-2">
             <div className="rounded-[12px] border border-rule-surface bg-panel p-3">

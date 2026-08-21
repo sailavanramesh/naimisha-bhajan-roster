@@ -282,6 +282,28 @@ model Bhajan {
   /// Free-text note on a locally added bhajan — where it came from, who asked.
   originNote String?
 
+  /// A recording of this bhajan, on the app's own disk, so a member can listen
+  /// and learn it.
+  ///
+  /// Distinct from `audio`, `tutorial` and `karaokeTracksForPractice`, which are
+  /// URLs the masterlist came with and which point at somebody else's site. This
+  /// is the group's own file, and it is here because a link that has rotted is
+  /// no use to somebody learning a bhajan the week before they sing it.
+  ///
+  /// Same five columns and the same rules as ProgramItem — see the long note on
+  /// `ProgramItem.trackFile`, which explains why this is a generated NAME and
+  /// never a path, why the file sits on /home/data rather than in blob storage,
+  /// and that a track is re-uploadable rather than recoverable. One per bhajan:
+  /// a second upload replaces the first.
+  trackFile       String?
+  /// What the file was called when it was uploaded. For showing and for
+  /// downloading under a sensible name; never used as a path.
+  trackName       String?
+  trackBytes      Int?
+  trackUploadedAt DateTime?
+  /// Who uploaded it, by name, so a recording has somebody to ask about it.
+  trackUploadedBy String?
+
   /// Generated column maintained by Postgres — see the migration. Not
   /// selectable through the client; search via $queryRaw against the GIN index.
   searchVector Unsupported("tsvector")?
