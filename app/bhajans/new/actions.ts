@@ -3,7 +3,8 @@
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth";
 import { BhajanOrigin } from "@prisma/client";
-import { revalidatePath } from "next/cache";
+import { BHAJANS_TAG } from "@/lib/candidateQueries";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
@@ -93,5 +94,8 @@ export async function createBhajan(formData: FormData): Promise<void> {
   });
 
   revalidatePath("/bhajans");
+  // A new bhajan has to appear in the pool, and its deity and language in the
+  // filter chips. Both read the masterlist from a cache.
+  revalidateTag(BHAJANS_TAG);
   redirect(`/bhajans/${created.id}`);
 }

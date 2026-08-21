@@ -1,10 +1,11 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { requireCapability, getSignedInSinger } from "@/lib/auth";
 import { cleanFieldValue, hasChanged, isEditableField, fieldLabel } from "@/lib/bhajanFields";
+import { BHAJANS_TAG } from "@/lib/candidateQueries";
 
 /**
  * Correct a bhajan, and remember that it was corrected.
@@ -85,6 +86,9 @@ export async function updateBhajanFields(input: {
 
   revalidatePath(`/bhajans/${bhajanId}`);
   revalidatePath("/bhajans");
+  // A corrected raga or language changes the pool and the filter chips on
+  // /build and /explore, which read the masterlist from a cache.
+  revalidateTag(BHAJANS_TAG);
   return { ok: true, changed: changed.map(fieldLabel) };
 }
 
@@ -123,5 +127,6 @@ export async function revertBhajanField(input: {
   });
 
   revalidatePath(`/bhajans/${input.bhajanId}`);
+  revalidateTag(BHAJANS_TAG);
   return { ok: true };
 }

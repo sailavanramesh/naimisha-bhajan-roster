@@ -7,6 +7,7 @@
  */
 
 import { cache } from 'react';
+import { unstable_cache } from 'next/cache';
 import { prisma } from '@/lib/db';
 import { RepertoireKind } from '@prisma/client';
 import type { Candidate } from '@/lib/sessionBuilder';
@@ -64,39 +65,88 @@ type MasterlistRow = {
   deities: Array<{ deity: { name: string } }>;
 };
 
-const loadMasterlist = cache(async () => {
-  const [bhajans, withLyrics, slots, deities] = await Promise.all([
-    prisma.bhajan.findMany({
-      select: {
-        id: true,
-        title: true,
-        raga: true,
-        language: true,
-        tempo: true,
-        level: true,
-        beat: true,
-        audio: true,
-        referenceGentsPitch: true,
-        referenceLadiesPitch: true,
-        deities: { select: { deity: { select: { name: true } } } },
-      },
-    }),
-    prisma.bhajan.findMany({ where: { lyrics: { not: null } }, select: { id: true } }),
-    /*
-     * Sung history, as slots rather than an aggregate: `groupBy` cannot reach
-     * through the relation to the session's date, and the date is what
-     * "days since last sung" needs. 765 rows, so one pass in JS is cheaper
-     * than a second query.
-     *
-     * There used to be a `groupBy` here as well, computing counts that were
-     * then thrown away with `void sungStats` — a whole round trip for nothing.
-     */
-    prisma.sessionSlot.findMany({
-      where: { bhajanId: { not: null }, session: LIVE_SESSION },
-      select: { bhajanId: true, session: { select: { date: true } } },
-    }),
-    prisma.deity.findMany({ orderBy: { name: 'asc' }, select: { name: true } }),
-  ]);
+/**
+ * The masterlist itself, CACHED ACROSS REQUESTS.
+ *
+ * Measured on dev, 2026-08-21: this read is essentially the whole cost of both
+ * /build and /explore. Asking /explore to render one bhajan instead of fifty —
+ * 78 KB against 306 KB — changed the page's time by nothing at all, because the
+ * fixed part is 3,607 rows crossing the wire and being turned into objects on a
+ * shared vCPU, and the fixed part is all of it.
+ *
+ * It is also the most cacheable thing in the app. The masterlist is a copy of
+ * somebody else's spreadsheet: 3,607 rows that change when a member corrects a
+ * raga or adds a bhajan, which is a handful of times a month. So it is tagged
+ * and the three write paths clear it — see `BHAJANS_TAG` below.
+ *
+ * The one-hour `revalidate` is a backstop, not the mechanism. If a future write
+ * path forgets the tag, the list is stale for an hour rather than until the app
+ * restarts. The seed and backfill scripts write outside the app entirely and
+ * cannot call `revalidateTag` at all, so for them the hour IS the mechanism.
+ *
+ * Returned as plain arrays: `unstable_cache` serialises what it stores, and a
+ * Set or a Map would not survive the trip. They are rebuilt per request by
+ * `loadMasterlist`, which costs about a millisecond.
+ *
+ * `lyrics` is deliberately NOT selected. It is 0.72 MB of Text across the
+ * masterlist and the only question ever asked of it is whether it is empty, so
+ * the answer comes back as a list of ids instead — which halved this query.
+ * Blank-but-not-null is not a state this database holds (checked across every
+ * text column here: zero rows) and `cleanFieldValue` in lib/bhajanFields.ts
+ * turns a blank edit into null, so `not: null` is the same test as `.trim()`.
+ */
+export const BHAJANS_TAG = 'masterlist';
+
+const loadBhajans = unstable_cache(
+  async () => {
+    const [bhajans, withLyrics, deities] = await Promise.all([
+      prisma.bhajan.findMany({
+        select: {
+          id: true,
+          title: true,
+          raga: true,
+          language: true,
+          tempo: true,
+          level: true,
+          beat: true,
+          audio: true,
+          referenceGentsPitch: true,
+          referenceLadiesPitch: true,
+          deities: { select: { deity: { select: { name: true } } } },
+        },
+      }),
+      prisma.bhajan.findMany({ where: { lyrics: { not: null } }, select: { id: true } }),
+      prisma.deity.findMany({ orderBy: { name: 'asc' }, select: { name: true } }),
+    ]);
+
+    return {
+      bhajans: bhajans as MasterlistRow[],
+      lyricIds: withLyrics.map((b) => b.id),
+      deityNames: deities.map((d) => d.name),
+    };
+  },
+  ['masterlist-rows'],
+  { tags: [BHAJANS_TAG], revalidate: 3600 },
+);
+
+/**
+ * What has been sung, and when. NOT cached across requests.
+ *
+ * This changes every time somebody rosters a bhajan, and "days since last sung"
+ * is what floats a bhajan back up the suggestions — a stale answer here would
+ * keep proposing something the group sang on Thursday. It is 765 rows and one
+ * round trip, so there is nothing to gain by risking it.
+ *
+ * Slots rather than an aggregate: `groupBy` cannot reach through the relation to
+ * the session's date, and the date is the part that matters. There used to be a
+ * `groupBy` here as well, computing counts that were thrown away on the next
+ * line with `void sungStats` — a whole round trip for nothing.
+ */
+const loadSungHistory = cache(async () => {
+  const slots = await prisma.sessionSlot.findMany({
+    where: { bhajanId: { not: null }, session: LIVE_SESSION },
+    select: { bhajanId: true, session: { select: { date: true } } },
+  });
 
   const timesSung = new Map<string, number>();
   const lastSung = new Map<string, Date>();
@@ -106,14 +156,23 @@ const loadMasterlist = cache(async () => {
     const current = lastSung.get(s.bhajanId);
     if (!current || s.session.date > current) lastSung.set(s.bhajanId, s.session.date);
   }
+  return { timesSung, lastSung };
+});
 
-  return {
-    bhajans: bhajans as MasterlistRow[],
-    hasLyrics: new Set(withLyrics.map((b) => b.id)),
-    timesSung,
-    lastSung,
-    deityNames: deities.map((d) => d.name),
-  };
+/**
+ * Both halves, once per request.
+ *
+ * `cache` from React memoises for the life of ONE request — the same trick
+ * lib/auth.ts uses on the signed-in singer. /build and /explore each want the
+ * facet list AND the candidate pool, and both are derived from these same rows,
+ * so without this they would each be read twice.
+ */
+const loadMasterlist = cache(async () => {
+  const [{ bhajans, lyricIds, deityNames }, { timesSung, lastSung }] = await Promise.all([
+    loadBhajans(),
+    loadSungHistory(),
+  ]);
+  return { bhajans, hasLyrics: new Set(lyricIds), timesSung, lastSung, deityNames };
 });
 
 const distinct = (values: ReadonlyArray<string | null>) =>

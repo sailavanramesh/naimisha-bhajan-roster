@@ -53,12 +53,22 @@ rather than in the code.
   worker is an app that cannot update itself.
 - `LOG_QUERIES=1` turns on Prisma statement logging (`lib/db.ts`), for counting
   a page's round trips rather than guessing at them.
-- **The masterlist is read ONCE per request**, by `loadMasterlist` in
-  `lib/candidateQueries.ts`, memoised with React `cache` the same way
-  `getSignedInSinger` is. `/build` and `/explore` each want both the facet list
-  and the candidate pool, and both come out of the same 3,607 rows. Never select
-  `lyrics` to ask whether a bhajan has any — it is 0.72 MB of Text across the
-  table, and the answer is a list of ids.
+- **The masterlist is cached, not re-read.** `lib/candidateQueries.ts` splits it
+  in two: `loadBhajans` (3,607 rows, `unstable_cache`, tag `masterlist`,
+  one-hour backstop) and `loadSungHistory` (765 rows, per-request only, because
+  rostering changes it and stale "last sung" would re-propose Thursday's
+  bhajans). `loadMasterlist` joins them once per request with React `cache`, the
+  same way `getSignedInSinger` works.
+
+  Measured 2026-08-21: that read WAS both pages. Rendering one bhajan instead of
+  fifty — 78 KB against 306 KB — changed `/explore` by nothing, because the
+  fixed part is all of it. **Anything editing a bhajan must
+  `revalidateTag(BHAJANS_TAG)`**; the three app write paths do. The seed and
+  backfill scripts cannot, so for them the hour is the mechanism — or restart
+  the app.
+
+  Never select `lyrics` to ask whether a bhajan has any: it is 0.72 MB of Text
+  across the table, and the answer is a list of ids.
 
 ## Commands
 
