@@ -94,6 +94,8 @@ export default async function BhajanPage({
     where: { id },
     include: {
       deities: { include: { deity: true } },
+      // Through the join table, never the raw `songTags` string (CLAUDE.md).
+      tags: { include: { tag: { select: { name: true } } } },
       // What the group has corrected, and what it replaced.
       fieldEdits: { select: { field: true, sourceValue: true, editedBy: true } },
     },
@@ -276,6 +278,31 @@ export default async function BhajanPage({
               bhajan, plus media for many — all of it was previously stored and
               never surfaced. Opened in a new tab so the roster is not lost. */}
           <ResourceLinks bhajan={bhajan} />
+
+          {/*
+            The bhajan's tags, and the only place in the app they are visible.
+            Sailavan asked how to search by tag; the honest answer was that you
+            could not, and that even once you could you would have no way to
+            learn a tag's name. Each one is a link into the filtered list, so a
+            tag is both an answer and a way to find more like it.
+          */}
+          {bhajan.tags.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs text-on-surface-muted">Tags</span>
+              {bhajan.tags
+                .map((x) => x.tag.name)
+                .sort((a, b) => a.localeCompare(b))
+                .map((name) => (
+                  <Link
+                    key={name}
+                    href={`/bhajans?tag=${encodeURIComponent(name)}`}
+                    className="rounded-full border border-rule-surface px-2 py-0.5 text-[11px] text-on-surface-muted transition-colors hover:border-brass/50 hover:text-on-surface"
+                  >
+                    {name}
+                  </Link>
+                ))}
+            </div>
+          ) : null}
 
           {/*
             The group's OWN recording, to learn the bhajan from.

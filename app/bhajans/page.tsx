@@ -11,13 +11,14 @@ export const dynamic = "force-dynamic";
 export default async function BhajansPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; deity?: string; lang?: string }>;
+  searchParams: Promise<{ q?: string; deity?: string; lang?: string; tag?: string }>;
 }) {
   const sp = await searchParams;
 
   const q = (sp?.q ?? "").trim();
   const deity = (sp?.deity ?? "").trim();
   const lang = (sp?.lang ?? "").trim();
+  const tag = (sp?.tag ?? "").trim();
 
   // Build filter
   const where: Prisma.BhajanWhereInput = {};
@@ -27,6 +28,10 @@ export default async function BhajansPage({
       { lyrics: { contains: q, mode: "insensitive" } },
       { meaning: { contains: q, mode: "insensitive" } },
       { raga: { contains: q, mode: "insensitive" } },
+      // Typing "karaoke" should find the karaoke ones without having to know
+      // there is a dropdown for it. Matched through the join table, never
+      // against the raw `songTags` string — see CLAUDE.md on multi-values.
+      { tags: { some: { tag: { name: { contains: q, mode: "insensitive" } } } } },
     ];
   }
   if (deity) where.deities = { some: { deity: { name: deity } } };
@@ -40,8 +45,15 @@ export default async function BhajansPage({
    * query time. Normalising it properly is logged in PROGRESS.md.
    */
   if (lang) where.language = { contains: lang, mode: "insensitive" };
+  /*
+   * Tags come from the masterlist's `song_tags` column, normalised into Tag and
+   * BhajanTag at seed time: 49 tags over 3,212 links. An exact name here, not a
+   * containment match, because the dropdown offers real tag names — and
+   * "music" would otherwise sweep up both `sheet-music` and `lead-music`.
+   */
+  if (tag) where.tags = { some: { tag: { name: tag } } };
 
-  const [items, deities, langs] = await Promise.all([
+  const [items, deities, langs, tags] = await Promise.all([
     prisma.bhajan.findMany({
       where,
       orderBy: { title: "asc" },
@@ -57,6 +69,17 @@ export default async function BhajansPage({
       distinct: ["language"],
       select: { language: true },
       orderBy: { language: "asc" },
+    }),
+    /*
+     * Ordered by how much each tag is used, not alphabetically, and the count is
+     * shown. The masterlist's tags were split on whitespace at seed time, so
+     * "ribbons of love" became three tags and the tail of this list is wreckage
+     * — `of`, `one`, `my`. Putting the useful ones first makes the list usable
+     * without inventing a rule about which of the group's own words to hide.
+     */
+    prisma.tag.findMany({
+      select: { name: true, _count: { select: { bhajans: true } } },
+      orderBy: [{ bhajans: { _count: "desc" } }, { name: "asc" }],
     }),
   ]);
 
@@ -89,7 +112,7 @@ export default async function BhajansPage({
           </div>
           <CardTitle>Bhajans</CardTitle>
           <div className="mt-2 text-sm text-on-surface-muted">
-            Search by title / lyrics / meaning / raga. Filter by deity or language.
+            Search by title / lyrics / meaning / raga / tag. Filter by deity, language or tag.
           </div>
         </CardHeader>
 
@@ -100,7 +123,7 @@ export default async function BhajansPage({
             submit on Enter, and the selects had no handler, so typing "shiva"
             and pressing Enter did nothing at all.
           */}
-          <form method="get" action="/bhajans" className="mb-4 grid gap-2 md:grid-cols-[1fr_auto_auto_auto]">
+          <form method="get" action="/bhajans" className="mb-4 grid gap-2 md:grid-cols-[1fr_auto_auto_auto_auto]">
             <Input name="q" defaultValue={q} placeholder="Search…" />
 
             <select
@@ -128,9 +151,22 @@ export default async function BhajansPage({
                 </option>
               ))}
             </select>
+            <select
+              name="tag"
+              defaultValue={tag}
+              className="w-full rounded-[12px] border px-3 py-2 text-sm bg-panel"
+            >
+              <option value="">All tags</option>
+              {tags.map((x) => (
+                <option key={x.name} value={x.name}>
+                  {x.name} ({x._count.bhajans})
+                </option>
+              ))}
+            </select>
+
             <div className="flex gap-2">
               <Button type="submit" variant="primary">Search</Button>
-              {q || deity || lang ? (
+              {q || deity || lang || tag ? (
                 <Link href="/bhajans">
                   <Button type="button">Clear</Button>
                 </Link>
@@ -141,7 +177,7 @@ export default async function BhajansPage({
           <div className="mb-2 text-sm text-on-surface-muted">
             Showing {items.length} result{items.length === 1 ? "" : "s"}
             {items.length === 500 ? " (capped at 500 — narrow the search)" : ""}
-            {q || deity || lang ? " for the current filters" : ""}
+            {q || deity || lang || tag ? " for the current filters" : ""}
           </div>
 
           <div className="grid gap-2">
