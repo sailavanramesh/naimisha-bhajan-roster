@@ -64,3 +64,54 @@ export function excerpt(text: string, query: string, radius = 40): string {
   const end = Math.min(text.length, at + query.trim().length + radius);
   return `${start > 0 ? "…" : ""}${text.slice(start, end)}${end < text.length ? "…" : ""}`;
 }
+
+/** One place a search matched, ready to print under a result. */
+export type MatchPreview = {
+  /** What to call the field on screen, e.g. "lyrics". */
+  label: string;
+  /** A window around the match, already trimmed to something printable. */
+  text: string;
+};
+
+/**
+ * Where a result matched, when the reason is not the title.
+ *
+ * A bhajan search runs over the title, lyrics, meaning, raga, composer and
+ * tags, so a row can be returned for a reason that appears nowhere on it: a
+ * word deep in the lyrics of a bhajan whose title looks unrelated. The row then
+ * looks like a mistake.
+ *
+ * Ordered by how much explaining a hit needs rather than alphabetically. Lyrics
+ * and meaning are long and invisible on the row, so they come first; raga is
+ * already printed beside the title, so it comes last and only speaks when
+ * nothing else did.
+ *
+ * `fields` is searched in order and the FIRST hit wins. One line, like the
+ * session card's `notes:` line — a result explaining itself three times over is
+ * worse than one that explains itself once.
+ */
+export function firstMatch(
+  fields: ReadonlyArray<{ label: string; text: string | null | undefined }>,
+  query: string | null | undefined,
+  radius = 32,
+): MatchPreview | null {
+  const q = (query ?? "").trim();
+  if (!q) return null;
+
+  for (const field of fields) {
+    const text = (field.text ?? "").trim();
+    if (!text || !matches(text, q)) continue;
+    return { label: field.label, text: excerpt(collapse(text), q, radius) };
+  }
+  return null;
+}
+
+/**
+ * Newlines and runs of spaces to single spaces.
+ *
+ * Lyrics are stored with the line breaks they were sung with, and a two-line
+ * excerpt breaks the one-line row it is printed in.
+ */
+function collapse(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}

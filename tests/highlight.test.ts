@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { excerpt, matches, splitOnMatch } from "@/lib/highlight";
+import { excerpt, firstMatch, matches, splitOnMatch } from "@/lib/highlight";
 
 const shown = (text: string, q: string) =>
   splitOnMatch(text, q)
@@ -64,5 +64,69 @@ describe("excerpt", () => {
 
   it("leaves a short note alone", () => {
     expect(excerpt("Guru Purnima", "purnima", 40)).toBe("Guru Purnima");
+  });
+});
+
+/**
+ * A bhajan search matches on title, lyrics, meaning, raga, composer and tags,
+ * so a row can be returned for a reason that appears nowhere on it. These pin
+ * the line that explains why.
+ */
+describe("firstMatch", () => {
+  const FIELDS = (over: Partial<Record<string, string | null>> = {}) => [
+    { label: "lyrics", text: over.lyrics ?? null },
+    { label: "meaning", text: over.meaning ?? null },
+    { label: "composer", text: over.composer ?? null },
+    { label: "tag", text: over.tag ?? null },
+    { label: "raga", text: over.raga ?? null },
+  ];
+
+  it("names the field it matched in", () => {
+    const m = firstMatch(FIELDS({ composer: "Purandara Dasa" }), "purandara");
+    expect(m).toEqual({ label: "composer", text: "Purandara Dasa" });
+  });
+
+  it("prefers the field that needs explaining most", () => {
+    // Both hold "sai". Lyrics is invisible on the row; raga is already printed
+    // beside the title, so it must not win.
+    const m = firstMatch(FIELDS({ lyrics: "Sai Ram Sai Ram", raga: "Saindhavi" }), "sai");
+    expect(m?.label).toBe("lyrics");
+  });
+
+  it("falls through to raga when nothing else matched", () => {
+    expect(firstMatch(FIELDS({ raga: "Kalyani / Yaman" }), "yaman")?.label).toBe("raga");
+  });
+
+  it("returns null with no query, so the line simply does not appear", () => {
+    expect(firstMatch(FIELDS({ lyrics: "anything" }), "")).toBeNull();
+    expect(firstMatch(FIELDS({ lyrics: "anything" }), null)).toBeNull();
+  });
+
+  it("returns null when nothing matched", () => {
+    expect(firstMatch(FIELDS({ lyrics: "Rama Raghava" }), "krishna")).toBeNull();
+  });
+
+  it("skips blank and whitespace-only fields", () => {
+    expect(firstMatch(FIELDS({ lyrics: "   ", meaning: "Sai is here" }), "sai")?.label).toBe("meaning");
+  });
+
+  it("windows a long match instead of printing the whole lyric", () => {
+    const long = "la ".repeat(200) + "Govinda" + " la".repeat(200);
+    const m = firstMatch(FIELDS({ lyrics: long }), "govinda");
+    expect(m!.text.length).toBeLessThan(120);
+    expect(m!.text.toLowerCase()).toContain("govinda");
+    expect(m!.text.startsWith("…")).toBe(true);
+    expect(m!.text.endsWith("…")).toBe(true);
+  });
+
+  it("collapses the newlines lyrics are stored with, so the row stays one line", () => {
+    const m = firstMatch(FIELDS({ lyrics: "Bhajo\n  Radhe\n\nGovinda" }), "radhe");
+    expect(m!.text).not.toMatch(/[\n\r]/);
+    expect(m!.text).toContain("Bhajo Radhe Govinda");
+  });
+
+  it("survives a regex character in the query", () => {
+    expect(() => firstMatch(FIELDS({ lyrics: "sung at C# today" }), "C#")).not.toThrow();
+    expect(firstMatch(FIELDS({ lyrics: "sung at C# today" }), "C#")?.label).toBe("lyrics");
   });
 });

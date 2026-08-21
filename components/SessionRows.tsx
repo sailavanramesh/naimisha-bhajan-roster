@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { splitOnMatch } from "@/lib/highlight";
+import { Marked } from "@/components/Marked";
 
 export type SessionRow = {
   singer: string;
@@ -81,30 +81,6 @@ export function SessionRows({
   );
 }
 
-/**
- * The matching part of a string, marked.
- *
- * A tinted background rather than the browser's default yellow <mark>, which
- * on this page reads as a warning.
- */
-export function Marked({ text, query }: { text: string; query?: string | null }) {
-  const pieces = splitOnMatch(text, query);
-  if (pieces.length === 1 && !pieces[0].hit) return <>{text}</>;
-  return (
-    <>
-      {pieces.map((p, i) =>
-        p.hit ? (
-          <mark key={i} className="rounded-[3px] bg-brass/25 px-0.5 text-on-surface">
-            {p.text}
-          </mark>
-        ) : (
-          <span key={i}>{p.text}</span>
-        ),
-      )}
-    </>
-  );
-}
-
 /** The date heading and count that sit above the rows. */
 export function SessionRowsHeader({
   href,
@@ -130,3 +106,7 @@ export function SessionRowsHeader({
     inner
   );
 }
+
+// Re-exported: this is where it used to live, and app/roster/page.tsx
+// still reaches for it alongside SessionRows.
+export { Marked };

@@ -3,6 +3,8 @@ import Link from "next/link";
 import { KeepScroll } from "@/components/KeepScroll";
 import { Button } from "@/components/ui";
 import { DeitySymbols } from "@/components/DeitySymbol";
+import { Marked } from "@/components/Marked";
+import { firstMatch, matches } from "@/lib/highlight";
 import { prisma } from "@/lib/db";
 import { Prisma } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle, Input } from "@/components/ui";
@@ -59,7 +61,11 @@ export default async function BhajansPage({
       where,
       orderBy: { title: "asc" },
       take: 500,
-      include: { deities: { include: { deity: true } } },
+      include: {
+        deities: { include: { deity: true } },
+        // Needed to say "tag: karaoke" under a row that matched on one.
+        tags: { include: { tag: { select: { name: true } } } },
+      },
     }),
     // The raw `deity` column holds combined strings like
     // "Ganesha, Rama, Krishna, Vittala, Subrahmanya, Guru", so a distinct query
@@ -190,17 +196,63 @@ export default async function BhajansPage({
               >
                 <div className="flex items-center gap-2">
                   <DeitySymbols deities={b.deities.map((d) => d.deity.name)} size={16} />
-                  <span className="text-sm font-semibold">{b.title}</span>
+                  <span className="text-sm font-semibold">
+                    <Marked text={b.title} query={q} />
+                  </span>
                 </div>
                 <div className="mt-1 text-xs text-on-surface-muted">
-                  {[
-                    b.deity ? `Deity: ${b.deity}` : null,
-                    b.language ? `Lang: ${b.language}` : null,
-                    b.raga ? `Raga: ${b.raga}` : null,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
+                  {b.deity ? <>Deity: {b.deity}</> : null}
+                  {b.deity && (b.language || b.raga) ? " · " : null}
+                  {b.language ? <>Lang: {b.language}</> : null}
+                  {b.language && b.raga ? " · " : null}
+                  {/* Marked because raga is one of the fields the box searches,
+                      and a row returned for its raga should say so where the
+                      raga already is rather than in a second line. */}
+                  {b.raga ? (
+                    <>
+                      Raga: <Marked text={b.raga} query={q} />
+                    </>
+                  ) : null}
                 </div>
+
+                {/*
+                  Why this row is here, when the reason is not the title.
+                  Sailavan, 2026-08-21: "if something matches in the bhajan
+                  search it should give a preview of where it matched, like we
+                  had when searching in sessions".
+
+                  Same shape as the session card's `notes:` line. The title and
+                  raga above are marked in place, so this only speaks when the
+                  hit was somewhere invisible — a word deep in a lyric, a
+                  composer, a tag.
+                */}
+                {(() => {
+                  const hit = firstMatch(
+                    [
+                      { label: "lyrics", text: b.lyrics },
+                      { label: "meaning", text: b.meaning },
+                      { label: "composer", text: b.composer },
+                      {
+                        label: "tag",
+                        // Only the tags that actually matched. Joining all of
+                        // them would print "sheet-music, karaoke" to explain a
+                        // search for "karaoke", which explains it worse.
+                        text: b.tags
+                          .map((x) => x.tag.name)
+                          .filter((name) => matches(name, q))
+                          .join(", "),
+                      },
+                    ],
+                    // Nothing to explain when the title already carries the hit.
+                    matches(b.title, q) ? "" : q,
+                  );
+                  if (!hit) return null;
+                  return (
+                    <p className="mt-1 text-[11px] italic text-on-surface-muted">
+                      {hit.label}: <Marked text={hit.text} query={q} />
+                    </p>
+                  );
+                })()}
               </Link>
             ))}
           </div>
