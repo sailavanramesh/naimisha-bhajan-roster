@@ -15,7 +15,15 @@
  * too, and that is a bigger change than this one.
  */
 
-export type BhajanFieldKind = "line" | "block";
+/**
+ * How a field is edited.
+ *
+ * `choice` is a dropdown of the values the masterlist already holds, plus a way
+ * to type one it does not — see lib/bhajanChoices.ts for where the options come
+ * from, and note that pitch takes its options from the PitchLabel table
+ * instead, being a genuinely closed set.
+ */
+export type BhajanFieldKind = "line" | "block" | "choice";
 
 export type EditableField = {
   /** The Prisma field name. */
@@ -29,11 +37,16 @@ export type EditableField = {
 
 export const EDITABLE_FIELDS: readonly EditableField[] = [
   { name: "title", label: "Title", kind: "line", hint: "Must stay unique across the masterlist." },
-  { name: "raga", label: "Raga", kind: "line", hint: "Dual names as \"Kalyani / Yaman\"." },
-  { name: "beat", label: "Beat / taal", kind: "line" },
-  { name: "tempo", label: "Tempo", kind: "line" },
-  { name: "level", label: "Level", kind: "line" },
-  { name: "language", label: "Language", kind: "line" },
+  { name: "raga", label: "Raga", kind: "choice", hint: "Dual names as \"Kalyani / Yaman\"." },
+  { name: "beat", label: "Beat / taal", kind: "choice" },
+  { name: "tempo", label: "Tempo", kind: "choice" },
+  { name: "level", label: "Level", kind: "choice" },
+  {
+    name: "language",
+    label: "Language",
+    kind: "choice",
+    hint: "A bhajan in several is one value, comma-joined.",
+  },
   {
     name: "composer",
     label: "Composer",
@@ -43,10 +56,10 @@ export const EDITABLE_FIELDS: readonly EditableField[] = [
   {
     name: "referenceGentsPitch",
     label: "Gents pitch",
-    kind: "line",
-    hint: 'Written like "2 Pancham / D". The note after the slash is the Sa.',
+    kind: "choice",
+    hint: "The note after the slash is the drone, not always the Sa.",
   },
-  { name: "referenceLadiesPitch", label: "Ladies pitch", kind: "line" },
+  { name: "referenceLadiesPitch", label: "Ladies pitch", kind: "choice" },
   { name: "notesRange", label: "Range", kind: "line" },
   { name: "songTags", label: "Tags", kind: "line" },
   { name: "singers", label: "Sung by", kind: "line" },

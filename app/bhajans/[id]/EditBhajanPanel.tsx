@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui";
 import { EDITABLE_FIELDS, describeEdit } from "@/lib/bhajanFields";
+import { ChoiceField } from "@/components/ChoiceInput";
 import { updateBhajanFields, revertBhajanField } from "./editActions";
 
 export type FieldEdit = { field: string; sourceValue: string | null; editedBy: string | null };
@@ -24,16 +25,36 @@ export function EditBhajanPanel({
   bhajanId,
   values,
   edits,
+  options,
 }: {
   bhajanId: string;
   values: Record<string, string | null>;
   edits: FieldEdit[];
+  /**
+   * Choices per `kind: "choice"` field. The values the masterlist already holds
+   * for raga, beat, tempo, level and language; the 24 real labels for the two
+   * pitches. See lib/bhajanChoices.ts.
+   */
+  options: Record<string, readonly string[]>;
 }) {
   const router = useRouter();
   const [draft, setDraft] = useState<Record<string, string>>(() =>
     Object.fromEntries(EDITABLE_FIELDS.map((f) => [f.name, values[f.name] ?? ""])),
   );
   const [pending, startTransition] = useTransition();
+  /*
+   * Fields the person has explicitly chosen to type a new value into.
+   *
+   * Needed as its own bit of state because "typing something new" and "blank"
+   * both leave the draft empty — without it, picking "Something else…" and then
+   * clearing the box would snap the dropdown back to "not recorded" mid-edit.
+   *
+   * A value already stored that is NOT one of the options puts the field in the
+   * same mode without anybody asking, which is how a one-off value the
+   * masterlist arrived with stays visible and editable rather than being
+   * silently replaced by the nearest match.
+   */
+  const [typing, setTyping] = useState<ReadonlySet<string>>(new Set());
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null);
 
   const editedBy = new Map(edits.map((e) => [e.field, e]));
@@ -129,6 +150,22 @@ export function EditBhajanPanel({
                     value={draft[f.name] ?? ""}
                     onChange={(e) => setDraft((d) => ({ ...d, [f.name]: e.target.value }))}
                     className="w-full rounded-[10px] border border-rule-surface bg-field px-2 py-1.5 text-sm text-on-surface"
+                  />
+                ) : f.kind === "choice" ? (
+                  <ChoiceField
+                    name={f.name}
+                    value={draft[f.name] ?? ""}
+                    options={options[f.name] ?? []}
+                    typing={typing.has(f.name)}
+                    onValue={(v) => setDraft((d) => ({ ...d, [f.name]: v }))}
+                    onTyping={(on) =>
+                      setTyping((s) => {
+                        const next = new Set(s);
+                        if (on) next.add(f.name);
+                        else next.delete(f.name);
+                        return next;
+                      })
+                    }
                   />
                 ) : (
                   <input

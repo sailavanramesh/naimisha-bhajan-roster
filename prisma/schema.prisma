@@ -312,6 +312,27 @@ model Bhajan {
   /// Who uploaded it, by name, so a recording has somebody to ask about it.
   trackUploadedBy String?
 
+  /// The same recording with the voice taken out, for practising against.
+  ///
+  /// Asked for 2026-08-21: "if we upload the original track, you could create a
+  /// toggle button that 'adds' the vocals back in (its just switching between
+  /// the vocal track and the karaoke track)".
+  ///
+  /// THE PAIR MUST BE THE SAME RECORDING. Confirmed with Sailavan: the karaoke
+  /// is the original with the vocals stripped, so both share one timeline and
+  /// the toggle can swap which one you hear without moving the playhead. Two
+  /// different performances would not line up and the toggle would land in the
+  /// wrong bar — components/PracticePlayer.tsx says so on screen when the two
+  /// durations disagree, rather than pretending.
+  ///
+  /// A second set of columns rather than a BhajanTrack table, his call: this
+  /// feature needs exactly two files and nothing more.
+  karaokeTrackFile       String?
+  karaokeTrackName       String?
+  karaokeTrackBytes      Int?
+  karaokeTrackUploadedAt DateTime?
+  karaokeTrackUploadedBy String?
+
   /// Generated column maintained by Postgres — see the migration. Not
   /// selectable through the client; search via $queryRaw against the GIN index.
   searchVector Unsupported("tsvector")?

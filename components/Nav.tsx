@@ -199,11 +199,36 @@ export function Nav({ role = "viewer", isDev = false }: { role?: string; isDev?:
           expanded ? "lg:w-64" : "lg:w-20"
         )}
       >
-        <div className="flex items-center justify-between gap-2 px-1 pb-3">
-          <div className={clsx("flex items-center gap-2 font-display text-sm font-semibold text-on-ground", expanded ? "opacity-100" : "opacity-0 pointer-events-none")}>
-            <Yantra size={22} className="text-brass" variant={isDev ? "dev" : "brand"} />
-            Naimiṣa Roster
-          </div>
+        {/*
+          The title is REMOVED when collapsed, not just made transparent.
+
+          It used to be `opacity-0 pointer-events-none`, which hides a thing but
+          does not un-lay-it-out: it still claimed about 180px. The rail is 80px,
+          so `justify-between` put the 44px toggle past the right edge, where
+          `lg:overflow-y-auto` clipped it — and a collapsed sidebar with its
+          expand button clipped off is a sidebar that can never be expanded
+          again. Sailavan hit exactly that in production on 2026-08-21: "the nav
+          bar is missing the 3 lines hamburger symbol … and when i click on it it
+          doesn't show the full text and expand out from the left hand side."
+
+          It looked fine in dev only because `naimisha_nav_expanded` is stored
+          per ORIGIN, and his dev copy happened to hold "1".
+
+          There is no width transition to protect, so a conditional render is
+          honest where the opacity trick was not.
+        */}
+        <div
+          className={clsx(
+            "flex items-center gap-2 px-1 pb-3",
+            expanded ? "justify-between" : "justify-center"
+          )}
+        >
+          {expanded ? (
+            <div className="flex min-w-0 items-center gap-2 font-display text-sm font-semibold text-on-ground">
+              <Yantra size={22} className="text-brass" variant={isDev ? "dev" : "brand"} />
+              <span className="truncate">Naimiṣa Roster</span>
+            </div>
+          ) : null}
 
           <button
             type="button"
