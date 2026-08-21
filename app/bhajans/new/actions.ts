@@ -3,7 +3,8 @@
 import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth";
 import { BhajanOrigin } from "@prisma/client";
-import { revalidatePath } from "next/cache";
+import { BHAJANS_TAG } from "@/lib/candidateQueries";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
@@ -18,6 +19,7 @@ const NewBhajan = z.object({
   deity: optional,
   language: optional,
   raga: optional,
+  composer: optional,
   beat: optional,
   level: optional,
   tempo: optional,
@@ -47,7 +49,7 @@ export async function createBhajan(formData: FormData): Promise<void> {
 
   const raw = Object.fromEntries(
     [
-      "title", "deity", "language", "raga", "beat", "level", "tempo",
+      "title", "deity", "language", "raga", "composer", "beat", "level", "tempo",
       "referenceGentsPitch", "referenceLadiesPitch", "url", "video", "audio",
       "lyrics", "meaning", "originNote",
     ].map((k) => [k, String(formData.get(k) ?? "")]),
@@ -93,5 +95,8 @@ export async function createBhajan(formData: FormData): Promise<void> {
   });
 
   revalidatePath("/bhajans");
+  // A new bhajan has to appear in the pool, and its deity and language in the
+  // filter chips. Both read the masterlist from a cache.
+  revalidateTag(BHAJANS_TAG);
   redirect(`/bhajans/${created.id}`);
 }

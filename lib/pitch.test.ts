@@ -493,3 +493,51 @@ describe('pitchRank / lowestPitch', () => {
     expect(lowestPitch(['3 Pancham / E'])).toBe('3 Pancham / E');
   });
 });
+
+/**
+ * A half-semitone offset used to produce no suggestion at all.
+ *
+ * The median of an even number of samples is the average of the middle two, so
+ * a singer split between 0 and +1 has a median of exactly 0.5. Nothing in the
+ * label table is half way between two pitches, so every candidate missed and
+ * the bare-note fallback returned NOTE_NAMES[6.5] — undefined. On production,
+ * 2026-08-21, that was 4 of the 27 per-raga profiles: a quarter of raga-based
+ * predictions showing nothing.
+ */
+describe('transposeLabel with a fractional offset', () => {
+  const LABELS = [
+    '1 Madhyam / F', '1.5 Madhyam / F#', '2 Madhyam / G', '2.5 Madhyam / G#',
+    '3 Madhyam / A', '4 Madhyam / A#', '4.5 Madhyam / B', '5 Madhyam / C',
+    '5.5 Madhyam / C#', '6 Madhyam / D', '6.5 Madhyam / D#', '7 Madhyam / E',
+    '1 Pancham / C', '1.5 Pancham / C#', '2 Pancham / D', '2.5 Pancham / D#',
+    '3 Pancham / E', '4 Pancham / F', '4.5 Pancham / F#', '5 Pancham / G',
+    '5.5 Pancham / G#', '6 Pancham / A', '6.5 Pancham / A#', '7 Pancham / B',
+  ];
+
+  it('always returns a real label, never undefined', () => {
+    for (const offset of [0.5, 1.5, -0.5, -1.5, 2.5, 0.25, 0.75]) {
+      const out = transposeLabel('4 Madhyam / A#', offset, LABELS);
+      expect(typeof out, `offset ${offset}`).toBe('string');
+      expect(LABELS, `offset ${offset}`).toContain(out);
+    }
+  });
+
+  it('rounds a half DOWN, to the lower pitch — the safe side of a guess', () => {
+    // Sa of 4 Madhyam / A# is F. +0.5 must not become F#.
+    expect(transposeLabel('4 Madhyam / A#', 0.5, LABELS)).toBe('4 Madhyam / A#');
+    expect(transposeLabel('4 Madhyam / A#', 1.5, LABELS)).toBe('4.5 Madhyam / B');
+    expect(transposeLabel('4 Madhyam / A#', -0.5, LABELS)).toBe('3 Madhyam / A');
+  });
+
+  it('leaves whole offsets exactly as they were', () => {
+    expect(transposeLabel('4 Madhyam / A#', 0, LABELS)).toBe('4 Madhyam / A#');
+    expect(transposeLabel('4 Madhyam / A#', 1, LABELS)).toBe('4.5 Madhyam / B');
+    expect(transposeLabel('4 Madhyam / A#', -1, LABELS)).toBe('3 Madhyam / A');
+    expect(transposeLabel('1 Pancham / C', 2, LABELS)).toBe('2 Pancham / D');
+  });
+
+  it('stays in the reference series, so the group reads its own vocabulary', () => {
+    expect(transposeLabel('4 Madhyam / A#', 1, LABELS)).toMatch(/Madhyam/);
+    expect(transposeLabel('1 Pancham / C', 1, LABELS)).toMatch(/Pancham/);
+  });
+});

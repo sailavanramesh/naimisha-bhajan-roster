@@ -450,7 +450,11 @@ function ItemCard({
               {draft.kind === "song" ? (
                 <div className="mt-2 grid gap-1">
                   <span className="text-xs text-on-surface-muted">Track</span>
-                  <TrackControl itemId={draft.id} initial={draft.track} canEdit={canEdit} />
+                  <TrackControl
+                    endpoint={`/api/program/item/${draft.id}/track`}
+                    initial={draft.track}
+                    canEdit={canEdit}
+                  />
                 </div>
               ) : null}
             </div>

@@ -166,6 +166,51 @@ export function semitoneDelta(
   return d > 6 ? d - 12 : d;
 }
 
+/**
+ * The gap between two labels AS THE GROUP READS THEM — on the written note,
+ * ignoring which series each is in.
+ *
+ * This is the one to measure a singer's offset with. `semitoneDelta` above is a
+ * true pitch interval and is the wrong tool for it, because the history mixes
+ * the two series and the sheet was filled in by comparing letters.
+ *
+ * Sailavan, 2026-08-21, on a prediction of 7 Madhyam from a reference of
+ * 4 Madhyam: "If they generally shift 1 semitone in Pancham, the same rule
+ * applies in Madhyam. We should use all Madhyam and Pancham data to calculate
+ * it, but it shouldn't go from 4 madhyam to 7 madhyam."
+ *
+ * He is right, and the data says why. Prithvi's fourteen Pahadi rows:
+ *
+ *   2 Madhyam / G    -> 2.5 Madhyam / G#    letter +1    Sa +1
+ *   1.5 Madhyam / F# -> 5 Pancham / G       letter +1    Sa +6
+ *   2 Madhyam / G    -> 5.5 Pancham / G#    letter +1    Sa +6
+ *
+ * He shifts +1 every time. Every +6 is a row whose reference is Madhyam and
+ * whose sung pitch was written in Pancham — the Madhyam five subtracted from
+ * one side of the comparison and not the other. Eight of his fourteen Pahadi
+ * rows are like that, so the MEDIAN went to +6 and the prediction with it.
+ *
+ * This is the tension already recorded against `NOTE_ABOVE_SA`, which says the
+ * likeliest account is that "the source sheet was filled in comparing letters,
+ * whatever the shruti box does". So: read the history the way it was written.
+ * Nothing here changes what the tanpura plays — that is still `saOf`.
+ *
+ * Measured across production, 2026-08-21: 52 of 681 comparisons are
+ * cross-series. Ten of the eleven singers' overall medians are identical either
+ * way; the difference bites only in the small per-raga samples, where a handful
+ * of cross-series rows can be the majority.
+ */
+export function writtenDelta(
+  actual?: string | null,
+  reference?: string | null,
+): number | null {
+  const a = parsePitchLabel(actual);
+  const r = parsePitchLabel(reference);
+  if (!a || !r) return null;
+  const d = (PITCH_CLASS[a.note] - PITCH_CLASS[r.note] + 12) % 12;
+  return d > 6 ? d - 12 : d;
+}
+
 /** Tabla pitch for a given Sa: always Sa + 7 semitones (a fifth above). */
 export function tablaSemitone(sa: number): number {
   return (((sa + 7) % 12) + 12) % 12;
@@ -174,6 +219,14 @@ export function tablaSemitone(sa: number): number {
 /**
  * Tabla note for a pitch label, e.g. `1 Madhyam / F` -> `C`.
  * Returns null when the label has no parseable note.
+ *
+ * THE OLD RULE. The bare fifth, taking no account of the raga and no account of
+ * which drums the ashram actually owns — see CLAUDE.md rule 3. Nothing a player
+ * reads goes through here any more: the roster grid, the live view, the printed
+ * sheet and (from 2026-08-21) the shruti ladder all use `recommendTabla` in
+ * lib/tabla.ts. The one remaining caller is lib/pitchSuggestions.ts, which
+ * fills `SessionSlot.alternativeTablaPitch` — a stored column nothing displays.
+ * Prefer `recommendTabla` for anything anybody acts on.
  */
 export function tablaPitchOf(label?: string | null): NoteName | null {
   const sa = saOf(label);
@@ -257,7 +310,26 @@ export function transposeLabel(
 ): string | null {
   const sa = saOf(reference);
   if (sa === null) return null;
-  const target = (((sa + semitones) % 12) + 12) % 12;
+
+  /*
+   * Snap the shift to a whole semitone FIRST.
+   *
+   * `semitones` is usually a median offset, and the median of an even number of
+   * samples is the average of the middle two — so a singer with 14 rows split
+   * between 0 and +1 has a median of exactly 0.5. There is no pitch half way
+   * between two labels, so every lookup below missed, and the fallback returned
+   * `NOTE_NAMES[6.5]` — undefined. The caller got no suggestion at all, silently.
+   *
+   * Measured on production 2026-08-21: 4 of the 27 per-raga profiles that clear
+   * the sample bar had a half-semitone median, so a quarter of the raga-based
+   * predictions were showing nothing rather than a pitch.
+   *
+   * Halves round DOWN, to the lower pitch. That is the same choice
+   * lib/suggestedPitch.ts makes and for the same reason: a singer asked to sing
+   * below their usual is comfortable, one asked to sing above it may not reach.
+   */
+  const whole = Math.ceil(semitones - 0.5);
+  const target = (((sa + whole) % 12) + 12) % 12;
 
   const parsed = parsePitchLabel(reference);
   const candidates = available

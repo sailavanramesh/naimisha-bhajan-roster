@@ -102,6 +102,9 @@ export default async function NewBhajanPage() {
                 <Field label="Raga">
                   <Input name="raga" placeholder="e.g. Kalyani / Yaman" />
                 </Field>
+                <Field label="Composer">
+                  <Input name="composer" placeholder="if it is known" />
+                </Field>
                 <Field label="Beat / taal">
                   <Input name="beat" list="beats" placeholder="e.g. 8 Beat / Keherwa / Adi" />
                   <datalist id="beats">

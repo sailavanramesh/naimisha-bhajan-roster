@@ -10,6 +10,7 @@ import { sampleBhajans, DEFAULT_FRESHNESS_DAYS } from "@/lib/sessionBuilder";
 import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
 import { AddToList } from "@/components/AddToList";
+import { PendingLink } from "@/components/PendingLink";
 
 export const dynamic = "force-dynamic";
 
@@ -76,25 +77,30 @@ export default async function ExplorePage({ searchParams }: { searchParams: Prom
   const freshnessDays = Number(one(sp, "fresh") ?? DEFAULT_FRESHNESS_DAYS) || DEFAULT_FRESHNESS_DAYS;
   const sungBefore = (one(sp, "sung") as "any" | "known" | "new") ?? "any";
 
-  const [facets, singers, signedIn] = await Promise.all([
+  /*
+   * ONE wave. The pool used to be awaited after this batch, which made the page
+   * two round trips deep for no reason: what goes into the pool comes from the
+   * url, not from anything above it. Both it and the facets now come out of the
+   * one per-request read of the masterlist — see lib/candidateQueries.ts.
+   */
+  const [facets, singers, signedIn, pool] = await Promise.all([
     getFacetOptions(),
     prisma.singer.findMany({ orderBy: { name: "asc" }, select: { id: true, name: true } }),
     getSignedInSinger(),
+    getCandidatePool(
+      {
+        deities: list(sp, "deity"),
+        languages: sp.lang === undefined ? DEFAULT_LANGUAGES : list(sp, "lang"),
+        tempos: list(sp, "tempo"),
+        levels: list(sp, "level"),
+        sungBefore,
+      },
+      new Date(),
+    ),
   ]);
   // Signed in as a member: the server already knows whose list it is, so the
   // picker would be noise — and it could not change the outcome anyway.
   const pickSinger = !signedIn || can(role, "assignSingers");
-
-  const pool = await getCandidatePool(
-    {
-      deities: list(sp, "deity"),
-      languages: sp.lang === undefined ? DEFAULT_LANGUAGES : list(sp, "lang"),
-      tempos: list(sp, "tempo"),
-      levels: list(sp, "level"),
-      sungBefore,
-    },
-    new Date(),
-  );
 
   const picked = sampleBhajans(pool, { seed, count, freshnessDays });
 
@@ -190,9 +196,10 @@ export default async function ExplorePage({ searchParams }: { searchParams: Prom
 
             <div className="flex flex-wrap items-center gap-2">
               <Button type="submit" variant="primary">Apply</Button>
-              <Link href={href({ seed: nextSeed })} scroll={false}>
-                <Button type="button">Show me another set</Button>
-              </Link>
+              {/* Shows that it is working — see components/PendingLink.tsx. */}
+              <PendingLink href={href({ seed: nextSeed })} busyLabel="Finding another set…">
+                Show me another set
+              </PendingLink>
               <Link href="/explore">
                 <Button type="button">Reset</Button>
               </Link>

@@ -53,6 +53,22 @@ rather than in the code.
   worker is an app that cannot update itself.
 - `LOG_QUERIES=1` turns on Prisma statement logging (`lib/db.ts`), for counting
   a page's round trips rather than guessing at them.
+- **The masterlist is cached, not re-read.** `lib/candidateQueries.ts` splits it
+  in two: `loadBhajans` (3,607 rows, `unstable_cache`, tag `masterlist`,
+  one-hour backstop) and `loadSungHistory` (765 rows, per-request only, because
+  rostering changes it and stale "last sung" would re-propose Thursday's
+  bhajans). `loadMasterlist` joins them once per request with React `cache`, the
+  same way `getSignedInSinger` works.
+
+  Measured 2026-08-21: that read WAS both pages. Rendering one bhajan instead of
+  fifty — 78 KB against 306 KB — changed `/explore` by nothing, because the
+  fixed part is all of it. **Anything editing a bhajan must
+  `revalidateTag(BHAJANS_TAG)`**; the three app write paths do. The seed and
+  backfill scripts cannot, so for them the hour is the mechanism — or restart
+  the app.
+
+  Never select `lyrics` to ask whether a bhajan has any: it is 0.72 MB of Text
+  across the table, and the answer is a list of ids.
 
 ## Commands
 
@@ -130,9 +146,18 @@ This is the heart of the app. Get it wrong and everything downstream is wrong.
    and flat sevenths, with 3.1% that no drum they own fits.
 
    `tablaPitchOf` in `lib/pitch.ts` still returns the bare fifth, Sa + 7. It is
-   the OLD rule and takes no account of the raga or of which drums exist —
-   `components/ShrutiLadder.tsx` and `lib/pitchSuggestions.ts` still call it.
-   Prefer `recommendTabla` for anything a player acts on.
+   the OLD rule and takes no account of the raga or of which drums exist.
+   Nothing anybody reads goes through it any more: the roster grid, the live
+   view, the printed sheet and — from 2026-08-21 — the shruti ladder all use
+   `recommendTabla`. Its one remaining caller is `lib/pitchSuggestions.ts`,
+   filling `SessionSlot.alternativeTablaPitch`, a stored column nothing
+   displays. Prefer `recommendTabla` for anything a player acts on.
+
+   The ladder is the one view that asks the question for all twelve Sa at once,
+   so it is where the old rule was most visibly wrong: it named a drum on every
+   row, including the Sa whose fifth the centre does not own. Two Sa — D♯ and
+   A♯ — now read **"none"** where the raga offers nothing, which is an answer
+   (sing at a different shruti), not missing data.
 
    Do not read `PitchLabel.tablaPitch` from the database. It is the written
    note + 7 in all 24 rows, which under rule 1 is wrong for the twelve Madhyam
@@ -164,6 +189,52 @@ export function semitoneDelta(actual?: string | null, reference?: string | null)
   return d > 6 ? d - 12 : d;
 }
 ```
+
+4a. **A SINGER'S OFFSET is measured on the written note, not on Sa.**
+   `writtenDelta`, not `semitoneDelta`. Two different questions, and using the
+   wrong one here was a real bug — added 2026-08-21.
+
+   `semitoneDelta` answers "how far apart are these two pitches", and is right
+   for that. A singer's offset is a different question: "given a label, which
+   label does this singer pick?" The history answers it by LETTER, because the
+   source sheet was filled in comparing letters — the same account already
+   recorded against `NOTE_ABOVE_SA` below. Measuring it on Sa puts the Madhyam
+   five on one side of a cross-series comparison and not the other.
+
+   Sailavan, seeing 7 Madhyam predicted from a reference of 4 Madhyam / A#: "If
+   they generally shift 1 semitone in Pancham, the same rule applies in Madhyam.
+   We should use all Madhyam and Pancham data to calculate it, but it shouldn't
+   go from 4 madhyam to 7 madhyam."
+
+   Prithvi's fourteen Pahadi rows are the proof. He shifts +1 every time by
+   letter; the eight rows whose reference is Madhyam and whose sung pitch was
+   written in Pancham read +6 on Sa, so the MEDIAN went to +6:
+
+   | reference | sung | by letter | by Sa |
+   |---|---|---:|---:|
+   | `2 Madhyam / G` | `2.5 Madhyam / G#` | +1 | +1 |
+   | `1.5 Madhyam / F#` | `5 Pancham / G` | +1 | **+6** |
+   | `2 Madhyam / G` | `5.5 Pancham / G#` | +1 | **+6** |
+
+   52 of 681 comparisons are cross-series. Ten of eleven overall medians are
+   identical either way, so this bites only in the small per-raga samples, where
+   a handful of such rows can be the majority. **APPLYING the offset needs no
+   change**: `transposeLabel` snaps to the reference's own series, and within one
+   series adding n to Sa and adding n to the written note reach the same label.
+
+   Supporting evidence, and the reason to trust this over the Sa reading: the
+   means move TOWARD zero almost everywhere (Ashwin 0.625 → 0.3125, Rhuben
+   0.143 → 0.000, Sriraag 0.205 → −0.231). Introducing `NOTE_ABOVE_SA` widened
+   them, which is recorded below as the cost of that change; this narrows them
+   again. Both tables are pinned in `tests/singerOffsets.test.ts` — the Sa one
+   guards the seed, the written one guards what the app predicts from.
+
+4b. **An offset is a whole number of semitones by the time it is applied.** The
+   median of an even sample is the average of the middle two, so 0.5 happens;
+   nothing sits between two labels, and `transposeLabel` used to return
+   `undefined` and show nothing at all. It now rounds, halves going DOWN to the
+   lower pitch — the safe side, as in `lib/suggestedPitch.ts`. This was 4 of the
+   27 per-raga profiles.
 
 5. **Recommended pitch is derived, never stored.** It is simply the bhajan's
    `reference_ladies_pitch` for a Ladies singer, `reference_gents_pitch` for a

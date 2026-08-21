@@ -6,7 +6,12 @@
  * A plain <audio controls> rather than a hand-built player. The browser's own
  * scrubber, keyboard handling and OS media keys are all better than anything
  * worth writing here, and they work the moment the server answers Range
- * requests — which is what app/api/program/track/[file] exists to do.
+ * requests — which is what app/api/tracks/[file] exists to do.
+ *
+ * `endpoint` rather than an id: this serves programme items and bhajan
+ * recordings, and the only thing that differs between them is which URL takes
+ * the upload. Everything else — the file IS the body, the progress bar, replace
+ * and remove — is the same in both places.
  *
  * `preload="metadata"` so the duration and a seekable scrubber are there before
  * anybody presses play, without pulling the whole file down on page load. A
@@ -19,6 +24,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/components/ui";
+
+/**
+ * Where stored audio is served from. One route for programme items and bhajan
+ * recordings alike — they are the same kind of file in the same directory.
+ */
+const TRACK_SRC = "/api/tracks";
 
 export type TrackInfo = {
   file: string | null;
@@ -97,7 +108,7 @@ export function InlineTrack({ file, name }: { file: string; name: string | null 
       {/* preload=metadata so the bar knows how long the track is before anybody
           presses play, without pulling the audio down on page load — a running
           order can carry a dozen of these. */}
-      <audio ref={audio} src={`/api/program/track/${file}`} preload="metadata" className="hidden" />
+      <audio ref={audio} src={`${TRACK_SRC}/${file}`} preload="metadata" className="hidden" />
 
       <button
         type="button"
@@ -145,15 +156,19 @@ export function InlineTrack({ file, name }: { file: string; name: string | null 
 }
 
 export function TrackControl({
-  itemId,
+  endpoint,
   initial,
   canEdit,
   className,
+  addLabel = "Add a track",
 }: {
-  itemId: string;
+  /** Where POST uploads and DELETE removes. e.g. `/api/bhajans/<id>/track`. */
+  endpoint: string;
   initial: TrackInfo;
   canEdit: boolean;
   className?: string;
+  /** What the empty state's button says, when "Add a track" is too vague. */
+  addLabel?: string;
 }) {
   const [track, setTrack] = useState<TrackInfo>(initial);
   const [progress, setProgress] = useState<number | null>(null);
@@ -165,7 +180,7 @@ export function TrackControl({
     setProgress(0);
 
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `/api/program/item/${itemId}/track`);
+    xhr.open("POST", endpoint);
     // The body IS the file — no multipart — so the type header doubles as the
     // thing the server validates against, and the name rides separately.
     xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
@@ -199,7 +214,7 @@ export function TrackControl({
 
   async function remove() {
     setError(null);
-    const res = await fetch(`/api/program/item/${itemId}/track`, { method: "DELETE" });
+    const res = await fetch(endpoint, { method: "DELETE" });
     if (res.ok) setTrack({ file: null, name: null, bytes: null, uploadedBy: null });
     else setError("Could not remove that track.");
   }
@@ -212,7 +227,7 @@ export function TrackControl({
             controls
             preload="metadata"
             className="h-9 w-full"
-            src={`/api/program/track/${track.file}`}
+            src={`${TRACK_SRC}/${track.file}`}
           >
             Your browser cannot play audio.
           </audio>
@@ -243,7 +258,7 @@ export function TrackControl({
           disabled={progress !== null}
           className="inline-flex h-8 items-center justify-center rounded-[10px] border border-rule-surface bg-field px-2 text-xs hover:border-brass/50 disabled:opacity-60"
         >
-          {progress === null ? "Add a track" : `Uploading… ${progress}%`}
+          {progress === null ? addLabel : `Uploading… ${progress}%`}
         </button>
       ) : null}
 

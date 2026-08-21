@@ -17,7 +17,7 @@
 
 import {
   saOf,
-  semitoneDelta,
+  writtenDelta,
   median,
   mean,
   percentile,
@@ -50,9 +50,23 @@ export function referenceFor(row: SungRow): string | null {
   return row.historicalRecommendedPitch ?? row.masterlistReference ?? null;
 }
 
-/** Signed semitone offset for one row, or null if it cannot be computed. */
+/**
+ * Signed semitone offset for one row, or null if it cannot be computed.
+ *
+ * Measured on the WRITTEN NOTE, not on Sa — `writtenDelta`, not
+ * `semitoneDelta`. The long version is on `writtenDelta` in lib/pitch.ts; the
+ * short version is that the history mixes the two series, the sheet was filled
+ * in by comparing letters, and measuring these on Sa made every Madhyam
+ * reference paired with a Pancham sung pitch read five semitones out. That is
+ * what turned Prithvi's Pahadi median into +6 and predicted 7 Madhyam / E from
+ * a reference of 4 Madhyam / A#.
+ *
+ * Applying the offset needs no matching change: `transposeLabel` snaps to the
+ * reference's own series, and within one series adding n to Sa and adding n to
+ * the written note land on the same label.
+ */
 export function offsetFor(row: SungRow): number | null {
-  return semitoneDelta(row.confirmedPitch, referenceFor(row));
+  return writtenDelta(row.confirmedPitch, referenceFor(row));
 }
 
 export type SingerProfile = {
