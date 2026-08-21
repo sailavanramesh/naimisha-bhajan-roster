@@ -265,7 +265,26 @@ export function transposeLabel(
 ): string | null {
   const sa = saOf(reference);
   if (sa === null) return null;
-  const target = (((sa + semitones) % 12) + 12) % 12;
+
+  /*
+   * Snap the shift to a whole semitone FIRST.
+   *
+   * `semitones` is usually a median offset, and the median of an even number of
+   * samples is the average of the middle two — so a singer with 14 rows split
+   * between 0 and +1 has a median of exactly 0.5. There is no pitch half way
+   * between two labels, so every lookup below missed, and the fallback returned
+   * `NOTE_NAMES[6.5]` — undefined. The caller got no suggestion at all, silently.
+   *
+   * Measured on production 2026-08-21: 4 of the 27 per-raga profiles that clear
+   * the sample bar had a half-semitone median, so a quarter of the raga-based
+   * predictions were showing nothing rather than a pitch.
+   *
+   * Halves round DOWN, to the lower pitch. That is the same choice
+   * lib/suggestedPitch.ts makes and for the same reason: a singer asked to sing
+   * below their usual is comfortable, one asked to sing above it may not reach.
+   */
+  const whole = Math.ceil(semitones - 0.5);
+  const target = (((sa + whole) % 12) + 12) % 12;
 
   const parsed = parsePitchLabel(reference);
   const candidates = available
