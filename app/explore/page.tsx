@@ -10,6 +10,7 @@ import { sampleBhajans, DEFAULT_FRESHNESS_DAYS } from "@/lib/sessionBuilder";
 import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
 import { AddToList } from "@/components/AddToList";
+import { PendingLink } from "@/components/PendingLink";
 
 export const dynamic = "force-dynamic";
 
@@ -195,9 +196,10 @@ export default async function ExplorePage({ searchParams }: { searchParams: Prom
 
             <div className="flex flex-wrap items-center gap-2">
               <Button type="submit" variant="primary">Apply</Button>
-              <Link href={href({ seed: nextSeed })} scroll={false}>
-                <Button type="button">Show me another set</Button>
-              </Link>
+              {/* Shows that it is working — see components/PendingLink.tsx. */}
+              <PendingLink href={href({ seed: nextSeed })} busyLabel="Finding another set…">
+                Show me another set
+              </PendingLink>
               <Link href="/explore">
                 <Button type="button">Reset</Button>
               </Link>

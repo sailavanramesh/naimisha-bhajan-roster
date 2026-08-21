@@ -4,6 +4,7 @@ import { KeepScroll } from "@/components/KeepScroll";
 import { prisma } from "@/lib/db";
 import { SessionType } from "@prisma/client";
 import { Card, CardContent, CardHeader, CardTitle, Button } from "@/components/ui";
+import { PendingLink } from "@/components/PendingLink";
 import { getCandidatePool, getFacetOptions, getSingersForBhajans, UNSPECIFIED } from "@/lib/candidateQueries";
 import {
   generateSession,
@@ -419,9 +420,10 @@ export default async function BuildPage({
               <Button type="submit" variant="primary">
                 Apply
               </Button>
-              <Link href={href(sp, { seed: nextSeed })} scroll={false}>
-                <Button type="button">Re-roll unlocked</Button>
-              </Link>
+              {/* Shows that it is working — see components/PendingLink.tsx. */}
+              <PendingLink href={href(sp, { seed: nextSeed })} busyLabel="Rolling…">
+                Re-roll unlocked
+              </PendingLink>
               {locked.size > 0 ? (
                 <Link href={href(sp, { lock: undefined })} scroll={false}>
                   <Button type="button">Unlock all</Button>
@@ -516,18 +518,19 @@ export default async function BuildPage({
                           {slot.locked ? "Unlock" : "Lock"}
                         </Button>
                       </Link>
-                      <Link
+                      {/* Same round trip as a full re-roll, so it says so too.
+                          No busyLabel: this button is narrow and a longer word
+                          would widen the column mid-tap. */}
+                      <PendingLink
                         href={href(sp, {
                           lock: serialiseLocks(new Map(otherLocks)),
                           seed: nextSeed,
                           __hash: `slot-${slot.position}`,
                         })}
-                        scroll={false}
+                        className="w-full text-xs"
                       >
-                        <Button type="button" className="w-full text-xs">
-                          Swap
-                        </Button>
-                      </Link>
+                        Swap
+                      </PendingLink>
                     </div>
                   </div>
 
