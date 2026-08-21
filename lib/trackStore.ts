@@ -138,11 +138,18 @@ export function displayName(original: string | null | undefined): string {
   return trimmed || 'track';
 }
 
-/** Human size, for a UI that has to explain a refusal. */
+/**
+ * Human size, for a UI that has to explain a refusal.
+ *
+ * Gigabytes included since 2026-08-21: the allowance is four of them, and
+ * "4096.0 MB of track storage" is a number people have to convert in their head
+ * before it means anything.
+ */
 export function humanSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
 }
 
 /** Make sure the directory exists. Safe to call repeatedly. */
