@@ -53,6 +53,12 @@ rather than in the code.
   worker is an app that cannot update itself.
 - `LOG_QUERIES=1` turns on Prisma statement logging (`lib/db.ts`), for counting
   a page's round trips rather than guessing at them.
+- **The masterlist is read ONCE per request**, by `loadMasterlist` in
+  `lib/candidateQueries.ts`, memoised with React `cache` the same way
+  `getSignedInSinger` is. `/build` and `/explore` each want both the facet list
+  and the candidate pool, and both come out of the same 3,607 rows. Never select
+  `lyrics` to ask whether a bhajan has any — it is 0.72 MB of Text across the
+  table, and the answer is a list of ids.
 
 ## Commands
 

@@ -129,12 +129,48 @@ export default async function BuildPage({
   const serialisePicks = (m: Map<string, string>) =>
     [...m.entries()].map(([b, s]) => `${b}:${s}`).join(",");
 
-  const [templates, facets] = await Promise.all([
+  /*
+   * ONE wave for everything that only depends on the url.
+   *
+   * This page used to be three waves deep — templates and facets, then the
+   * pool, then the singers — and none of the later ones actually needed the
+   * earlier ones: the filters come from `sp`, and the roster of singers depends
+   * on nothing at all. On a Burstable Postgres each wave is a fresh wait whose
+   * length depends on the server's mood, so the count of them is what the page
+   * feels like. Only `getSingersForBhajans` genuinely has to come second, and
+   * it is the cheapest of them.
+   *
+   * The facets and the pool now share a single read of the masterlist — see
+   * lib/candidateQueries.ts.
+   */
+  const [templates, facets, pool, allSingers] = await Promise.all([
     prisma.sessionTemplate.findMany({
       include: { rules: true },
       orderBy: [{ isDefault: "desc" }, { name: "asc" }],
     }),
     getFacetOptions(),
+    getCandidatePool(
+      {
+        deities: list(sp, "deity"),
+        excludeDeities: list(sp, "notdeity"),
+        // Default to the languages the group actually sings in. The masterlist
+        // has 40, most of them one-offs, and an unfiltered pool kept suggesting
+        // Japanese and Zulu. Explicitly clearing the facet still opens it up.
+        languages: sp.lang === undefined ? DEFAULT_LANGUAGES : list(sp, "lang"),
+        tempos: list(sp, "tempo"),
+        levels: list(sp, "level"),
+        requireLyrics: one(sp, "lyrics") === "1",
+        requireAudio: one(sp, "audio") === "1",
+        requireReference: one(sp, "ref") === "1",
+        sungBefore: (one(sp, "sung") as "any" | "known" | "new") ?? "any",
+      },
+      new Date(`${date}T00:00:00.000Z`),
+    ),
+    prisma.singer.findMany({
+      where: { gender: { not: null } },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, gender: true },
+    }),
   ]);
 
   if (templates.length === 0) {
@@ -168,24 +204,6 @@ export default async function BuildPage({
     })),
   };
 
-  const pool = await getCandidatePool(
-    {
-      deities: list(sp, "deity"),
-      excludeDeities: list(sp, "notdeity"),
-      // Default to the languages the group actually sings in. The masterlist
-      // has 40, most of them one-offs, and an unfiltered pool kept suggesting
-      // Japanese and Zulu. Explicitly clearing the facet still opens it up.
-      languages: sp.lang === undefined ? DEFAULT_LANGUAGES : list(sp, "lang"),
-      tempos: list(sp, "tempo"),
-      levels: list(sp, "level"),
-      requireLyrics: one(sp, "lyrics") === "1",
-      requireAudio: one(sp, "audio") === "1",
-      requireReference: one(sp, "ref") === "1",
-      sungBefore: (one(sp, "sung") as "any" | "known" | "new") ?? "any",
-    },
-    new Date(`${date}T00:00:00.000Z`),
-  );
-
   const result = generateSession(pool, spec, { seed, length, freshnessDays, locked });
 
   const sessionType: SessionType = template.singleDeity
@@ -214,11 +232,10 @@ export default async function BuildPage({
     Object.fromEntries(FILTER_KEYS.map((k) => [k, undefined])) as Record<string, undefined>,
   );
 
+  // The only query that genuinely has to wait: it asks about the bhajans the
+  // generator just chose.
   const chosenIds = result.slots.map((s) => s.candidate.id);
-  const [singersByBhajan, allSingers] = await Promise.all([
-    getSingersForBhajans(chosenIds),
-    prisma.singer.findMany({ where: { gender: { not: null } }, orderBy: { name: "asc" }, select: { id: true, name: true, gender: true } }),
-  ]);
+  const singersByBhajan = await getSingersForBhajans(chosenIds);
 
   return (
     <div className="grid gap-4">

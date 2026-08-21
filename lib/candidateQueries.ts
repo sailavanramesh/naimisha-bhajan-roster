@@ -1,39 +1,21 @@
 /**
- * lib/candidateQueries.ts — building the candidate pool for the generator.
+ * lib/candidateQueries.ts — reading the masterlist for the generator.
  *
- * "Missing is not excluded" (CLAUDE.md). Every facet filter here offers an
- * explicit `unspecified` value, and leaving a facet unset never drops bhajans
- * that simply lack that field. A third of the masterlist has no tempo and
- * nearly a third no level; those bhajans must stay reachable.
+ * The DATABASE half. The filters themselves are pure and live in
+ * lib/candidatePool.ts, which has no Prisma import and is unit-tested; this
+ * module's job is to read the rows they work on, as few times as possible.
  */
 
+import { cache } from 'react';
 import { prisma } from '@/lib/db';
 import { RepertoireKind } from '@prisma/client';
 import type { Candidate } from '@/lib/sessionBuilder';
-import { LIVE_SESSION } from "./archive";
+import { selectCandidates, type CandidateFilters, type PoolRow } from '@/lib/candidatePool';
+import { LIVE_SESSION } from './archive';
 
-/** Sentinel meaning "this field is blank in the masterlist". */
-export const UNSPECIFIED = 'unspecified';
-
-export type CandidateFilters = {
-  deities?: string[];
-  excludeDeities?: string[];
-  languages?: string[];
-  tempos?: string[];
-  levels?: string[];
-  beats?: string[];
-  requireLyrics?: boolean;
-  requireAudio?: boolean;
-  requireReference?: boolean;
-  /** Restrict to bhajans at least one of these singers already knows. */
-  repertoireOf?: string[];
-  /**
-   * Only ~600 of 3,607 bhajans have ever been sung, so an unfiltered pool
-   * naturally produces sets of songs nobody in the group knows.
-   * `known` restricts to bhajans with sung history, `new` to those without.
-   */
-  sungBefore?: 'any' | 'known' | 'new';
-};
+// Re-exported so the pages keep importing the filter vocabulary from one place.
+export { UNSPECIFIED, selectCandidates } from '@/lib/candidatePool';
+export type { CandidateFilters, PoolRow } from '@/lib/candidatePool';
 
 export type FacetValue = { name: string; count: number };
 
@@ -47,39 +29,119 @@ export type FacetOptions = {
   beats: string[];
 };
 
-/** Distinct facet values for the filter UI, each including `unspecified`. */
-export async function getFacetOptions(): Promise<FacetOptions> {
-  const [deities, languages, tempos, levels, beats] = await Promise.all([
+/**
+ * Everything about the masterlist that the pool and the facets both come from,
+ * read ONCE per request.
+ *
+ * /build and /explore each ask for the facet list AND the candidate pool, and
+ * both answers are derived from the same 3,607 rows. Asking twice meant five
+ * extra round trips to a Burstable database for numbers already in memory, and
+ * CLAUDE.md is explicit about why that hurts: the round-trip count is what that
+ * server's variance multiplies.
+ *
+ * `cache` from React memoises for the life of ONE request — the same trick
+ * lib/auth.ts uses on the signed-in singer. Outside a request it is a no-op, so
+ * scripts and tests behave normally.
+ *
+ * `lyrics` is deliberately NOT selected. It is 0.72 MB of Text across the
+ * masterlist and the only question ever asked of it is whether it is empty, so
+ * the answer comes back as a list of ids instead — which halved this query.
+ * Blank-but-not-null is not a state this database holds (checked across every
+ * text column here: zero rows) and `cleanFieldValue` in lib/bhajanFields.ts
+ * turns a blank edit into null, so `not: null` is the same test as `.trim()`.
+ */
+type MasterlistRow = {
+  id: string;
+  title: string;
+  raga: string | null;
+  language: string | null;
+  tempo: string | null;
+  level: string | null;
+  beat: string | null;
+  audio: string | null;
+  referenceGentsPitch: string | null;
+  referenceLadiesPitch: string | null;
+  deities: Array<{ deity: { name: string } }>;
+};
+
+const loadMasterlist = cache(async () => {
+  const [bhajans, withLyrics, slots, deities] = await Promise.all([
+    prisma.bhajan.findMany({
+      select: {
+        id: true,
+        title: true,
+        raga: true,
+        language: true,
+        tempo: true,
+        level: true,
+        beat: true,
+        audio: true,
+        referenceGentsPitch: true,
+        referenceLadiesPitch: true,
+        deities: { select: { deity: { select: { name: true } } } },
+      },
+    }),
+    prisma.bhajan.findMany({ where: { lyrics: { not: null } }, select: { id: true } }),
+    /*
+     * Sung history, as slots rather than an aggregate: `groupBy` cannot reach
+     * through the relation to the session's date, and the date is what
+     * "days since last sung" needs. 765 rows, so one pass in JS is cheaper
+     * than a second query.
+     *
+     * There used to be a `groupBy` here as well, computing counts that were
+     * then thrown away with `void sungStats` — a whole round trip for nothing.
+     */
+    prisma.sessionSlot.findMany({
+      where: { bhajanId: { not: null }, session: LIVE_SESSION },
+      select: { bhajanId: true, session: { select: { date: true } } },
+    }),
     prisma.deity.findMany({ orderBy: { name: 'asc' }, select: { name: true } }),
-    prisma.bhajan.groupBy({ by: ['language'], _count: { _all: true } }),
-    prisma.bhajan.groupBy({ by: ['tempo'] }),
-    prisma.bhajan.groupBy({ by: ['level'] }),
-    prisma.bhajan.groupBy({ by: ['beat'] }),
   ]);
 
-  const values = (rows: { [k: string]: string | null }[], key: string) =>
-    rows
-      .map((r) => r[key])
-      .filter((v): v is string => typeof v === 'string' && v.trim() !== '')
-      .sort((a, b) => a.localeCompare(b));
+  const timesSung = new Map<string, number>();
+  const lastSung = new Map<string, Date>();
+  for (const s of slots) {
+    if (!s.bhajanId) continue;
+    timesSung.set(s.bhajanId, (timesSung.get(s.bhajanId) ?? 0) + 1);
+    const current = lastSung.get(s.bhajanId);
+    if (!current || s.session.date > current) lastSung.set(s.bhajanId, s.session.date);
+  }
 
   return {
-    deities: deities.map((d) => d.name),
-    languages: (languages as Array<{ language: string | null; _count: { _all: number } }>)
-      .filter((r) => typeof r.language === 'string' && r.language.trim() !== '')
-      .map((r) => ({ name: r.language as string, count: r._count._all }))
-      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
-    tempos: values(tempos, 'tempo'),
-    levels: values(levels, 'level'),
-    beats: values(beats, 'beat'),
+    bhajans: bhajans as MasterlistRow[],
+    hasLyrics: new Set(withLyrics.map((b) => b.id)),
+    timesSung,
+    lastSung,
+    deityNames: deities.map((d) => d.name),
   };
-}
+});
 
-function matchesFacet(value: string | null, selected: string[] | undefined): boolean {
-  if (!selected || selected.length === 0) return true;
-  const blank = value === null || value.trim() === '';
-  if (blank) return selected.includes(UNSPECIFIED);
-  return selected.some((s) => s.toLowerCase() === value.trim().toLowerCase());
+const distinct = (values: ReadonlyArray<string | null>) =>
+  [...new Set(values.filter((v): v is string => typeof v === 'string' && v.trim() !== ''))].sort(
+    (a, b) => a.localeCompare(b),
+  );
+
+/** Distinct facet values for the filter UI, each including `unspecified`. */
+export async function getFacetOptions(): Promise<FacetOptions> {
+  const { bhajans, deityNames } = await loadMasterlist();
+
+  // Tallied in memory rather than with four GROUP BYs. Every one of them was a
+  // full scan of the same table this request has already read.
+  const languageCounts = new Map<string, number>();
+  for (const b of bhajans) {
+    const language = (b.language ?? '').trim();
+    if (language) languageCounts.set(language, (languageCounts.get(language) ?? 0) + 1);
+  }
+
+  return {
+    deities: deityNames,
+    languages: [...languageCounts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name)),
+    tempos: distinct(bhajans.map((b) => b.tempo)),
+    levels: distinct(bhajans.map((b) => b.level)),
+    beats: distinct(bhajans.map((b) => b.beat)),
+  };
 }
 
 /**
@@ -92,29 +154,8 @@ export async function getCandidatePool(
   filters: CandidateFilters,
   asOf: Date,
 ): Promise<Candidate[]> {
-  const [bhajans, sungStats, repertoire] = await Promise.all([
-    prisma.bhajan.findMany({
-      select: {
-        id: true,
-        title: true,
-        raga: true,
-        language: true,
-        tempo: true,
-        level: true,
-        beat: true,
-        lyrics: true,
-        audio: true,
-        referenceGentsPitch: true,
-        referenceLadiesPitch: true,
-        deities: { select: { deity: { select: { name: true } } } },
-      },
-    }),
-    prisma.sessionSlot.groupBy({
-      by: ['bhajanId'],
-      where: { bhajanId: { not: null }, session: LIVE_SESSION },
-      _count: { _all: true },
-      _max: { sessionId: true },
-    }),
+  const [masterlist, repertoire] = await Promise.all([
+    loadMasterlist(),
     filters.repertoireOf?.length
       ? prisma.singerRepertoire.findMany({
           where: { singer: { name: { in: filters.repertoireOf } }, bhajanId: { not: null } },
@@ -123,84 +164,30 @@ export async function getCandidatePool(
       : Promise.resolve([] as { bhajanId: string | null; kind: RepertoireKind }[]),
   ]);
 
-  // Last sung date per bhajan. groupBy cannot reach through the relation to the
-  // session date, so this is a second pass over the slots that actually matter.
-  const lastSung = new Map<string, Date>();
-  const sungCount = new Map<string, number>();
-  const slots = await prisma.sessionSlot.findMany({
-    where: { bhajanId: { not: null }, session: LIVE_SESSION },
-    select: { bhajanId: true, session: { select: { date: true } } },
-  });
-  for (const s of slots) {
-    if (!s.bhajanId) continue;
-    sungCount.set(s.bhajanId, (sungCount.get(s.bhajanId) ?? 0) + 1);
-    const current = lastSung.get(s.bhajanId);
-    if (!current || s.session.date > current) lastSung.set(s.bhajanId, s.session.date);
-  }
-  void sungStats;
-
   const repertoireIds = new Set(
     repertoire.map((r) => r.bhajanId).filter((id): id is string => id !== null),
   );
 
-  const DAY = 24 * 60 * 60 * 1000;
-  const excluded = (filters.excludeDeities ?? []).map((d) => d.toLowerCase());
-
-  const pool: Candidate[] = [];
-  for (const b of bhajans) {
-    const deities = b.deities.map((d) => d.deity.name);
-
-    if (filters.deities?.length) {
-      const wantsUnspecified = filters.deities.includes(UNSPECIFIED);
-      const hit =
-        (deities.length === 0 && wantsUnspecified) ||
-        deities.some((d) => filters.deities!.some((f) => f.toLowerCase() === d.toLowerCase()));
-      if (!hit) continue;
-    }
-    if (excluded.length && deities.some((d) => excluded.includes(d.toLowerCase()))) continue;
-
-    if (!matchesFacet(b.language, filters.languages)) continue;
-    if (!matchesFacet(b.tempo, filters.tempos)) continue;
-    if (!matchesFacet(b.level, filters.levels)) continue;
-    if (!matchesFacet(b.beat, filters.beats)) continue;
-
-    const hasLyrics = Boolean(b.lyrics && b.lyrics.trim());
-    const hasAudio = Boolean(b.audio && b.audio.trim());
-    const hasReference = Boolean(
+  const rows: PoolRow[] = masterlist.bhajans.map((b) => ({
+    id: b.id,
+    title: b.title,
+    deities: b.deities.map((d) => d.deity.name),
+    raga: b.raga,
+    language: b.language,
+    tempo: b.tempo,
+    level: b.level,
+    beat: b.beat,
+    hasLyrics: masterlist.hasLyrics.has(b.id),
+    hasAudio: Boolean(b.audio && b.audio.trim()),
+    hasReference: Boolean(
       (b.referenceGentsPitch && b.referenceGentsPitch.trim()) ||
         (b.referenceLadiesPitch && b.referenceLadiesPitch.trim()),
-    );
-    if (filters.requireLyrics && !hasLyrics) continue;
-    if (filters.requireAudio && !hasAudio) continue;
-    if (filters.requireReference && !hasReference) continue;
+    ),
+    timesSung: masterlist.timesSung.get(b.id) ?? 0,
+    lastSung: masterlist.lastSung.get(b.id) ?? null,
+  }));
 
-    // Repertoire is a SCORING input by default (SPEC §9.3); it only filters
-    // when the coordinator explicitly opts in by naming singers.
-    if (filters.repertoireOf?.length && !repertoireIds.has(b.id)) continue;
-
-    const timesSung = sungCount.get(b.id) ?? 0;
-    if (filters.sungBefore === 'known' && timesSung === 0) continue;
-    if (filters.sungBefore === 'new' && timesSung > 0) continue;
-
-    const last = lastSung.get(b.id) ?? null;
-    pool.push({
-      id: b.id,
-      title: b.title,
-      deities,
-      raga: b.raga,
-      language: b.language,
-      tempo: b.tempo,
-      level: b.level,
-      beat: b.beat,
-      hasLyrics,
-      hasAudio,
-      hasReference,
-      timesSung,
-      lastSungDaysAgo: last ? Math.max(0, Math.round((asOf.getTime() - last.getTime()) / DAY)) : null,
-    });
-  }
-
-  return pool;
+  return selectCandidates(rows, filters, asOf, repertoireIds);
 }
 
 export type BhajanSinger = {
