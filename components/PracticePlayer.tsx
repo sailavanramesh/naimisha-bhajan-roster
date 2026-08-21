@@ -1,41 +1,61 @@
 "use client";
 
 /**
- * Two recordings of one bhajan, and a switch between them.
+ * Two recordings of one song, and a switch between them.
  *
  * Sailavan, 2026-08-21: "if we upload the original track, you could create a
- * toggle button that 'adds' the vocals back in (its just switching between the
- * vocal track and the karaoke track) but it would useful when practising etc.
- * Has to be smooth and responsive as well."
+ * toggle button that 'adds' the vocals back in … Has to be smooth and
+ * responsive as well."
  *
  * ## How it is smooth
  *
- * Both files play AT THE SAME TIME, from the same instant, and the toggle only
- * changes which one you can hear. So switching costs nothing: no seek, no
- * buffering, no gap. You can flip it in the middle of a word.
+ * Both files play at the same time, from the same instant, and the toggle only
+ * changes which one you can hear. There is no seek and no buffering at the
+ * moment of the switch, so it can be flipped mid-word.
  *
- * That only works because the pair is the same recording with and without the
- * voice — confirmed before any of this was built — so one timeline serves both.
- * If two files ever disagree about their length this says so rather than
- * pretending, because then the same second is a different bar and the toggle
- * would drop you in the wrong place.
+ * ## WHY THERE IS NO DRIFT CORRECTION, which is the important part
+ *
+ * The first version nudged the silent element back into line whenever the pair
+ * drifted past 40ms. On my test files — 352 KB, fully buffered — that was free.
+ * On his real pair, two files of about 10 MB, it was a disaster: "it keeps
+ * playing the music for a fraction of a second then pausing for 1 second then
+ * the next bit, it takes 10 seconds to play 1 second."
+ *
+ * Two reasons, both mine:
+ *
+ *   1. EVERY SEEK ON A REMOTE FILE COSTS A REQUEST. These are streamed from
+ *      /api/tracks with Range support, so moving the playhead abandons the
+ *      response in flight and asks for another. Doing that every few hundred
+ *      milliseconds against a 10 MB file over a Burstable instance is the
+ *      stutter he heard.
+ *   2. IT FED ITSELF. Correcting the silent element fired `seeked`, the `seeked`
+ *      handler called a FORCED align, and a forced align moved the other
+ *      element — the audible one. So one small correction seeked the track being
+ *      listened to, which drifted the pair further, which corrected again.
+ *
+ * So nothing seeks during playback any more. The pair is left alone: two
+ * elements started together and driven by the same clock stay close enough, and
+ * the only thing a small drift can cost is a slightly soft switch — which is
+ * nothing beside re-requesting ten megabytes mid-phrase.
+ *
+ * A seek is now only ever caused by a PERSON: dragging the lead's scrubber takes
+ * the shadow with it, and a toggle repairs the incoming element ONLY if the
+ * platform actually stopped it.
+ *
+ * ## Why the shadow preloads metadata, not the whole file
+ *
+ * It was `preload="auto"`, so the browser raced to fetch all 10 MB the moment
+ * the page opened — competing with the audible stream for bandwidth and for the
+ * app's own request handling. It streams alongside instead: it has been playing
+ * silently in lockstep, so it is already buffered exactly where the toggle
+ * needs it.
  *
  * ## Why the visible controls belong to one element
  *
  * The original carries the native `<audio controls>` — the browser's own
  * scrubber and OS media keys beat anything hand-built, especially on a phone.
- * The karaoke element is hidden and shadows it: play, pause, seek and rate are
- * mirrored across. Since the two share a timeline, the visible position is
- * correct whichever one you are hearing.
- *
- * ## The one platform risk, handled
- *
- * Some phones have historically refused to let two audio elements play at once,
- * pausing one when the other starts. If that happens the silent element falls
- * behind or stops, and a muted-swap alone would toggle to silence. So the toggle
- * checks: if the element about to be heard is paused or has drifted, it is
- * seeked to the audible one's position and started. That costs a few
- * milliseconds in the bad case and nothing in the good one.
+ * Since the two share a timeline the position shown is right whichever one is
+ * being heard.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -44,25 +64,12 @@ import { cn } from "@/components/ui";
 export type PracticeTrack = { file: string; name: string | null };
 
 /**
- * Two thresholds, because the two jobs want opposite things.
+ * Durations further apart than this are not the same recording.
  *
- * ALIGN is how far the SILENT element may drift before it is nudged back. Tight,
- * because whatever gap is left at the moment of a toggle is heard as the music
- * jumping. Measured on dev, two 8-second files: left to themselves the pair sat
- * about 90ms apart, which is enough to stumble a rhythm. Correcting the silent
- * one costs nothing — nobody can hear a seek in a track they are not listening
- * to.
- *
- * REPAIR is how far out the element ABOUT TO BE HEARD has to be before the
- * toggle seeks it. Deliberately loose: a seek on an element that is about to
- * play can stall it for a moment, so it is a last resort for the case where a
- * phone stopped the second stream entirely, not routine tidying. ALIGN keeps
- * things far inside this.
+ * This matters more now that nothing corrects drift: if the pair is genuinely
+ * two different takes, the toggle lands wherever the other recording happens to
+ * be at that second. Saying so is the only honest thing to do.
  */
-const ALIGN_LIMIT = 0.04;
-const REPAIR_LIMIT = 0.25;
-
-/** Durations further apart than this are not the same recording. */
 const LENGTH_MISMATCH = 0.75;
 
 export function PracticePlayer({
@@ -79,82 +86,62 @@ export function PracticePlayer({
   const [vocals, setVocals] = useState(true);
   const [mismatch, setMismatch] = useState<number | null>(null);
 
-  /**
-   * Which one is audible, readable from an event listener without re-binding.
-   *
-   * The listeners are attached once; a `useState` value read inside them would
-   * be whatever it was when they were bound.
-   */
-  const vocalsRef = useRef(true);
-  /** Set while we are moving a playhead ourselves, so `seeked` does not recurse. */
-  const syncing = useRef(false);
+  /** Set while we move the shadow ourselves, so its own events are ignored. */
+  const ourSeek = useRef(false);
 
   /**
-   * Keep the pair together.
+   * Mirror the lead's TRANSPORT onto the shadow. Never its playhead.
    *
-   * TRANSPORT always follows the lead, because the lead owns the visible
-   * controls: it is the one a person presses play on, whichever they are
-   * hearing.
-   *
-   * THE PLAYHEAD is corrected on whichever element is SILENT — never on the one
-   * being listened to. Seeking audio somebody is hearing is exactly the stutter
-   * this feature is supposed to avoid, and it was the flaw in the first draft:
-   * it always corrected the shadow, which is the audible one whenever the
-   * karaoke is selected.
+   * The lead owns the visible controls, so it decides whether the pair is
+   * playing and how fast. The playhead is left alone — see the note at the top
+   * of this file for what correcting it cost.
    */
-  const align = useCallback((force: boolean) => {
+  const mirror = useCallback(() => {
     const a = lead.current;
     const b = shadow.current;
-    if (!a || !b || syncing.current) return;
-
-    b.playbackRate = a.playbackRate;
+    if (!a || !b) return;
+    if (b.playbackRate !== a.playbackRate) b.playbackRate = a.playbackRate;
     if (a.paused) {
       if (!b.paused) b.pause();
     } else if (b.paused) {
       void b.play().catch(() => {
-        /* A phone refusing the second stream is handled on toggle. */
+        /* A platform refusing the second stream is repaired on toggle. */
       });
     }
-
-    const apart = Math.abs(a.currentTime - b.currentTime);
-    if (!force && apart <= ALIGN_LIMIT) return;
-
-    // A forced align follows a seek on the lead, so the lead is right by
-    // definition. Otherwise move the one nobody can hear.
-    const silent = force ? b : vocalsRef.current ? b : a;
-    const source = silent === b ? a : b;
-    syncing.current = true;
-    silent.currentTime = source.currentTime;
-    // Cleared on a task of its own: the `seeked` this causes arrives later.
-    setTimeout(() => {
-      syncing.current = false;
-    }, 0);
   }, []);
 
-  // Mirror the lead's controls onto the shadow.
   useEffect(() => {
     const a = lead.current;
     if (!a) return;
-    const onPlay = () => align(false);
-    const onPause = () => align(false);
-    const onSeek = () => align(true);
-    const onRate = () => align(false);
-    // Drift is corrected here, on whichever element is silent — see align.
-    const onTime = () => align(false);
 
-    a.addEventListener("play", onPlay);
-    a.addEventListener("pause", onPause);
-    a.addEventListener("seeked", onSeek);
-    a.addEventListener("ratechange", onRate);
-    a.addEventListener("timeupdate", onTime);
-    return () => {
-      a.removeEventListener("play", onPlay);
-      a.removeEventListener("pause", onPause);
-      a.removeEventListener("seeked", onSeek);
-      a.removeEventListener("ratechange", onRate);
-      a.removeEventListener("timeupdate", onTime);
+    const onTransport = () => mirror();
+    /**
+     * A person dragged the scrubber, so both should move. This is the ONE place
+     * a seek is mirrored, and it is safe because it is caused by a person rather
+     * than by us: nothing here can trigger it again.
+     */
+    const onSeeked = () => {
+      const b = shadow.current;
+      if (!b) return;
+      if (ourSeek.current) {
+        ourSeek.current = false;
+        return;
+      }
+      b.currentTime = a.currentTime;
+      mirror();
     };
-  }, [align]);
+
+    a.addEventListener("play", onTransport);
+    a.addEventListener("pause", onTransport);
+    a.addEventListener("ratechange", onTransport);
+    a.addEventListener("seeked", onSeeked);
+    return () => {
+      a.removeEventListener("play", onTransport);
+      a.removeEventListener("pause", onTransport);
+      a.removeEventListener("ratechange", onTransport);
+      a.removeEventListener("seeked", onSeeked);
+    };
+  }, [mirror]);
 
   // Say so when the two are not the same length, because then they are not the
   // same recording and the toggle cannot mean what it says.
@@ -181,19 +168,28 @@ export function PracticePlayer({
     const b = shadow.current;
     const next = !vocals;
     setVocals(next);
-    vocalsRef.current = next;
     if (!a || !b) return;
 
-    // The one about to be heard. If the platform stopped it, or it has drifted,
-    // put it right BEFORE it becomes audible rather than after.
-    const audible = next ? a : b;
-    const other = next ? b : a;
-    if (!a.paused && (audible.paused || Math.abs(audible.currentTime - other.currentTime) > REPAIR_LIMIT)) {
-      audible.currentTime = other.currentTime;
-      void audible.play().catch(() => {});
-    }
+    /*
+     * Swap which one is heard. Nothing is seeked: both have been playing
+     * together, so the incoming element is already at the right place and
+     * already buffered there.
+     */
     a.muted = !next;
     b.muted = next;
+
+    /*
+     * The only repair. If the platform stopped the second stream — phones have
+     * historically allowed one at a time — the incoming element is paused and
+     * would toggle to silence. Then, and only then, is a seek worth its cost.
+     */
+    const incoming = next ? a : b;
+    const running = next ? b : a;
+    if (!a.paused && incoming.paused) {
+      ourSeek.current = incoming === a;
+      incoming.currentTime = running.currentTime;
+      void incoming.play().catch(() => {});
+    }
   };
 
   return (
@@ -210,13 +206,14 @@ export function PracticePlayer({
       </audio>
 
       {/*
-        The shadow. `preload="auto"` on purpose where the lead is only
-        "metadata": this one has to be ready to be heard the instant somebody
-        asks, and it is the whole point of the feature.
+        The shadow. `metadata`, NOT `auto`: it used to race to download the whole
+        file the moment the page opened, which on a 10 MB pair competed with the
+        audible stream. It has been playing silently in lockstep, so it is
+        already buffered where a toggle needs it.
       */}
       <audio
         ref={shadow}
-        preload="auto"
+        preload="metadata"
         muted
         className="hidden"
         src={`/api/tracks/${karaoke.file}`}
