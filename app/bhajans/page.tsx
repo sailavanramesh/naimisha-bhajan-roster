@@ -174,9 +174,31 @@ export default async function BhajansPage({
             <div className="flex gap-2">
               <Button type="submit" variant="primary">Search</Button>
               {q || deity || lang || tag ? (
-                <Link href="/bhajans">
+                /*
+                  A PLAIN ANCHOR, not next/link. Deliberate, and do not
+                  "improve" it back.
+
+                  Sailavan, 2026-08-21, on a phone: "when i press clear nothing
+                  happens or its happening too slowly."
+
+                  Nothing happened. As a <Link> this fetched /bhajans and then
+                  never committed the navigation — the RSC request goes out, the
+                  answer arrives, and the URL stays exactly as it was. The shape
+                  that breaks is a client navigation to the SAME pathname with
+                  every search param removed; /explore's Reset has the same shape
+                  and only works by accident, because that page redirects to add
+                  a seed and so lands on a different URL.
+
+                  A real navigation cannot fail that way. It also resets the
+                  form for free: the inputs are uncontrolled, `defaultValue`
+                  does not reassign a DOM value on re-render, so a client
+                  navigation would have left "govinda" sitting in the box even
+                  if it had committed.
+                */
+                // eslint-disable-next-line @next/next/no-html-link-for-pages -- see above: a client navigation to this href does not commit
+                <a href="/bhajans">
                   <Button type="button">Clear</Button>
-                </Link>
+                </a>
               ) : null}
             </div>
           </form>
