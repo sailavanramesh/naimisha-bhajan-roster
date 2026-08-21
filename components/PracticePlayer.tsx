@@ -64,6 +64,30 @@ import { cn } from "@/components/ui";
 export type PracticeTrack = { file: string; name: string | null };
 
 /**
+ * How far apart the pair may sit before it is worth one seek to fix.
+ *
+ * Not a drift tolerance — a startup-race tolerance. Measured on dev with his
+ * real 10 MB pair: the two began 0.86s apart and settled 1.26s apart, because
+ * whichever element starts decoding first runs ahead while the other is still
+ * opening its file. With nothing correcting it that offset lasts the whole
+ * track, and a toggle then moves the music by well over a second.
+ *
+ * A third of a second is about where a switch stops sounding like a switch and
+ * starts sounding like a mistake.
+ */
+const MAX_APART = 0.35;
+
+/**
+ * And no more than one correction this often.
+ *
+ * The stutter that started all this was a seek every time the pair wandered
+ * 40ms, each one abandoning a Range request against a 10 MB file. The cooldown
+ * is what keeps this a handful of seeks per track instead: enough to fix a
+ * startup race, far too slow to feed itself.
+ */
+const CORRECTION_COOLDOWN_MS = 8000;
+
+/**
  * Durations further apart than this are not the same recording.
  *
  * This matters more now that nothing corrects drift: if the pair is genuinely
@@ -86,8 +110,10 @@ export function PracticePlayer({
   const [vocals, setVocals] = useState(true);
   const [mismatch, setMismatch] = useState<number | null>(null);
 
-  /** Set while we move the shadow ourselves, so its own events are ignored. */
+  /** Set while we move a playhead ourselves, so `seeked` is not treated as a person's. */
   const ourSeek = useRef(false);
+  /** When we last corrected, so corrections stay rare. */
+  const lastFix = useRef(0);
 
   /**
    * Mirror the lead's TRANSPORT onto the shadow. Never its playhead.
@@ -110,11 +136,43 @@ export function PracticePlayer({
     }
   }, []);
 
+  /**
+   * Bring the pair back together, rarely, and only by moving the silent one.
+   *
+   * Three rules, each of which was learnt the hard way:
+   *
+   *   - Only past MAX_APART. Small differences are inaudible in a switch; it is
+   *     the startup race, which can be over a second, that has to be caught.
+   *   - Only once per CORRECTION_COOLDOWN_MS. A seek costs a Range request
+   *     against a large file, and doing it often is what made playback stutter.
+   *   - Only ever the SILENT element. Seeking what somebody is listening to is
+   *     the stutter itself, and moving the lead means telling its own `seeked`
+   *     handler that this one was ours.
+   */
+  const nudge = useCallback((now: number) => {
+    const a = lead.current;
+    const b = shadow.current;
+    if (!a || !b || a.paused) return;
+    if (now - lastFix.current < CORRECTION_COOLDOWN_MS) return;
+    if (Math.abs(a.currentTime - b.currentTime) <= MAX_APART) return;
+
+    lastFix.current = now;
+    // `muted` is the truth about which one is being heard.
+    if (b.muted) {
+      b.currentTime = a.currentTime;
+    } else {
+      ourSeek.current = true;
+      a.currentTime = b.currentTime;
+    }
+  }, []);
+
   useEffect(() => {
     const a = lead.current;
     if (!a) return;
 
     const onTransport = () => mirror();
+    /** Cheap: two numbers compared. It acts only past the threshold and the cooldown. */
+    const onTime = () => nudge(Date.now());
     /**
      * A person dragged the scrubber, so both should move. This is the ONE place
      * a seek is mirrored, and it is safe because it is caused by a person rather
@@ -131,17 +189,19 @@ export function PracticePlayer({
       mirror();
     };
 
+    a.addEventListener("timeupdate", onTime);
     a.addEventListener("play", onTransport);
     a.addEventListener("pause", onTransport);
     a.addEventListener("ratechange", onTransport);
     a.addEventListener("seeked", onSeeked);
     return () => {
+      a.removeEventListener("timeupdate", onTime);
       a.removeEventListener("play", onTransport);
       a.removeEventListener("pause", onTransport);
       a.removeEventListener("ratechange", onTransport);
       a.removeEventListener("seeked", onSeeked);
     };
-  }, [mirror]);
+  }, [mirror, nudge]);
 
   // Say so when the two are not the same length, because then they are not the
   // same recording and the toggle cannot mean what it says.
