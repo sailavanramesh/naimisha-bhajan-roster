@@ -4,7 +4,8 @@ import { ragaScale } from './ragaScales';
 import { NOTE_NAMES } from './pitch';
 
 /** What the ashram owns, as pitch classes. */
-const ASHRAM = ['C', 'C#', 'D', 'E'].map((n) => NOTE_NAMES.indexOf(n as never));
+const ASHRAM_NOTES = ['C', 'C#', 'D', 'E'] as const;
+const ASHRAM = ASHRAM_NOTES.map((n) => NOTE_NAMES.indexOf(n as never));
 const scale = (name: string) => ragaScale(name);
 
 describe('degree preference', () => {
@@ -197,5 +198,49 @@ describe('confirmed against the group', () => {
     expect(scale('Kalyana Vasantham')).toContain(5);
     expect(scale('Kalyana Vasantham')).not.toContain(6);
     expect(recommendTablaForLabel('5.5 Pancham / G#', scale('Kalyana Vasantham'), ASHRAM).note).toBe('C#');
+  });
+});
+
+/**
+ * The shruti ladder's column, which showed Sa + 7 until 2026-08-21.
+ *
+ * The ladder lists every pitch label, so it is the one place that asks the
+ * question for all twelve Sa at once — and therefore the place where the old
+ * rule was most visibly wrong: it named a drum for every row, including the
+ * five Sa whose fifth is a drum the centre does not own.
+ */
+describe('the shruti ladder column — every Sa, one raga', () => {
+  const PANCHAM = NOTE_NAMES.map((n) => `1 Pancham / ${n}`);
+
+  it('never names a drum the centre does not own', () => {
+    for (const label of PANCHAM) {
+      const note = recommendTablaForLabel(label, null, ASHRAM).note;
+      if (note !== null) expect(ASHRAM_NOTES, label).toContain(note);
+    }
+  });
+
+  it('disagrees with the old Sa + 7 rule on most of the octave', () => {
+    // The old rule: the fifth, whether or not it is a drum in the building.
+    const oldRule = (label: string) => {
+      const sa = NOTE_NAMES.indexOf(label.split('/')[1].trim() as never);
+      return NOTE_NAMES[(sa + 7) % 12];
+    };
+    const differ = PANCHAM.filter(
+      (label) => recommendTablaForLabel(label, null, ASHRAM).note !== oldRule(label),
+    );
+    // The two rules agree on only 2 of the 12 Sa. Agreement needs the fifth
+    // to be BOTH the drum the new rule reaches for — so Sa and Ma are not
+    // owned — and a drum the centre actually has.
+    expect(differ.length).toBe(10);
+  });
+
+  it('says "none" rather than inventing one, and only where nothing fits', () => {
+    // With no raga recorded only Sa, Ma and Pa are assumed available, so a Sa
+    // is unusable exactly when none of Sa, Sa+5 and Sa+7 is an owned drum.
+    for (const label of PANCHAM) {
+      const sa = NOTE_NAMES.indexOf(label.split('/')[1].trim() as never);
+      const usable = [0, 5, 7].some((s) => ASHRAM.includes((sa + s) % 12));
+      expect(recommendTablaForLabel(label, null, ASHRAM).note === null, label).toBe(!usable);
+    }
   });
 });

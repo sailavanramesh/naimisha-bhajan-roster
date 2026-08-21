@@ -174,6 +174,14 @@ export function tablaSemitone(sa: number): number {
 /**
  * Tabla note for a pitch label, e.g. `1 Madhyam / F` -> `C`.
  * Returns null when the label has no parseable note.
+ *
+ * THE OLD RULE. The bare fifth, taking no account of the raga and no account of
+ * which drums the ashram actually owns — see CLAUDE.md rule 3. Nothing a player
+ * reads goes through here any more: the roster grid, the live view, the printed
+ * sheet and (from 2026-08-21) the shruti ladder all use `recommendTabla` in
+ * lib/tabla.ts. The one remaining caller is lib/pitchSuggestions.ts, which
+ * fills `SessionSlot.alternativeTablaPitch` — a stored column nothing displays.
+ * Prefer `recommendTabla` for anything anybody acts on.
  */
 export function tablaPitchOf(label?: string | null): NoteName | null {
   const sa = saOf(label);

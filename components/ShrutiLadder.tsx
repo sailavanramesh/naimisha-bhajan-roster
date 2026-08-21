@@ -9,9 +9,19 @@
  *
  * `--kumkum` means "pitch deviation" and nothing else. Do not reuse it here for
  * warnings or emphasis.
+ *
+ * The tabla column is the drum to TUNE, from `recommendTabla` — Sa, then Ma,
+ * then whatever the raga contains, against the four drums the ashram owns. It
+ * used `tablaPitchOf` (Sa + 7) until 2026-08-21, which is the old rule: the
+ * bare fifth, taking no account of the raga and no account of whether the
+ * ashram owns that drum. It therefore named drums that do not exist and
+ * disagreed with the roster grid, the live view and the printed sheet, all of
+ * which moved to the prescriptive rule earlier. See CLAUDE.md rule 3.
  */
 
-import { saOf, semitoneDelta, tablaPitchOf, NOTE_NAMES } from '@/lib/pitch';
+import { saOf, semitoneDelta, NOTE_NAMES } from '@/lib/pitch';
+import { ragaScale } from '@/lib/ragaScales';
+import { recommendTablaForLabel, ASHRAM_TABLA_PC } from '@/lib/tabla';
 import { cn } from '@/components/ui';
 
 export type LadderRung = {
@@ -28,6 +38,7 @@ export function ShrutiLadder({
   actual,
   actualKind = 'confirmed',
   comfort,
+  raga,
   className,
 }: {
   rungs: readonly LadderRung[];
@@ -35,11 +46,19 @@ export function ShrutiLadder({
   actual?: string | null;
   actualKind?: 'confirmed' | 'predicted';
   comfort?: { low: number; high: number; centre: number } | null;
+  /**
+   * The raga of the bhajan this ladder is about. The tabla depends on it — a
+   * raga without a Pa cannot have its tabla tuned to one — so leaving it out
+   * downgrades every row to a guess rather than producing a wrong answer.
+   */
+  raga?: string | null;
   className?: string;
 }) {
   const referenceSa = saOf(reference);
   const actualSa = saOf(actual);
   const delta = semitoneDelta(actual, reference);
+  // One lookup for the whole ladder: the raga is fixed, only Sa moves per row.
+  const ragaSemitones = ragaScale(raga);
 
   // The ladder shows one row per label. Both series are listed because
   // "1 Madhyam / F" and "4 Pancham / F" are the same Sa written two ways, and
@@ -69,6 +88,7 @@ export function ShrutiLadder({
         {rungs.map((rung) => {
           const isReference = referenceSa !== null && rung.semitone === referenceSa;
           const isActual = actualSa !== null && rung.semitone === actualSa;
+          const tabla = recommendTablaForLabel(rung.label, ragaSemitones, ASHRAM_TABLA_PC);
 
           return (
             <li
@@ -112,7 +132,15 @@ export function ShrutiLadder({
               </span>
 
               <span className="ml-auto flex items-center gap-2 text-[11px] text-on-surface-muted">
-                <span className="font-mono tabular-nums">tabla {tablaPitchOf(rung.label) ?? '—'}</span>
+                {/* "none" is an answer, not a gap: it means no drum they own
+                    can be tuned to this Sa, which is a reason to sing at a
+                    different one. `—` would read as missing data. */}
+                <span className="font-mono tabular-nums" title={tabla.why}>
+                  tabla{' '}
+                  {tabla.note ?? (
+                    <span className="font-sans not-italic">none</span>
+                  )}
+                </span>
                 {isReference ? <Tag>reference</Tag> : null}
                 {isActual ? (
                   <Tag style={{ background: 'rgb(var(--kumkum))', color: 'white', borderColor: 'transparent' }}>
@@ -124,6 +152,18 @@ export function ShrutiLadder({
           );
         })}
       </ol>
+
+      {/*
+        Said once, quietly, rather than marking every row. `ragaScale` knows a
+        subset of the masterlist's 236 raga names, and a good part of the
+        masterlist has no raga at all, so "assumed" is the common case — a
+        per-row marker would be noise on most ladders.
+      */}
+      <p className="text-xs text-on-surface-muted">
+        {ragaSemitones
+          ? 'Tabla is the drum to tune — Sa, then Ma, then whatever this raga contains, against the C, C♯, D and E the centre owns.'
+          : "Tabla is the drum to tune, of the C, C♯, D and E the centre owns. This raga's notes are not recorded, so Sa, Ma and Pa were taken as present — check it against the raga before tuning to anything else."}
+      </p>
 
       {comfort ? (
         <p className="text-xs text-on-surface-muted">

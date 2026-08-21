@@ -519,6 +519,7 @@ export default async function BhajanPage({
                 reference={mostRecent.reference}
                 actual={mostRecent.confirmedPitch}
                 actualKind="confirmed"
+                raga={bhajan.raga}
               />
             </section>
           ) : null}

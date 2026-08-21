@@ -240,6 +240,7 @@ export default async function SingerPage({
                 actual={latest.confirmedPitch}
                 actualKind="confirmed"
                 comfort={profile.comfort}
+                raga={latest.raga}
               />
             </section>
           ) : null}

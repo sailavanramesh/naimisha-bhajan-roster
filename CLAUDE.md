@@ -130,9 +130,18 @@ This is the heart of the app. Get it wrong and everything downstream is wrong.
    and flat sevenths, with 3.1% that no drum they own fits.
 
    `tablaPitchOf` in `lib/pitch.ts` still returns the bare fifth, Sa + 7. It is
-   the OLD rule and takes no account of the raga or of which drums exist —
-   `components/ShrutiLadder.tsx` and `lib/pitchSuggestions.ts` still call it.
-   Prefer `recommendTabla` for anything a player acts on.
+   the OLD rule and takes no account of the raga or of which drums exist.
+   Nothing anybody reads goes through it any more: the roster grid, the live
+   view, the printed sheet and — from 2026-08-21 — the shruti ladder all use
+   `recommendTabla`. Its one remaining caller is `lib/pitchSuggestions.ts`,
+   filling `SessionSlot.alternativeTablaPitch`, a stored column nothing
+   displays. Prefer `recommendTabla` for anything a player acts on.
+
+   The ladder is the one view that asks the question for all twelve Sa at once,
+   so it is where the old rule was most visibly wrong: it named a drum on every
+   row, including the Sa whose fifth the centre does not own. Two Sa — D♯ and
+   A♯ — now read **"none"** where the raga offers nothing, which is an answer
+   (sing at a different shruti), not missing data.
 
    Do not read `PitchLabel.tablaPitch` from the database. It is the written
    note + 7 in all 24 rows, which under rule 1 is wrong for the twelve Madhyam
