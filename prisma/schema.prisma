@@ -252,6 +252,14 @@ model Bhajan {
   /// Query through the join tables below, never with LIKE.
   deity    String?
   language String?
+  /// Who composed the bhajan. Blank on every row to start with: the masterlist
+  /// has no such column, so there is nothing to import and nothing to infer —
+  /// it is filled in by hand as the group finds out. Asked for 2026-08-21.
+  ///
+  /// Same name and same meaning as `Song.composer` in the programme catalogue,
+  /// deliberately: the two catalogues stay separate but they should not use
+  /// different words for the same thing.
+  composer String?
   raga     String?
   beat     String?
   level    String?

@@ -1,0 +1,15 @@
+-- Who composed a bhajan.
+--
+-- One nullable column with no default, so every one of the 3,613 existing rows
+-- keeps meaning exactly what it did and starts blank, which is what was asked
+-- for. Nothing is backfilled and nothing is inferred: the masterlist has no
+-- such column, so there is no source to take it from.
+--
+-- Additive, so it is safe to apply while the app is serving, and safe to apply
+-- BEFORE the code that reads it ships — which is the order to use, since a
+-- build selecting a column that does not exist yet fails every query on the
+-- page.
+--
+-- The programme catalogue already has "Song"."composer"; this is the same idea
+-- for the bhajan masterlist, and deliberately the same word.
+ALTER TABLE "Bhajan" ADD COLUMN "composer" TEXT;

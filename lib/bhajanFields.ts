@@ -35,6 +35,12 @@ export const EDITABLE_FIELDS: readonly EditableField[] = [
   { name: "level", label: "Level", kind: "line" },
   { name: "language", label: "Language", kind: "line" },
   {
+    name: "composer",
+    label: "Composer",
+    kind: "line",
+    hint: "Blank everywhere to start with — the masterlist never carried it.",
+  },
+  {
     name: "referenceGentsPitch",
     label: "Gents pitch",
     kind: "line",

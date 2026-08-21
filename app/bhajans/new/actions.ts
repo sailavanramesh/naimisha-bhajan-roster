@@ -19,6 +19,7 @@ const NewBhajan = z.object({
   deity: optional,
   language: optional,
   raga: optional,
+  composer: optional,
   beat: optional,
   level: optional,
   tempo: optional,
@@ -48,7 +49,7 @@ export async function createBhajan(formData: FormData): Promise<void> {
 
   const raw = Object.fromEntries(
     [
-      "title", "deity", "language", "raga", "beat", "level", "tempo",
+      "title", "deity", "language", "raga", "composer", "beat", "level", "tempo",
       "referenceGentsPitch", "referenceLadiesPitch", "url", "video", "audio",
       "lyrics", "meaning", "originNote",
     ].map((k) => [k, String(formData.get(k) ?? "")]),

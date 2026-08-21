@@ -28,6 +28,7 @@ export default async function BhajansPage({
       { lyrics: { contains: q, mode: "insensitive" } },
       { meaning: { contains: q, mode: "insensitive" } },
       { raga: { contains: q, mode: "insensitive" } },
+      { composer: { contains: q, mode: "insensitive" } },
       // Typing "karaoke" should find the karaoke ones without having to know
       // there is a dropdown for it. Matched through the join table, never
       // against the raw `songTags` string — see CLAUDE.md on multi-values.
@@ -112,7 +113,7 @@ export default async function BhajansPage({
           </div>
           <CardTitle>Bhajans</CardTitle>
           <div className="mt-2 text-sm text-on-surface-muted">
-            Search by title / lyrics / meaning / raga / tag. Filter by deity, language or tag.
+            Search by title / lyrics / meaning / raga / composer / tag. Filter by deity, language or tag.
           </div>
         </CardHeader>
 

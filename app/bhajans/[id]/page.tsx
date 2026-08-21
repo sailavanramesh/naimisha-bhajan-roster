@@ -237,6 +237,17 @@ export default async function BhajanPage({
                     <EditedDot field="raga" sourceValue={editOf("raga")!.sourceValue} />
                   ) : null}
                 </span>
+                {/* Only when it is known. Unlike raga, a blank composer is the
+                    normal state — the masterlist never carried one — so
+                    printing "Composer: —" on 3,613 bhajans would be noise. */}
+                {bhajan.composer ? (
+                  <span>
+                    Composer: {bhajan.composer}
+                    {editOf("composer") ? (
+                      <EditedDot field="composer" sourceValue={editOf("composer")!.sourceValue} />
+                    ) : null}
+                  </span>
+                ) : null}
                 {/* Deliberately quiet. The group should be able to tell its own
                     additions from the Sai Rhythms masterlist without the
                     distinction being shouted at them. */}
