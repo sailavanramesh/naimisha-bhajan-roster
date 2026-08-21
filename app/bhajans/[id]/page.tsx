@@ -21,6 +21,7 @@ import { rosterable } from "@/lib/rosterEligibility";
 import { EditBhajanPanel, EditedDot } from "./EditBhajanPanel";
 import { TrackControl } from "@/components/TrackControl";
 import { EDITABLE_FIELDS } from "@/lib/bhajanFields";
+import { getBhajanChoices } from "@/lib/bhajanChoices";
 
 export const dynamic = "force-dynamic";
 
@@ -119,15 +120,19 @@ export default async function BhajanPage({
     );
   }
 
-  const [sungRows, scheduled, profiles, rungs, singers, role, signedIn] = await Promise.all([
-    getSungRowsForBhajan(bhajan.id),
-    getScheduledRowsForBhajan(bhajan.id),
-    getAllProfiles(),
-    getPitchLabels(),
-    prisma.singer.findMany({ orderBy: { name: "asc" } }),
-    getRole(),
-    getSignedInSinger(),
-  ]);
+  const [sungRows, scheduled, profiles, rungs, singers, role, signedIn, choices] =
+    await Promise.all([
+      getSungRowsForBhajan(bhajan.id),
+      getScheduledRowsForBhajan(bhajan.id),
+      getAllProfiles(),
+      getPitchLabels(),
+      prisma.singer.findMany({ orderBy: { name: "asc" } }),
+      getRole(),
+      getSignedInSinger(),
+      // In the same wave as everything else, and cached across requests, so the
+      // dropdowns cost this page nothing it was not already paying.
+      getBhajanChoices(),
+    ]);
 
   /*
    * Same rule as Explore: the picker only appears when the app cannot tell who
@@ -433,6 +438,17 @@ export default async function BhajanPage({
             <EditBhajanPanel
               bhajanId={bhajan.id}
               edits={bhajan.fieldEdits}
+              /*
+                What each dropdown offers. The five masterlist vocabularies come
+                from what the data already holds (lib/bhajanChoices.ts); the two
+                pitches come from the PitchLabel table, which is the real closed
+                set of 24 and already loaded above for the ladder.
+              */
+              options={{
+                ...choices,
+                referenceGentsPitch: labelStrings,
+                referenceLadiesPitch: labelStrings,
+              }}
               values={Object.fromEntries(
                 EDITABLE_FIELDS.map((f) => [
                   f.name,
