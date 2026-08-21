@@ -519,8 +519,9 @@ export default async function BuildPage({
                         </Button>
                       </Link>
                       {/* Same round trip as a full re-roll, so it says so too.
-                          No busyLabel: this button is narrow and a longer word
-                          would widen the column mid-tap. */}
+                          No busyLabel: this button is 64px wide, and keeping the
+                          label means only the spinner is added rather than the
+                          spinner and a longer word. Measured 375px: 64 -> 86. */}
                       <PendingLink
                         href={href(sp, {
                           lock: serialiseLocks(new Map(otherLocks)),

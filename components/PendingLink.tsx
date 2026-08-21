@@ -42,8 +42,8 @@ export function PendingLink({
   children: React.ReactNode;
   /**
    * What the button says while the next set is on its way. Omit on a narrow
-   * control — the label then stays put and only the spinner appears, so the
-   * button does not change width and shift the row it sits in.
+   * control and the label stays put, so only the spinner's width is added
+   * (~22px) rather than that plus a longer word.
    */
   busyLabel?: string;
   variant?: "primary" | "secondary" | "quiet" | "danger";
