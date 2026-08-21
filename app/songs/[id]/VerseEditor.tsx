@@ -57,14 +57,70 @@ export function VerseEditor({
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [pasting, setPasting] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   if (!canEdit) return null;
 
   const say = (res: { ok: boolean; error?: string }, good: string) =>
     setMessage(res.ok ? { ok: true, text: good } : { ok: false, text: res.error ?? "Failed." });
 
+  /*
+   * SHUT UNTIL SOMEBODY SAYS THEY ARE EDITING.
+   *
+   * Sailavan, 2026-08-21: "make the 'add a section' for the words of a song be
+   * not open by default and click on something to say 'edit' or something along
+   * those lines then it opens up, just to make it neater."
+   *
+   * Every editor got seven section buttons and three text boxes per verse
+   * whether they had come to change anything or not — on a six-verse song that
+   * is a screen and a half of form under the words, and the words are what the
+   * page is for. A coordinator opens this page to READ far more often than to
+   * write, exactly as the running order is read more often than it is edited.
+   *
+   * Closed is a button and a count, so it is still obvious that editing is
+   * possible and how much there is.
+   */
+  if (!editing) {
+    return (
+      <div className="grid gap-2 border-t border-rule-surface pt-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            className="h-8 text-xs"
+            onClick={() => setEditing(true)}
+          >
+            Edit the words
+          </Button>
+          <span className="text-[11px] text-on-surface-muted">
+            {verses.length === 0
+              ? "nothing here yet — add the sections, or paste the whole song in"
+              : `${verses.length} section${verses.length === 1 ? "" : "s"}`}
+          </span>
+        </div>
+        {message ? (
+          <p role="status" className={message.ok ? "text-xs text-brass-ink" : "text-xs text-warn"}>
+            {message.text}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-4 border-t border-rule-surface pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="text-xs font-semibold uppercase tracking-wide text-on-surface-muted">
+          Editing the words
+        </span>
+        {/*
+          Nothing here holds an unsaved change except a verse box somebody is
+          part way through, and each of those has its own Save. So this is a
+          plain "put it away" rather than a commit.
+        */}
+        <Button type="button" className="h-8 text-xs" onClick={() => setEditing(false)}>
+          Done
+        </Button>
+      </div>
       {/*
         BOTH families of section, shown at once.
 

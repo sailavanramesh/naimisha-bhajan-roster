@@ -191,30 +191,133 @@ export default async function RosterSessionPage({
 
   const tablaPlan = isTablaPlayer ? await planTablas(sessionId) : null;
 
-  /*
-   * Who could be sent a reminder by hand, and whether it would reach them.
-   *
-   * Only queried for somebody who may actually send one — this is two extra
-   * round trips on a page that already makes several, and a viewer would be
-   * paying for a control they never see.
-   */
-  // Cheap: four rows the centre owns, and the session already has its own.
-  // Bhajan kinds only — the program vocabulary is a different list, and
-  // offering "Musical offering" as a kind of Thursday would be nonsense.
-/*
-   * The cushions on offer come from the DESK, not from a list in the code.
-   *
-   * Sailavan, 2026-08-19: "if a cushion colour is not ascribed to a channel set
-   * for a certain session, then it can't be picked." One list, in channel
-   * order, for the lead dots and the chorus dots alike.
-   */
-  const cushions = await cushionsForSession(session);
+  const canNotify = can(role, "notifySingers");
 
-  const sessionCategories = await prisma.sessionCategory.findMany({
-    where: { scope: "bhajans" },
-    orderBy: [{ order: "asc" }, { name: "asc" }],
-    select: { id: true, name: true },
-  });
+  /*
+   * EVERYTHING ELSE THIS PAGE NEEDS, ASKED FOR AT ONCE.
+   *
+   * Each of these was its own `await`, spread down the file next to the markup
+   * that uses it, which reads beautifully and means the page waits for the
+   * database eight times in a row before it can draw anything. None of them
+   * depends on another's answer — they only depend on `session`, which is
+   * already here — so the waits were pure sequence, not order.
+   *
+   * Sailavan, 2026-08-21: "sometimes the loading time for the app when opening
+   * it, either on laptop or phone is a bit long. its unpredictable." This is
+   * where the unpredictability comes from. One round trip to Australia East is
+   * a few milliseconds when the burstable database has CPU credits in hand and
+   * thirty or more when it does not, and eight in a row multiply whichever it
+   * is that minute. Asked together they cost one wait instead of eight.
+   *
+   * Anything that needs an earlier answer STAYS where it is: the tabla plan
+   * needs to know whether the reader plays tabla, and the sessions either side
+   * need this session's date.
+   */
+  const [
+    cushions,
+    sessionCategories,
+    sessionPlaceRows,
+    sameDayRows,
+    notifyPeople,
+    tablaOverrideRows,
+    allSingers,
+  ] = await Promise.all([
+    /*
+     * The cushions on offer come from the DESK, not from a list in the code.
+     *
+     * Sailavan, 2026-08-19: "if a cushion colour is not ascribed to a channel
+     * set for a certain session, then it can't be picked." One list, in channel
+     * order, for the lead dots and the chorus dots alike.
+     */
+    cushionsForSession(session),
+
+    // Cheap: four rows the centre owns, and the session already has its own.
+    // Bhajan kinds only — the program vocabulary is a different list, and
+    // offering "Musical offering" as a kind of Thursday would be nonsense.
+    prisma.sessionCategory.findMany({
+      where: { scope: "bhajans" },
+      orderBy: [{ order: "asc" }, { name: "asc" }],
+      select: { id: true, name: true },
+    }),
+
+    // Venues already used, so the field suggests rather than asks people to
+    // retype "Naimisha Sai Centre" every week.
+    prisma.session.findMany({
+      where: { ...NOT_ARCHIVED, location: { not: null } },
+      distinct: ["location"],
+      select: { location: true },
+      orderBy: { location: "asc" },
+    }),
+
+    /*
+     * The other sessions on this day.
+     *
+     * Nothing on this page said a day held more than one, so a morning session
+     * was reachable only from the calendar. Sailavan: "if a day has multiple
+     * sessions, shouldn't i be able to see them all once i go into that day?"
+     * Yes — and from the session itself, which is where you already are.
+     *
+     * Not rendered at all on an ordinary day.
+     */
+    prisma.session.findMany({
+      where: { ...NOT_ARCHIVED, date: session.date },
+      select: {
+        id: true,
+        startsAt: true,
+        category: { select: { name: true } },
+        _count: { select: { slots: true } },
+      },
+    }),
+
+    /*
+     * Who could be sent a reminder by hand, and whether it would reach them.
+     *
+     * Only queried for somebody who may actually send one — this is two extra
+     * round trips on a page that already makes several, and a viewer would be
+     * paying for a control they never see.
+     */
+    /*
+     * Who could be sent a reminder by hand, and whether it would reach them.
+     *
+     * Only for somebody who may actually send one — it is two queries of its
+     * own, and a viewer would be paying for a control they never see.
+     */
+    canNotify ? notifyCandidates(sessionId) : Promise.resolve([] as NotifyPerson[]),
+
+    // The grid recomputes a row's tabla in the browser as the pitch is edited,
+    // so it needs the overrides rather than a pre-computed answer.
+    prisma.tablaOverride.findMany({ select: { raga: true, sa: true, note: true } }),
+
+    /*
+     * The names the grid can offer, for two different controls with two
+     * different permissions.
+     *
+     * It fed only the row's Singer select, which is an allocation, so it was
+     * loaded only for somebody who may assign — and a member got an empty list.
+     * That was invisible until the chorus mics opened to everybody: the chorus
+     * picker reads the same list, so a member saw the column and no way to add
+     * anybody to it.
+     *
+     * Loading it for them is safe. The Singer select and the Delete button are
+     * each gated on `canAssign` in the grid itself, not on this being non-empty.
+     */
+    canAssign || can(role, "setMicCushion")
+      ? prisma.singer.findMany({ where: { gender: { not: null } }, orderBy: { name: "asc" } })
+      : Promise.resolve([]),
+  ]);
+
+  const sessionPlaces = sessionPlaceRows.map((x) => x.location!).filter(Boolean);
+
+  const sameDay = sortByStart(sameDayRows).map((x) => ({
+    id: x.id,
+    startsAt: x.startsAt,
+    categoryName: x.category?.name ?? null,
+    entries: x._count.slots,
+  }));
+
+  const tablaOverrides = Object.fromEntries(
+    tablaOverrideRows.map((o) => [`${o.raga}|${o.sa}`, o.note]),
+  );
 
   /*
    * The jobs this person holds, if any — sound engineer, mic coordinator, both.
@@ -231,51 +334,6 @@ export default async function RosterSessionPage({
   const myJobs = jobsOf(me);
   const myView = resolveSessionView({ sessionId, format: "bhajans", jobs: myJobs });
 
-  // Venues already used, so the field suggests rather than asks people to
-  // retype "Naimisha Sai Centre" every week.
-  const sessionPlaces = (
-    await prisma.session.findMany({
-      where: { ...NOT_ARCHIVED, location: { not: null } },
-      distinct: ["location"],
-      select: { location: true },
-      orderBy: { location: "asc" },
-    })
-  )
-    .map((x) => x.location!)
-    .filter(Boolean);
-
-  /*
-   * The other sessions on this day.
-   *
-   * Nothing on this page said a day held more than one, so a morning session
-   * was reachable only from the calendar. Sailavan: "if a day has multiple
-   * sessions, shouldn't i be able to see them all once i go into that day?"
-   * Yes — and from the session itself, which is where you already are.
-   *
-   * Not rendered at all on an ordinary day.
-   */
-  const sameDay = sortByStart(
-    await prisma.session.findMany({
-      where: { ...NOT_ARCHIVED, date: session.date },
-      select: {
-        id: true,
-        startsAt: true,
-        category: { select: { name: true } },
-        _count: { select: { slots: true } },
-      },
-    }),
-  ).map((x) => ({
-    id: x.id,
-    startsAt: x.startsAt,
-    categoryName: x.category?.name ?? null,
-    entries: x._count.slots,
-  }));
-
-  const canNotify = can(role, "notifySingers");
-  const notifyPeople = canNotify ? await notifyCandidates(sessionId) : [];
-
-  // The grid recomputes a row's tabla in the browser as the pitch is edited,
-  // so it needs the overrides rather than a pre-computed answer.
   /*
    * The sessions either side, by date. Rostering runs in sequence — you look at
    * last Thursday to see what was sung, then at next Thursday to plan — and
@@ -324,30 +382,6 @@ export default async function RosterSessionPage({
       month: "short",
       timeZone: "UTC",
     }).format(d);
-
-  const tablaOverrides = Object.fromEntries(
-    (await prisma.tablaOverride.findMany({ select: { raga: true, sa: true, note: true } })).map(
-      (o) => [`${o.raga}|${o.sa}`, o.note],
-    ),
-  );
-
-  /*
-   * The names the grid can offer, for two different controls with two
-   * different permissions.
-   *
-   * It fed only the row's Singer select, which is an allocation, so it was
-   * loaded only for somebody who may assign — and a member got an empty list.
-   * That was invisible until the chorus mics opened to everybody: the chorus
-   * picker reads the same list, so a member saw the column and no way to add
-   * anybody to it.
-   *
-   * Loading it for them is safe. The Singer select and the Delete button are
-   * each gated on `canAssign` in the grid itself, not on this being non-empty.
-   */
-  const allSingers =
-    canAssign || can(role, "setMicCushion")
-      ? await prisma.singer.findMany({ where: { gender: { not: null } }, orderBy: { name: "asc" } })
-      : [];
 
   /*
    * Anybody on this roster who has since said they cannot sing that night.

@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { normaliseEmail } from "./email";
 import { prisma } from "@/lib/db";
@@ -58,8 +59,23 @@ export {
 export const requireSignIn = process.env.REQUIRE_SIGN_IN === "true";
 
 
-/** The signed-in person, if any, resolved to a singer via the email allowlist. */
-export async function getSignedInSinger(): Promise<{
+/**
+ * The signed-in person, if any, resolved to a singer via the email allowlist.
+ *
+ * ONCE PER REQUEST, however many times it is asked.
+ *
+ * This is the hottest function in the app and it was being run four to eight
+ * times over on every page: the layout calls it, the layout then calls getRole
+ * which calls it again, and each page calls getRole and often canWithGrantsFor
+ * as well, each of which calls it once more. Every one of those decrypted the
+ * session cookie and made a round trip to Azure Postgres for the same row.
+ *
+ * `cache` from React memoises for the life of ONE request — not across requests,
+ * not across people — which is exactly the scope of the question being asked. It
+ * is why opening the app felt unpredictable: the cost was a multiple of the
+ * database's mood at that moment rather than one round trip.
+ */
+export const getSignedInSinger = cache(async function getSignedInSinger(): Promise<{
   id: string;
   name: string;
   email: string;
@@ -102,7 +118,7 @@ export async function getSignedInSinger(): Promise<{
     soundEngineer: singer.soundEngineer,
     micCoordinator: singer.micCoordinator,
   };
-}
+});
 
 /**
  * May the person reading this page do it, counting their personal grants?
@@ -140,7 +156,8 @@ export async function requireGrantedCapability(capability: Capability): Promise<
   );
 }
 
-export async function getRole(): Promise<Role> {
+/** Memoised per request for the same reason as getSignedInSinger, above. */
+export const getRole = cache(async function getRole(): Promise<Role> {
   // Google sign-in wins when it is configured and the person is on the
   // allowlist — an access link cannot escalate a named identity.
   const signedIn = await getSignedInSinger();
@@ -152,7 +169,7 @@ export async function getRole(): Promise<Role> {
   // A pre-existing `edit=1` cookie predates roles and meant full access.
   if (store.get("edit")?.value === "1") return "editor";
   return "viewer";
-}
+});
 
 /**
  * Server-side gate for a mutating Server Action.

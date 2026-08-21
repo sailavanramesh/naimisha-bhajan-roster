@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { MEMBER_NAV } from './nav';
+import {
+  MEMBER_NAV,
+  NAV_TREE,
+  activeHrefIn,
+  groupContaining,
+  isNavGroup,
+  navFor,
+  navLeaves,
+  type NavLeaf,
+} from './nav';
 import { can } from './capabilities';
 
 /**
@@ -55,5 +64,83 @@ describe('what a member can reach from the nav', () => {
   it('keeps the planning board out of a member\'s reach both ways', () => {
     expect(MEMBER_NAV).not.toContain('/availability/team');
     expect(can('member', 'assignSingers')).toBe(false);
+  });
+});
+
+/**
+ * The shape of the menu, 2026-08-21. Seventeen items in one flat column put the
+ * roster and the admin screen at the same size and the same distance away.
+ *
+ * Two things are worth asserting about the fix. The pages somebody opens the app
+ * FOR must stay at the top level — that is the whole request — and no page may
+ * fall out of the tree while it is still in MEMBER_NAV, which would be the same
+ * failure as before wearing a different hat: a page somebody is entitled to,
+ * with nothing linking to it.
+ */
+describe('the shape of the menu', () => {
+  const primary = NAV_TREE.filter((e): e is NavLeaf => !isNavGroup(e)).map((e) => e.href);
+
+  it('leaves the pages people come for at the top level', () => {
+    for (const href of ['/roster', '/my-list', '/find-my-pitch', '/explore', '/guide']) {
+      expect(primary, href).toContain(href);
+    }
+  });
+
+  it('keeps the guide last, where it has always been', () => {
+    const last = NAV_TREE[NAV_TREE.length - 1];
+    expect(isNavGroup(last) ? null : last.href).toBe('/guide');
+  });
+
+  it('folds the dashboard away rather than deleting it', () => {
+    expect(primary).not.toContain('/dashboard');
+    expect(navLeaves(NAV_TREE).map((l) => l.href)).toContain('/dashboard');
+  });
+
+  it('links every page a member is allowed to reach', () => {
+    const memberTree = navFor('member');
+    const hrefs = navLeaves(memberTree).map((l) => l.href);
+    for (const href of MEMBER_NAV) expect(hrefs, href).toContain(href);
+  });
+
+  it('shows an editor everything, and lists nothing twice', () => {
+    const hrefs = navLeaves(navFor('editor')).map((l) => l.href);
+    expect(hrefs).toEqual(navLeaves(NAV_TREE).map((l) => l.href));
+    expect(new Set(hrefs).size).toBe(hrefs.length);
+  });
+
+  it('keeps the coordinator-only pages away from a member', () => {
+    const hrefs = navLeaves(navFor('member')).map((l) => l.href);
+    for (const href of ['/dashboard', '/availability/team', '/build', '/admin', '/fairness']) {
+      expect(hrefs, href).not.toContain(href);
+    }
+  });
+
+  /*
+   * A fold with one thing in it is worse than no fold: "People" expanding to
+   * reveal only Singers is a click for nothing. A member should get the link.
+   */
+  it('turns a group left with one child into that child', () => {
+    const memberTree = navFor('member');
+    expect(
+      memberTree.filter((e): e is NavLeaf => !isNavGroup(e)).map((e) => e.href),
+    ).toContain('/singers');
+    for (const entry of memberTree) {
+      if (isNavGroup(entry)) expect(entry.children.length, entry.label).toBeGreaterThan(1);
+    }
+  });
+
+  it('lights up the longest matching link, not the first one listed', () => {
+    const tree = navFor('editor');
+    expect(activeHrefIn(tree, '/availability/team')).toBe('/availability/team');
+    expect(activeHrefIn(tree, '/availability/team/anything')).toBe('/availability/team');
+    expect(activeHrefIn(tree, '/availability')).toBe('/availability');
+    expect(activeHrefIn(tree, '/roster/abc123')).toBe('/roster');
+    expect(activeHrefIn(tree, '/nowhere')).toBeNull();
+  });
+
+  it('knows which fold a page is in, so arriving opens it', () => {
+    const tree = navFor('editor');
+    expect(groupContaining(tree, '/dashboard')).toBe('Coordinating');
+    expect(groupContaining(tree, '/roster')).toBeNull();
   });
 });

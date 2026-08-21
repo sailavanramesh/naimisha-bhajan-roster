@@ -235,40 +235,92 @@ function ItemCard({
             {isReading ? "read" : number}
           </span>
 
-          <button
-            type="button"
-            onClick={onToggle}
-            aria-expanded={isOpen}
-            className="min-w-0 flex-1 text-left"
-          >
-            {/*
-              THE KEY NEVER TRUNCATES. The title does.
+          {/*
+            THE TITLE, THE KEY, THE TRACK — three siblings, not one nested pile.
 
-              Both used to sit inside one `truncate` span, so a long title ate
-              the note — Sailavan: "can't see key if the song title too big",
-              and the key is the one thing on this line somebody is scanning for.
-              Its own flex child, `shrink-0`, so the ellipsis lands in the title.
+            Two bugs came out of the old shape, which put the tanpura button and
+            the whole inline player INSIDE the button that opens the item.
+
+            One: a phone in portrait had no room for all of it, and since the
+            title was the only shrinkable thing on the line, it was the thing
+            that shrank — to nothing. Sailavan, 2026-08-21: "if a track is added
+            to a song, it cuts out the title", and the screenshot shows item 3
+            with no title at all, the Words button sitting on top of the elapsed
+            time. So under `sm` the track drops onto its own line (`basis-full`),
+            which is the width it wants anyway, and the title keeps the first.
+
+            Two: `<button>` may not contain a button, and the HTML PARSER does
+            not merely disapprove — it closes the outer one. So the markup the
+            server sent and the tree React built in the browser disagreed on
+            every item with a pitch or a track, which is hydration error #418 on
+            this page. React then threw away the server's HTML and re-rendered
+            the lot on the client, which is the slowest possible way to draw a
+            running order.
+
+            THE KEY STILL NEVER TRUNCATES. The title does — `shrink-0` on the
+            key, `min-w-0 truncate` on the title, so the ellipsis lands in the
+            long name rather than eating the note somebody is scanning for.
+          */}
+          <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-1">
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-expanded={isOpen}
+              /* Not flex-1: the key and the player sit right beside the name,
+                 as they did before, rather than being pushed out to the far
+                 edge of a wide screen. It still shrinks — flex items do by
+                 default — which is what keeps a long title in bounds. */
+              className="flex min-w-0 items-baseline gap-2 text-left font-display text-lg font-semibold"
+            >
+              {/*
+                Two lines on a phone, one from `sm` up.
+
+                Truncating at a phone's width left "Kuzhalooti manam…" and
+                "Kandu Njaan Kann…" — the ellipsis falls in the middle of the
+                name, and several bhajans in a set can share a first word. There
+                is room for a second line and no reason to hoard it; the wider
+                layout has never needed one.
+              */}
+              <span className="min-w-0 leading-snug line-clamp-2 sm:line-clamp-1">{heading}</span>
+            </button>
+
+            {/*
+              The key and the button that sounds it, as one thing.
+
+              The player has to be outside the toggle — a button inside a button
+              is what broke this markup in the first place — but the two must not
+              be allowed to separate: with the name wrapping onto a second line
+              on a phone, the tanpura circle went and sat by itself on a third,
+              reading as a stray control belonging to nothing.
             */}
-            <span className="flex min-w-0 items-baseline gap-2 font-display text-lg font-semibold">
-              <span className="min-w-0 truncate">{heading}</span>
-              {draft.pitchNote ? (
-                <span className="flex shrink-0 items-center gap-1.5 font-mono text-sm font-normal text-on-surface-muted">
-                  {draft.pitchNote}
-                  <ShrutiPlayer label={draft.pitchNote} />
-                </span>
-              ) : null}
-              {/* The recording, playable without opening the item — the running
-                  order is read on the night, and opening each song to reach its
-                  track is a hop nobody wants mid-programme. */}
-              {draft.track.file ? (
+            {draft.pitchNote ? (
+              <span className="flex shrink-0 items-center gap-1.5 font-mono text-sm text-on-surface-muted">
+                {draft.pitchNote}
+                <ShrutiPlayer label={draft.pitchNote} />
+              </span>
+            ) : null}
+
+            {/* The recording, playable without opening the item — the running
+                order is read on the night, and opening each song to reach its
+                track is a hop nobody wants mid-programme. Its own line on a
+                phone, beside the title from `sm` up. */}
+            {draft.track.file ? (
+              <span className="basis-full sm:basis-auto">
                 <InlineTrack file={draft.track.file} name={draft.track.name} />
-              ) : null}
-            </span>
-            <span className="block truncate text-sm text-on-surface-muted">
+              </span>
+            ) : null}
+
+            <button
+              type="button"
+              onClick={onToggle}
+              aria-expanded={isOpen}
+              aria-label={`Open ${heading}`}
+              className="block min-w-0 basis-full truncate text-left text-sm text-on-surface-muted"
+            >
               {[performers, played].filter(Boolean).join(" · ") ||
                 (isReading ? "no reader yet" : "nobody yet")}
-            </span>
-          </button>
+            </button>
+          </div>
 
           {/*
             Straight to the words. Sailavan: "have a link next to each song to

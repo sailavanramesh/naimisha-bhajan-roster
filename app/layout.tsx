@@ -194,7 +194,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             {/* A column, so the credit sits at the BOTTOM rather than
                 directly under the header while a page is still streaming in.
                 Without this a slow page reads as "the site is just a footer". */}
-            <div className="mx-auto flex min-h-screen max-w-6xl flex-col px-3 pb-16 pt-14 sm:px-6 sm:pt-8">
+            <div className="mx-auto flex min-h-screen max-w-6xl flex-col px-3 pb-16 pt-14 sm:px-6 lg:pt-8">
               <header className="no-print mb-6">
                 <div className="flex items-center gap-4 border-b border-rule pb-4">
                   <YantraFull size={54} className="shrink-0 text-brass" variant={isDev ? "dev" : "brand"} />

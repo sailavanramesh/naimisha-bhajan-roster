@@ -90,7 +90,10 @@ export function InlineTrack({ file, name }: { file: string; name: string | null 
   }
 
   return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 align-middle">
+    /* Full width when it has been dropped onto its own line — which is what a
+       phone in portrait does with it, see app/program/[id]/ProgramEditor.tsx —
+       and back to its compact self beside the title from `sm` up. */
+    <span className="flex w-full items-center gap-1.5 align-middle sm:inline-flex sm:w-auto sm:shrink-0">
       {/* preload=metadata so the bar knows how long the track is before anybody
           presses play, without pulling the audio down on page load — a running
           order can carry a dozen of these. */}
@@ -130,7 +133,7 @@ export function InlineTrack({ file, name }: { file: string; name: string | null 
           el.currentTime = t;
           setAt(t);
         }}
-        className="h-1 w-20 cursor-pointer accent-brass disabled:cursor-not-allowed sm:w-28"
+        className="h-1 min-w-0 flex-1 cursor-pointer accent-brass disabled:cursor-not-allowed sm:w-28 sm:flex-none"
       />
 
       <span className="font-mono text-[10px] tabular-nums text-on-surface-muted">
