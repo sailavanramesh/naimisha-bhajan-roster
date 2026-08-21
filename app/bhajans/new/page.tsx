@@ -4,8 +4,9 @@ import {
   Card, CardContent, CardHeader, CardTitle, Button, Input, Textarea, SectionTitle,
 } from "@/components/ui";
 import { EnableEditForm } from "@/components/EnableEditForm";
-import { TEMPO_ORDER } from "@/lib/sessionBuilder";
 import { createBhajan } from "./actions";
+import { ChoiceFormField } from "@/components/ChoiceInput";
+import { getBhajanChoices } from "@/lib/bhajanChoices";
 
 import { getRole, can } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
@@ -26,24 +27,16 @@ export default async function NewBhajanPage() {
 
   const canEdit = can(role, "addBhajan");
 
-  const [deities, languages, levels, beats, labels] = await Promise.all([
+  /*
+   * One wave, and the vocabularies come from the same cached place the edit
+   * panel reads — four groupBy calls here were a second, slightly different
+   * answer to a question already answered elsewhere.
+   */
+  const [deities, labels, choices] = await Promise.all([
     prisma.deity.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
-    prisma.bhajan.groupBy({ by: ["language"], _count: { _all: true } }),
-    prisma.bhajan.groupBy({ by: ["level"] }),
-    prisma.bhajan.groupBy({ by: ["beat"] }),
     prisma.pitchLabel.findMany({ orderBy: [{ step: "asc" }, { series: "asc" }], select: { label: true } }),
+    getBhajanChoices(),
   ]);
-
-  const clean = (rows: { [k: string]: unknown }[], key: string) =>
-    rows
-      .map((r) => r[key])
-      .filter((v): v is string => typeof v === "string" && v.trim() !== "")
-      .sort((a, b) => a.localeCompare(b));
-
-  const commonLanguages = (languages as Array<{ language: string | null; _count: { _all: number } }>)
-    .filter((l) => l.language && l._count._all >= 10)
-    .map((l) => l.language as string)
-    .sort((a, b) => a.localeCompare(b));
 
   if (!canEdit) {
     return (
@@ -93,35 +86,35 @@ export default async function NewBhajanPage() {
                     {deities.map((d) => <option key={d.name} value={d.name} />)}
                   </datalist>
                 </Field>
-                <Field label="Language">
-                  <Input name="language" list="languages" placeholder="e.g. Sanskrit / Hindi" />
-                  <datalist id="languages">
-                    {commonLanguages.map((l) => <option key={l} value={l} />)}
-                  </datalist>
+                {/*
+                  The same dropdowns as "Correct this bhajan", from the same
+                  values, with the same "Something else…" escape hatch.
+                  Sailavan, 2026-08-21: "the dropdowns should exist in Add a
+                  bhajan too, its the same concept with the same escape hatch for
+                  new values."
+
+                  These were a mixture before — a datalist for language and beat,
+                  a hardcoded TEMPO_ORDER for tempo, a groupBy for level, and
+                  plain text for raga. Four ways to ask the same kind of
+                  question, and only some of them told you what the answers were.
+                */}
+                <Field label="Language" hint="A bhajan in several is one value, comma-joined.">
+                  <ChoiceFormField name="language" options={choices.language} />
                 </Field>
                 <Field label="Raga">
-                  <Input name="raga" placeholder="e.g. Kalyani / Yaman" />
+                  <ChoiceFormField name="raga" options={choices.raga} />
                 </Field>
                 <Field label="Composer">
                   <Input name="composer" placeholder="if it is known" />
                 </Field>
                 <Field label="Beat / taal">
-                  <Input name="beat" list="beats" placeholder="e.g. 8 Beat / Keherwa / Adi" />
-                  <datalist id="beats">
-                    {clean(beats, "beat").map((b) => <option key={b} value={b} />)}
-                  </datalist>
+                  <ChoiceFormField name="beat" options={choices.beat} />
                 </Field>
                 <Field label="Tempo">
-                  <select name="tempo" className="h-11 w-full rounded-[10px] border border-rule-surface bg-field px-3 text-sm">
-                    <option value="">—</option>
-                    {TEMPO_ORDER.map((t) => <option key={t} value={t}>{t}</option>)}
-                  </select>
+                  <ChoiceFormField name="tempo" options={choices.tempo} />
                 </Field>
                 <Field label="Level">
-                  <select name="level" className="h-11 w-full rounded-[10px] border border-rule-surface bg-field px-3 text-sm">
-                    <option value="">—</option>
-                    {clean(levels, "level").map((l) => <option key={l} value={l}>{l}</option>)}
-                  </select>
+                  <ChoiceFormField name="level" options={choices.level} />
                 </Field>
               </div>
             </section>
@@ -177,13 +170,15 @@ export default async function NewBhajanPage() {
   );
 }
 
+/**
+ * The 24 real labels, with the same escape hatch as everything else.
+ *
+ * It was a bare <select>, which is right about the 24 being the whole set — but
+ * inconsistent with every other field here, and it left no way to record a
+ * label the table has not got.
+ */
 function PitchSelect({ name, labels }: { name: string; labels: string[] }) {
-  return (
-    <select name={name} className="h-11 w-full rounded-[10px] border border-rule-surface bg-field px-3 text-sm">
-      <option value="">—</option>
-      {labels.map((l) => <option key={l} value={l}>{l}</option>)}
-    </select>
-  );
+  return <ChoiceFormField name={name} options={labels} />;
 }
 
 function Field({
