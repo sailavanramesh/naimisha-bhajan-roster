@@ -25,7 +25,6 @@
 import { NextResponse } from "next/server";
 import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
-import { Readable } from "node:stream";
 import { getRole, can } from "@/lib/auth";
 import { CONTENT_TYPE, trackPath } from "@/lib/trackStore";
 
@@ -114,7 +113,76 @@ export async function serveTrack(req: Request, file: string): Promise<Response> 
   });
 }
 
-/** Node stream to the web stream a Response wants. */
+/**
+ * Node stream to the web stream a Response wants, safely.
+ *
+ * It was `Readable.toWeb(stream)`, and that throws when the consumer goes away:
+ * the dev logs carry `uncaughtException: TypeError: Invalid state: Controller is
+ * already closed (ERR_INVALID_STATE)`. An unhandled throw out of a stream
+ * listener is not something a server should ever do, and this route is aborted
+ * constantly by design — an <audio> element abandons a Range request every time
+ * somebody seeks, and the practice player holds two streams at once.
+ *
+ * So every hand-off is guarded and `closed` is tracked, because a controller can
+ * only be closed once and enqueueing into a closed one throws.
+ *
+ * `cancel` destroys the file handle. That also fixes a quieter leak: an
+ * abandoned request used to leave its read stream open until the garbage
+ * collector noticed, and a 10 MB track abandoned repeatedly is a lot of open
+ * descriptors on a B1 instance.
+ *
+ * Backpressure is real here: pausing when the consumer is full is what stops a
+ * whole track being pulled into memory for somebody on a slow connection.
+ */
 function toWeb(stream: import("node:stream").Readable): ReadableStream {
-  return Readable.toWeb(stream) as unknown as ReadableStream;
+  let closed = false;
+
+  const done = () => {
+    if (closed) return;
+    closed = true;
+    stream.destroy();
+  };
+
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      stream.on("data", (chunk: Buffer) => {
+        if (closed) return;
+        try {
+          controller.enqueue(new Uint8Array(chunk));
+        } catch {
+          // The consumer is gone. Not an error worth reporting — it is what a
+          // browser does when it seeks — so stop reading and say nothing.
+          done();
+          return;
+        }
+        if ((controller.desiredSize ?? 1) <= 0) stream.pause();
+      });
+
+      stream.on("end", () => {
+        if (closed) return;
+        closed = true;
+        try {
+          controller.close();
+        } catch {
+          /* Already closed by a cancel that raced us. */
+        }
+      });
+
+      stream.on("error", (err) => {
+        if (closed) return;
+        closed = true;
+        try {
+          controller.error(err);
+        } catch {
+          /* Nothing left to tell. */
+        }
+      });
+    },
+    pull() {
+      if (!closed) stream.resume();
+    },
+    cancel() {
+      done();
+    },
+  }) as unknown as ReadableStream;
 }
