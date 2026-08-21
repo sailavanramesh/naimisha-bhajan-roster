@@ -99,11 +99,18 @@ const NUDGE_SETTLED = 0.004;
 const MAX_NUDGE = 0.04;
 
 /**
- * Durations further apart than this are not the same recording.
+ * Durations further apart than this are worth mentioning — carefully.
  *
- * This matters more now that nothing corrects drift: if the pair is genuinely
- * two different takes, the toggle lands wherever the other recording happens to
- * be at that second. Saying so is the only honest thing to do.
+ * Total length is a CRUDE proxy for "same recording". Sailavan's real stem pair
+ * measures 536.1s against 523.26s — 12.8s apart — and yet the music lines up:
+ * the difference is at the END, a longer fade or trailing silence on one render.
+ * The first wording flatly said they were "probably not the same recording",
+ * which was wrong about his files and would have sent him looking for a problem
+ * that was mine.
+ *
+ * So it now says what it actually knows — they differ in length — and what that
+ * does and does not imply. Nothing here can see whether the MUSIC aligns; only
+ * a person listening can.
  */
 const LENGTH_MISMATCH = 0.75;
 
@@ -354,10 +361,12 @@ export function PracticePlayer({
       </div>
 
       {mismatch !== null ? (
-        <p className="text-[11px] text-warn">
-          These two are {mismatch < 60 ? `${mismatch.toFixed(1)} seconds` : "well over a minute"} apart
-          in length, so they are probably not the same recording. Switching will keep the same
-          position, which will not be the same place in the music.
+        <p className="text-[11px] text-on-surface-muted">
+          These two differ in length by{" "}
+          {mismatch < 60 ? `${mismatch.toFixed(0)} seconds` : "well over a minute"}. That is fine if
+          one just has a longer ending — the switch keeps the same position, so what matters is
+          that they START together and hold the same tempo. If the switch lands somewhere else in
+          the music, they are two different takes rather than one mix with and without the voice.
         </p>
       ) : null}
     </div>
