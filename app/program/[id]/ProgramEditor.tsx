@@ -375,18 +375,28 @@ function ItemCard({
         {isOpen ? (
           <div className="grid grid-cols-[minmax(0,1fr)] gap-3 border-t border-rule-surface pt-3">
             <div className="grid gap-2 sm:grid-cols-2">
-              <label className="grid gap-1 text-xs text-on-surface-muted">
+              <label className="grid content-start gap-1 text-xs text-on-surface-muted">
                 {/*
-                  LABEL ROWS ARE A FIXED HEIGHT, all three of them.
+                  TWO THINGS KEEP THESE FIELDS IN LINE. Sailavan, 2026-08-21:
+                  "the alignment is wonky here".
 
-                  The Pitch label carries a ShrutiPlayer, which is 24px against a
-                  16px line of text, so that column's label row was 8px taller
-                  than its neighbours and its field started 8px lower. Sailavan,
-                  2026-08-21: "the alignment is wonky here".
+                  1. Every label's first line is a fixed 24px — the height of the
+                     ShrutiPlayer the Pitch label carries so a note can be
+                     auditioned while it is chosen. A 24px button on a 16px line
+                     of text made that one label row taller than its neighbours
+                     and pushed its field down. Sizing the button to the text
+                     would fix this case and leave the next label that needs a
+                     control to break it again.
 
-                  Giving every label's first line the button's height lines the
-                  fields up whether or not a label has a control in it, which is
-                  steadier than sizing the button to the text.
+                  2. `content-start` on each label. These are grids, and the
+                     Song column is TALLER than the others — it carries a hint
+                     and the "Words and meaning" links. Grid stretches its items,
+                     so the two-row labels beside it were stretched to match and
+                     `align-content: normal` shared the slack out among their
+                     rows: measured on production, a 24px label row had become
+                     43px and the field sat 19px low. Pinning the content to the
+                     top means a label's rows keep the size they asked for
+                     however tall the row around them is.
                 */}
                 <span className="flex h-6 items-center">
                   {isReading ? "What it is called" : "Song"}
@@ -425,7 +435,7 @@ function ItemCard({
 
               {!isReading ? (
                 <div className="grid grid-cols-2 gap-2">
-                  <label className="grid gap-1 text-xs text-on-surface-muted">
+                  <label className="grid content-start gap-1 text-xs text-on-surface-muted">
                     <span className="flex h-6 items-center gap-1.5">
                       Pitch
                       {/* Audition while choosing, rather than saving first. */}
@@ -445,7 +455,7 @@ function ItemCard({
                       ))}
                     </select>
                   </label>
-                  <label className="grid gap-1 text-xs text-on-surface-muted">
+                  <label className="grid content-start gap-1 text-xs text-on-surface-muted">
                     <span className="flex h-6 items-center">Beats per minute</span>
                     <Input
                       value={draft.bpm}
