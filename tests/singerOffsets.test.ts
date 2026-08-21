@@ -54,7 +54,7 @@
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { PrismaClient } from '@prisma/client';
-import { semitoneDelta, median, mean } from '../lib/pitch';
+import { semitoneDelta, writtenDelta, median, mean } from '../lib/pitch';
 
 /**
  * From the table in CLAUDE.md: [gender, n, median, mean], as measured against
@@ -167,6 +167,101 @@ describe.skipIf(!hasDatabase)('singer offset profiles reproduce from the seeded 
       expect(mean(profile!.deltas), `${singer} mean offset`).toBeCloseTo(expectedMean, 1);
     });
   }
+});
+
+
+/**
+ * THE SAME GATE, ON THE QUANTITY THE APP ACTUALLY PREDICTS FROM.
+ *
+ * Added 2026-08-21. The table above is measured with `semitoneDelta`, on Sa. The
+ * predictions stopped being measured that way the same day: `offsetFor` in
+ * lib/singerProfile.ts now uses `writtenDelta`, on the written note, because the
+ * history mixes the two series and the sheet was filled in by comparing letters.
+ * The long version is on `writtenDelta` in lib/pitch.ts.
+ *
+ * So the gate above no longer guards the number the app uses — it guards the
+ * seed and the Sa maths, which is still worth guarding, and it is deliberately
+ * left exactly as it was. Re-baselining it a third time would have made it
+ * worthless; a tripwire that gets edited whenever it fires is not a tripwire.
+ * This is a second tripwire beside it, on the second quantity.
+ *
+ * These figures are measured against PRODUCTION, 2026-08-21, over the same 608
+ * rows. Bounds, not equalities, for the same reason as above.
+ *
+ * Worth noticing, and the reason to believe this reading: the means move TOWARD
+ * zero almost everywhere — Ashwin 0.625 to 0.3125, Rhuben 0.143 to 0.000,
+ * Sriraag 0.205 to -0.231. CLAUDE.md records that introducing NOTE_ABOVE_SA
+ * WIDENED the means, and called that the cost of the change. Measuring the
+ * offset on the letter narrows them again, which is what dropping an artefact
+ * looks like rather than what introducing one looks like.
+ */
+const EXPECTED_WRITTEN = {
+  Sailavan: ['Gents', 98, 1, 0.8469],
+  Ashwin: ['Gents', 96, 0, 0.3125],
+  Prithvi: ['Gents', 88, 1, 1.3523],
+  Jothsna: ['Ladies', 68, 0, 0.4265],
+  Prasanna: ['Ladies', 63, 1, 1.0476],
+  Pavitra: ['Ladies', 40, 0, 0.25],
+  Shravya: ['Ladies', 40, 0, 0.55],
+  Sriraag: ['Gents', 39, 0, -0.2308],
+  Rhuben: ['Gents', 35, 0, 0],
+  Anvita: ['Ladies', 25, 0, -0.52],
+  Triveni: ['Ladies', 16, 0, 0.25],
+} as const satisfies Record<string, readonly [string, number, number, number]>;
+
+let written = new Map<string, Profile>();
+
+describe.skipIf(!hasDatabase)('the offsets the app predicts from, measured on the written note', () => {
+  beforeAll(async () => {
+    const slots = await prisma!.sessionSlot.findMany({
+      where: {
+        confirmedPitch: { not: null },
+        historicalRecommendedPitch: { not: null },
+        singerId: { not: null },
+      },
+      select: {
+        confirmedPitch: true,
+        historicalRecommendedPitch: true,
+        singer: { select: { name: true, gender: true } },
+      },
+    });
+
+    written = new Map();
+    for (const slot of slots) {
+      const delta = writtenDelta(slot.confirmedPitch, slot.historicalRecommendedPitch);
+      if (delta === null || !slot.singer) continue;
+      const name = slot.singer.name;
+      if (!written.has(name)) written.set(name, { gender: slot.singer.gender, deltas: [] });
+      written.get(name)!.deltas.push(delta);
+    }
+  });
+
+  for (const [singer, [gender, n, expectedMedian, expectedMean]] of Object.entries(EXPECTED_WRITTEN)) {
+    it(`${singer} (${gender}): about ${n} rows, written median near ${expectedMedian}`, () => {
+      const profile = written.get(singer);
+      expect(profile, `${singer} is missing`).toBeDefined();
+      expect(profile!.deltas.length, `${singer} has lost a lot of history`).toBeGreaterThanOrEqual(
+        Math.floor(n * 0.9),
+      );
+      const m = median(profile!.deltas);
+      expect(m, `${singer} written median`).not.toBeNull();
+      expect(Math.abs(m! - expectedMedian), `${singer} written median moved`).toBeLessThanOrEqual(0.5);
+      expect(mean(profile!.deltas), `${singer} written mean`).toBeCloseTo(expectedMean, 1);
+    });
+  }
+
+  /*
+   * The whole point, stated as a test: nobody's offset should be a tritone or
+   * more. An offset that large is not a voice, it is a measurement crossing the
+   * two conventions — which is what put Prithvi's Pahadi median at +6 and
+   * predicted 7 Madhyam / E from a reference of 4 Madhyam / A#.
+   */
+  it('gives nobody an offset of 5 semitones or more, in any raga', () => {
+    for (const [name, profile] of written) {
+      const m = median(profile.deltas);
+      expect(Math.abs(m ?? 0), `${name} overall offset is implausibly large`).toBeLessThan(5);
+    }
+  });
 });
 
 describe.skipIf(hasDatabase)('singer offset regression', () => {

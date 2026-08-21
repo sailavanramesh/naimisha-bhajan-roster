@@ -166,6 +166,51 @@ export function semitoneDelta(
   return d > 6 ? d - 12 : d;
 }
 
+/**
+ * The gap between two labels AS THE GROUP READS THEM — on the written note,
+ * ignoring which series each is in.
+ *
+ * This is the one to measure a singer's offset with. `semitoneDelta` above is a
+ * true pitch interval and is the wrong tool for it, because the history mixes
+ * the two series and the sheet was filled in by comparing letters.
+ *
+ * Sailavan, 2026-08-21, on a prediction of 7 Madhyam from a reference of
+ * 4 Madhyam: "If they generally shift 1 semitone in Pancham, the same rule
+ * applies in Madhyam. We should use all Madhyam and Pancham data to calculate
+ * it, but it shouldn't go from 4 madhyam to 7 madhyam."
+ *
+ * He is right, and the data says why. Prithvi's fourteen Pahadi rows:
+ *
+ *   2 Madhyam / G    -> 2.5 Madhyam / G#    letter +1    Sa +1
+ *   1.5 Madhyam / F# -> 5 Pancham / G       letter +1    Sa +6
+ *   2 Madhyam / G    -> 5.5 Pancham / G#    letter +1    Sa +6
+ *
+ * He shifts +1 every time. Every +6 is a row whose reference is Madhyam and
+ * whose sung pitch was written in Pancham — the Madhyam five subtracted from
+ * one side of the comparison and not the other. Eight of his fourteen Pahadi
+ * rows are like that, so the MEDIAN went to +6 and the prediction with it.
+ *
+ * This is the tension already recorded against `NOTE_ABOVE_SA`, which says the
+ * likeliest account is that "the source sheet was filled in comparing letters,
+ * whatever the shruti box does". So: read the history the way it was written.
+ * Nothing here changes what the tanpura plays — that is still `saOf`.
+ *
+ * Measured across production, 2026-08-21: 52 of 681 comparisons are
+ * cross-series. Ten of the eleven singers' overall medians are identical either
+ * way; the difference bites only in the small per-raga samples, where a handful
+ * of cross-series rows can be the majority.
+ */
+export function writtenDelta(
+  actual?: string | null,
+  reference?: string | null,
+): number | null {
+  const a = parsePitchLabel(actual);
+  const r = parsePitchLabel(reference);
+  if (!a || !r) return null;
+  const d = (PITCH_CLASS[a.note] - PITCH_CLASS[r.note] + 12) % 12;
+  return d > 6 ? d - 12 : d;
+}
+
 /** Tabla pitch for a given Sa: always Sa + 7 semitones (a fifth above). */
 export function tablaSemitone(sa: number): number {
   return (((sa + 7) % 12) + 12) % 12;
