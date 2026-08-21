@@ -43,8 +43,24 @@ import { cn } from "@/components/ui";
 
 export type PracticeTrack = { file: string; name: string | null };
 
-/** How far apart the two may drift before it is worth correcting, in seconds. */
-const DRIFT_LIMIT = 0.12;
+/**
+ * Two thresholds, because the two jobs want opposite things.
+ *
+ * ALIGN is how far the SILENT element may drift before it is nudged back. Tight,
+ * because whatever gap is left at the moment of a toggle is heard as the music
+ * jumping. Measured on dev, two 8-second files: left to themselves the pair sat
+ * about 90ms apart, which is enough to stumble a rhythm. Correcting the silent
+ * one costs nothing — nobody can hear a seek in a track they are not listening
+ * to.
+ *
+ * REPAIR is how far out the element ABOUT TO BE HEARD has to be before the
+ * toggle seeks it. Deliberately loose: a seek on an element that is about to
+ * play can stall it for a moment, so it is a last resort for the case where a
+ * phone stopped the second stream entirely, not routine tidying. ALIGN keeps
+ * things far inside this.
+ */
+const ALIGN_LIMIT = 0.04;
+const REPAIR_LIMIT = 0.25;
 
 /** Durations further apart than this are not the same recording. */
 const LENGTH_MISMATCH = 0.75;
@@ -63,14 +79,34 @@ export function PracticePlayer({
   const [vocals, setVocals] = useState(true);
   const [mismatch, setMismatch] = useState<number | null>(null);
 
-  /** Put the shadow exactly where the lead is, and in the same state. */
+  /**
+   * Which one is audible, readable from an event listener without re-binding.
+   *
+   * The listeners are attached once; a `useState` value read inside them would
+   * be whatever it was when they were bound.
+   */
+  const vocalsRef = useRef(true);
+  /** Set while we are moving a playhead ourselves, so `seeked` does not recurse. */
+  const syncing = useRef(false);
+
+  /**
+   * Keep the pair together.
+   *
+   * TRANSPORT always follows the lead, because the lead owns the visible
+   * controls: it is the one a person presses play on, whichever they are
+   * hearing.
+   *
+   * THE PLAYHEAD is corrected on whichever element is SILENT — never on the one
+   * being listened to. Seeking audio somebody is hearing is exactly the stutter
+   * this feature is supposed to avoid, and it was the flaw in the first draft:
+   * it always corrected the shadow, which is the audible one whenever the
+   * karaoke is selected.
+   */
   const align = useCallback((force: boolean) => {
     const a = lead.current;
     const b = shadow.current;
-    if (!a || !b) return;
-    if (force || Math.abs(a.currentTime - b.currentTime) > DRIFT_LIMIT) {
-      b.currentTime = a.currentTime;
-    }
+    if (!a || !b || syncing.current) return;
+
     b.playbackRate = a.playbackRate;
     if (a.paused) {
       if (!b.paused) b.pause();
@@ -79,6 +115,20 @@ export function PracticePlayer({
         /* A phone refusing the second stream is handled on toggle. */
       });
     }
+
+    const apart = Math.abs(a.currentTime - b.currentTime);
+    if (!force && apart <= ALIGN_LIMIT) return;
+
+    // A forced align follows a seek on the lead, so the lead is right by
+    // definition. Otherwise move the one nobody can hear.
+    const silent = force ? b : vocalsRef.current ? b : a;
+    const source = silent === b ? a : b;
+    syncing.current = true;
+    silent.currentTime = source.currentTime;
+    // Cleared on a task of its own: the `seeked` this causes arrives later.
+    setTimeout(() => {
+      syncing.current = false;
+    }, 0);
   }, []);
 
   // Mirror the lead's controls onto the shadow.
@@ -89,7 +139,7 @@ export function PracticePlayer({
     const onPause = () => align(false);
     const onSeek = () => align(true);
     const onRate = () => align(false);
-    // Only correct drift on the SILENT one, where a jump cannot be heard.
+    // Drift is corrected here, on whichever element is silent — see align.
     const onTime = () => align(false);
 
     a.addEventListener("play", onPlay);
@@ -131,13 +181,14 @@ export function PracticePlayer({
     const b = shadow.current;
     const next = !vocals;
     setVocals(next);
+    vocalsRef.current = next;
     if (!a || !b) return;
 
     // The one about to be heard. If the platform stopped it, or it has drifted,
     // put it right BEFORE it becomes audible rather than after.
     const audible = next ? a : b;
     const other = next ? b : a;
-    if (!a.paused && (audible.paused || Math.abs(audible.currentTime - other.currentTime) > DRIFT_LIMIT)) {
+    if (!a.paused && (audible.paused || Math.abs(audible.currentTime - other.currentTime) > REPAIR_LIMIT)) {
       audible.currentTime = other.currentTime;
       void audible.play().catch(() => {});
     }
