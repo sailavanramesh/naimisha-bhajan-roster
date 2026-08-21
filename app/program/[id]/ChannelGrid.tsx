@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { Button, Card, CardContent, Input } from "@/components/ui";
 import { micColourDot, type MicColourValue } from "@/lib/micCushion";
 import { occupantFor, shortName, stripNumber } from "@/lib/deskChannels";
-import { DeskStrips, stripName } from "./DeskStrips";
+import { DeskStrips, stripName } from "@/components/DeskStrips";
 import { songNumbers } from "@/lib/program";
 import {
   setChannelOpen,

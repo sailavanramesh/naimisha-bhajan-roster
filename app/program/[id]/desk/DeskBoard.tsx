@@ -5,8 +5,8 @@ import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useSessionVersion } from "@/components/useSessionVersion";
 import { currentItemOf, occupantFor, stepItem } from "@/lib/deskChannels";
 import { type MicColourValue } from "@/lib/micCushion";
-import { DeskStrips } from "../DeskStrips";
-import { Verses, type VerseView } from "@/app/songs/[id]/Verses";
+import { DeskStrips } from "@/components/DeskStrips";
+import { Verses, type VerseView } from "@/components/Verses";
 import { setCurrentItem } from "../deskActions";
 
 export type DeskChannel = {

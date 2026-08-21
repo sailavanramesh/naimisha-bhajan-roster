@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { Button } from "@/components/ui";
-import { updateSessionMeta } from "./metaActions";
+import { updateSessionMeta } from "@/app/roster/[id]/metaActions";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
 import { CENTRE_TIME_ZONE } from "@/lib/timezones";
 import { SessionTime } from "@/components/SessionTime";
