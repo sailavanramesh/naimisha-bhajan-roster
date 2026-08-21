@@ -20,8 +20,8 @@ import {
   updateProgramItem,
 } from "./actions";
 import { createSong, renameSong, setItemSong } from "@/app/songs/actions";
-import { Verses, type VerseView } from "@/app/songs/[id]/Verses";
-import { VerseEditor } from "@/app/songs/[id]/VerseEditor";
+import { Verses, type VerseView } from "@/components/Verses";
+import { VerseEditor } from "@/components/VerseEditor";
 
 export type EditorItem = {
   id: string;

@@ -2,10 +2,30 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { deleteSession } from "./metaActions";
+import { deleteSession } from "@/app/roster/[id]/metaActions";
 
 /**
  * Delete this session. Two steps, and quiet until asked.
+ *
+ * LIVES HERE, not in app/roster/[id]/, and that matters. It was in the route
+ * directory and imported two ways — `./DeleteSessionButton` from the session
+ * page and `@/app/roster/[id]/DeleteSessionButton` from the programme page. A
+ * shared CLIENT component inside a dynamic route segment breaks the React
+ * Client Manifest, and it breaks NON-DETERMINISTICALLY, depending on how that
+ * build happened to chunk things:
+ *
+ *   Error: Could not find the module ".../app/roster/[id]/DeleteSessionButton
+ *   .tsx#DeleteSessionButton" in the React Client Manifest.
+ *
+ * Which surfaces as "Application error: a server-side exception has occurred" on
+ * every session and programme page, for anybody who may delete one. Sailavan hit
+ * exactly that on 2026-08-21, on a laptop and a phone, while the build before and
+ * the build after were both fine — which is why it looked like an outage rather
+ * than a bug.
+ *
+ * Importing the server ACTION back across the same bracketed path is fine and
+ * proven — components/MicCushions.tsx has done it for weeks. It is the client
+ * component reference that cannot live there.
  *
  * A plain line of text rather than a red button: deleting a session is a rare
  * correction — a day tapped by mistake, a duplicate — not part of running a

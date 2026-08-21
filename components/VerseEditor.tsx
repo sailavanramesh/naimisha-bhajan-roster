@@ -30,7 +30,7 @@ import {
   removeVerse,
   updateVerse,
 } from "@/app/songs/actions";
-import type { VerseView } from "./Verses";
+import type { VerseView } from "@/components/Verses";
 
 /**
  * Editing the words.

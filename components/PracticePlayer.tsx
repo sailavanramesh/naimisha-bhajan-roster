@@ -64,35 +64,53 @@ import { cn } from "@/components/ui";
 export type PracticeTrack = { file: string; name: string | null };
 
 /**
- * How far apart the pair may sit before it is worth one seek to fix.
+ * A gap this big is a startup race, and only a seek will close it.
  *
- * Not a drift tolerance — a startup-race tolerance. Measured on dev with his
- * real 10 MB pair: the two began 0.86s apart and settled 1.26s apart, because
- * whichever element starts decoding first runs ahead while the other is still
- * opening its file. With nothing correcting it that offset lasts the whole
- * track, and a toggle then moves the music by well over a second.
- *
- * A third of a second is about where a switch stops sounding like a switch and
- * starts sounding like a mistake.
+ * Measured on dev: the two elements can begin over a second apart, because
+ * whichever starts decoding first runs ahead while the other opens its file.
+ * Nothing but a seek fixes that, and it is worth one.
  */
-const MAX_APART = 0.35;
+const SEEK_IF_APART = 0.3;
+
+/** No more than one seek this often. A seek costs a Range request; see below. */
+const SEEK_COOLDOWN_MS = 8000;
 
 /**
- * And no more than one correction this often.
+ * Under that, the gap is closed by SPEED rather than by seeking.
  *
- * The stutter that started all this was a seek every time the pair wandered
- * 40ms, each one abandoning a Range request against a 10 MB file. The cooldown
- * is what keeps this a handful of seeks per track instead: enough to fix a
- * startup race, far too slow to feed itself.
+ * Sailavan, with a genuine stem pair: "there is a slight behindness to the
+ * karaoke track, maybe, but it affects the beat."
+ *
+ * He is right and it was mine: the old tolerance let the pair sit up to 350ms
+ * apart before anything acted, so at any given toggle the offset was somewhere
+ * in that range. On a beat, 350ms is not slight.
+ *
+ * Tightening the tolerance would have meant seeking far more often, which is
+ * precisely what made playback stutter — every seek on a 10 MB file abandons a
+ * Range request and asks for another. So small gaps are closed the way sync is
+ * done properly: nudge the SILENT element's playback RATE by a few per cent
+ * until it catches up, then put it back to 1. No seek, no request, and nothing
+ * audible, because it is only ever done to the track nobody is hearing.
+ *
+ * 4% closes a 100ms gap in about two and a half seconds.
  */
-const CORRECTION_COOLDOWN_MS = 8000;
+const NUDGE_IF_APART = 0.012;
+const NUDGE_SETTLED = 0.004;
+const MAX_NUDGE = 0.04;
 
 /**
- * Durations further apart than this are not the same recording.
+ * Durations further apart than this are worth mentioning — carefully.
  *
- * This matters more now that nothing corrects drift: if the pair is genuinely
- * two different takes, the toggle lands wherever the other recording happens to
- * be at that second. Saying so is the only honest thing to do.
+ * Total length is a CRUDE proxy for "same recording". Sailavan's real stem pair
+ * measures 536.1s against 523.26s — 12.8s apart — and yet the music lines up:
+ * the difference is at the END, a longer fade or trailing silence on one render.
+ * The first wording flatly said they were "probably not the same recording",
+ * which was wrong about his files and would have sent him looking for a problem
+ * that was mine.
+ *
+ * So it now says what it actually knows — they differ in length — and what that
+ * does and does not imply. Nothing here can see whether the MUSIC aligns; only
+ * a person listening can.
  */
 const LENGTH_MISMATCH = 0.75;
 
@@ -112,8 +130,10 @@ export function PracticePlayer({
 
   /** Set while we move a playhead ourselves, so `seeked` is not treated as a person's. */
   const ourSeek = useRef(false);
-  /** When we last corrected, so corrections stay rare. */
-  const lastFix = useRef(0);
+  /** When we last SEEKED, so seeks stay rare. */
+  const lastSeek = useRef(0);
+  /** True while a playback rate is being held off 1 to close a gap. */
+  const nudging = useRef(false);
 
   /**
    * Mirror the lead's TRANSPORT onto the shadow. Never its playhead.
@@ -126,9 +146,19 @@ export function PracticePlayer({
     const a = lead.current;
     const b = shadow.current;
     if (!a || !b) return;
-    if (b.playbackRate !== a.playbackRate) b.playbackRate = a.playbackRate;
+    // NOT while nudging: the rates are deliberately different then, and copying
+    // one onto the other would undo the correction — or worse, apply it to the
+    // element being listened to.
+    if (!nudging.current && b.playbackRate !== a.playbackRate) {
+      b.playbackRate = a.playbackRate;
+    }
     if (a.paused) {
       if (!b.paused) b.pause();
+      if (nudging.current) {
+        a.playbackRate = 1;
+        b.playbackRate = 1;
+        nudging.current = false;
+      }
     } else if (b.paused) {
       void b.play().catch(() => {
         /* A platform refusing the second stream is repaired on toggle. */
@@ -137,32 +167,49 @@ export function PracticePlayer({
   }, []);
 
   /**
-   * Bring the pair back together, rarely, and only by moving the silent one.
+   * Keep the pair together: by speed for small gaps, by one seek for large ones.
    *
-   * Three rules, each of which was learnt the hard way:
-   *
-   *   - Only past MAX_APART. Small differences are inaudible in a switch; it is
-   *     the startup race, which can be over a second, that has to be caught.
-   *   - Only once per CORRECTION_COOLDOWN_MS. A seek costs a Range request
-   *     against a large file, and doing it often is what made playback stutter.
-   *   - Only ever the SILENT element. Seeking what somebody is listening to is
-   *     the stutter itself, and moving the lead means telling its own `seeked`
-   *     handler that this one was ours.
+   * Whichever element is SILENT is the one adjusted — `muted` is the truth about
+   * which that is. Nothing here ever touches the track being listened to, which
+   * is the rule the first two versions of this broke in opposite ways.
    */
-  const nudge = useCallback((now: number) => {
+  const keepTogether = useCallback((now: number) => {
     const a = lead.current;
     const b = shadow.current;
     if (!a || !b || a.paused) return;
-    if (now - lastFix.current < CORRECTION_COOLDOWN_MS) return;
-    if (Math.abs(a.currentTime - b.currentTime) <= MAX_APART) return;
 
-    lastFix.current = now;
-    // `muted` is the truth about which one is being heard.
-    if (b.muted) {
-      b.currentTime = a.currentTime;
-    } else {
-      ourSeek.current = true;
-      a.currentTime = b.currentTime;
+    const silent = b.muted ? b : a;
+    const audible = silent === b ? a : b;
+    const gap = audible.currentTime - silent.currentTime;
+    const apart = Math.abs(gap);
+
+    if (apart > SEEK_IF_APART) {
+      if (now - lastSeek.current < SEEK_COOLDOWN_MS) return;
+      lastSeek.current = now;
+      if (nudging.current) {
+        a.playbackRate = 1;
+        b.playbackRate = 1;
+        nudging.current = false;
+      }
+      // Moving the lead means telling its own `seeked` handler this one was ours.
+      if (silent === a) ourSeek.current = true;
+      silent.currentTime = audible.currentTime;
+      return;
+    }
+
+    if (apart > NUDGE_IF_APART) {
+      // Behind: speed it up. Ahead: slow it down. Proportional, so a small gap
+      // gets a small nudge and closes without overshooting.
+      const adjust = Math.min(MAX_NUDGE, apart) * Math.sign(gap);
+      silent.playbackRate = 1 + adjust;
+      nudging.current = true;
+      return;
+    }
+
+    if (nudging.current && apart < NUDGE_SETTLED) {
+      a.playbackRate = 1;
+      b.playbackRate = 1;
+      nudging.current = false;
     }
   }, []);
 
@@ -171,8 +218,8 @@ export function PracticePlayer({
     if (!a) return;
 
     const onTransport = () => mirror();
-    /** Cheap: two numbers compared. It acts only past the threshold and the cooldown. */
-    const onTime = () => nudge(Date.now());
+    /** Cheap: two numbers compared, four times a second. */
+    const onTime = () => keepTogether(Date.now());
     /**
      * A person dragged the scrubber, so both should move. This is the ONE place
      * a seek is mirrored, and it is safe because it is caused by a person rather
@@ -201,7 +248,7 @@ export function PracticePlayer({
       a.removeEventListener("ratechange", onTransport);
       a.removeEventListener("seeked", onSeeked);
     };
-  }, [mirror, nudge]);
+  }, [mirror, keepTogether]);
 
   // Say so when the two are not the same length, because then they are not the
   // same recording and the toggle cannot mean what it says.
@@ -229,6 +276,18 @@ export function PracticePlayer({
     const next = !vocals;
     setVocals(next);
     if (!a || !b) return;
+
+    /*
+     * Both back to normal speed before the swap. One of them may be running a
+     * few per cent off to close a gap, and the one about to be heard must not
+     * be — that would be an audible tempo change at the very moment of the
+     * switch.
+     */
+    if (nudging.current) {
+      a.playbackRate = 1;
+      b.playbackRate = 1;
+      nudging.current = false;
+    }
 
     /*
      * Swap which one is heard. Nothing is seeked: both have been playing
@@ -302,10 +361,12 @@ export function PracticePlayer({
       </div>
 
       {mismatch !== null ? (
-        <p className="text-[11px] text-warn">
-          These two are {mismatch < 60 ? `${mismatch.toFixed(1)} seconds` : "well over a minute"} apart
-          in length, so they are probably not the same recording. Switching will keep the same
-          position, which will not be the same place in the music.
+        <p className="text-[11px] text-on-surface-muted">
+          These two differ in length by{" "}
+          {mismatch < 60 ? `${mismatch.toFixed(0)} seconds` : "well over a minute"}. That is fine if
+          one just has a longer ending — the switch keeps the same position, so what matters is
+          that they START together and hold the same tempo. If the switch lands somewhere else in
+          the music, they are two different takes rather than one mix with and without the voice.
         </p>
       ) : null}
     </div>

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { DeskStrips, stripName } from "@/app/program/[id]/DeskStrips";
+import { DeskStrips, stripName } from "@/components/DeskStrips";
 import {
   planLiveDeskForSlots,
   stripWho,
