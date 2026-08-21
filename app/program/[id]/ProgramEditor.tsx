@@ -5,6 +5,8 @@ import { useState, useTransition } from "react";
 import { Button, Card, CardContent, Input } from "@/components/ui";
 import { ShrutiPlayer } from "@/components/ShrutiPlayer";
 import { TrackControl, InlineTrack } from "@/components/TrackControl";
+import { PracticePlayer } from "@/components/PracticePlayer";
+import type { ResolvedTracks } from "@/lib/songTracks";
 import { NOTE_NAMES } from "@/lib/pitch";
 import { instrumentsLabel, performersLabel, runningOrderLabel, songNumbers } from "@/lib/program";
 import {
@@ -33,13 +35,20 @@ export type EditorItem = {
   title: string;
   narration: string;
   pitchNote: string;
-  /** The audio for this song, if somebody has added one. */
+  /** The audio uploaded ON THIS ITEM, if somebody has added one. */
   track: {
     file: string | null;
     name: string | null;
     bytes: number | null;
     uploadedBy: string | null;
   };
+  /**
+   * What this item should actually play: its own track, or the catalogued song's
+   * practice pair when it has none. Resolved on the server by
+   * lib/songTracks.ts, so the running order, the desk and the song page all give
+   * the same answer.
+   */
+  plays: ResolvedTracks;
   bpm: string;
   referenceUrl: string;
   arrangement: string;
@@ -304,9 +313,9 @@ function ItemCard({
                 order is read on the night, and opening each song to reach its
                 track is a hop nobody wants mid-programme. Its own line on a
                 phone, beside the title from `sm` up. */}
-            {draft.track.file ? (
+            {draft.plays.play ? (
               <span className="basis-full sm:basis-auto">
-                <InlineTrack file={draft.track.file} name={draft.track.name} />
+                <InlineTrack file={draft.plays.play.file} name={draft.plays.play.name} />
               </span>
             ) : null}
 
@@ -450,10 +459,52 @@ function ItemCard({
               {draft.kind === "song" ? (
                 <div className="mt-2 grid gap-1">
                   <span className="text-xs text-on-surface-muted">Track</span>
+
+                  {/*
+                    A practice pair, when what is being played has one: both
+                    halves in sync with a switch that drops the voice in and out.
+                    Usually the catalogued song's, which is the point of putting
+                    it there — upload once and every programme gets it.
+                  */}
+                  {draft.plays.canToggle && draft.plays.play && draft.plays.karaoke ? (
+                    <>
+                      <PracticePlayer
+                        original={{ file: draft.plays.play.file, name: draft.plays.play.name }}
+                        karaoke={{ file: draft.plays.karaoke.file, name: draft.plays.karaoke.name }}
+                      />
+                      <span className="text-[11px] text-on-surface-muted">
+                        {draft.plays.source === "song"
+                          ? "From the song catalogue. Adding a track here instead would override it for this programme."
+                          : "Uploaded on this item."}
+                      </span>
+                    </>
+                  ) : draft.plays.play && draft.plays.source === "song" ? (
+                    <>
+                      <audio
+                        controls
+                        preload="metadata"
+                        className="h-9 w-full"
+                        src={`/api/tracks/${draft.plays.play.file}`}
+                      >
+                        Your browser cannot play audio.
+                      </audio>
+                      <span className="text-[11px] text-on-surface-muted">
+                        From the song catalogue. Adding a track here instead would override it for
+                        this programme.
+                      </span>
+                    </>
+                  ) : null}
+
                   <TrackControl
                     endpoint={`/api/program/item/${draft.id}/track`}
                     initial={draft.track}
                     canEdit={canEdit}
+                    addLabel={
+                      draft.plays.source === "song"
+                        ? "Use a different track for this programme"
+                        : "Add a track"
+                    }
+                    playerHidden={Boolean(draft.plays.canToggle && draft.track.file)}
                   />
                 </div>
               ) : null}

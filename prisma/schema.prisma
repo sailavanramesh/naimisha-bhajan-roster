@@ -894,6 +894,38 @@ model Song {
   bpm          Int?
   notes        String? @db.Text
 
+  /// A PRACTICE PAIR: the song sung, and the same recording with the voice out.
+  ///
+  /// Sailavan, 2026-08-21, asked for the vocals toggle here rather than on a
+  /// bhajan — "i need it not in the bhajans but in the songs section" — and for
+  /// a programme to be able to play it too.
+  ///
+  /// On the SONG rather than on ProgramItem because practice belongs to the
+  /// song: you rehearse "Madhura Mohana", not one night's performance of it, and
+  /// a pair uploaded here serves every programme the song ever appears in. A
+  /// programme item keeps its own `trackFile` for the desk, and that WINS when
+  /// it is set — it is the recording chosen for that performance. The song's
+  /// pair is the fallback. See lib/songTracks.ts.
+  ///
+  /// THE PAIR MUST BE THE SAME RECORDING: karaoke = original with the vocals
+  /// stripped, so both share one timeline and the toggle can swap which one you
+  /// hear without moving the playhead. components/PracticePlayer.tsx says so on
+  /// screen when the two durations disagree, rather than pretending.
+  ///
+  /// Same five-column shape and same rules as ProgramItem.trackFile — a
+  /// generated NAME, never a path, on the app's own disk with no backup.
+  trackFile       String?
+  trackName       String?
+  trackBytes      Int?
+  trackUploadedAt DateTime?
+  trackUploadedBy String?
+
+  karaokeTrackFile       String?
+  karaokeTrackName       String?
+  karaokeTrackBytes      Int?
+  karaokeTrackUploadedAt DateTime?
+  karaokeTrackUploadedBy String?
+
   bhajanId String? @unique
 
   createdBy String?
