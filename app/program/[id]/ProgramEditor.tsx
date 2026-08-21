@@ -376,7 +376,21 @@ function ItemCard({
           <div className="grid grid-cols-[minmax(0,1fr)] gap-3 border-t border-rule-surface pt-3">
             <div className="grid gap-2 sm:grid-cols-2">
               <label className="grid gap-1 text-xs text-on-surface-muted">
-                {isReading ? "What it is called" : "Song"}
+                {/*
+                  LABEL ROWS ARE A FIXED HEIGHT, all three of them.
+
+                  The Pitch label carries a ShrutiPlayer, which is 24px against a
+                  16px line of text, so that column's label row was 8px taller
+                  than its neighbours and its field started 8px lower. Sailavan,
+                  2026-08-21: "the alignment is wonky here".
+
+                  Giving every label's first line the button's height lines the
+                  fields up whether or not a label has a control in it, which is
+                  steadier than sizing the button to the text.
+                */}
+                <span className="flex h-6 items-center">
+                  {isReading ? "What it is called" : "Song"}
+                </span>
                 {/*
                   ONCE A SONG IS CATALOGUED, ITS NAME LIVES THERE.
 
@@ -412,7 +426,7 @@ function ItemCard({
               {!isReading ? (
                 <div className="grid grid-cols-2 gap-2">
                   <label className="grid gap-1 text-xs text-on-surface-muted">
-                    <span className="flex items-center gap-1.5">
+                    <span className="flex h-6 items-center gap-1.5">
                       Pitch
                       {/* Audition while choosing, rather than saving first. */}
                       <ShrutiPlayer label={draft.pitchNote} />
@@ -432,7 +446,7 @@ function ItemCard({
                     </select>
                   </label>
                   <label className="grid gap-1 text-xs text-on-surface-muted">
-                    Beats per minute
+                    <span className="flex h-6 items-center">Beats per minute</span>
                     <Input
                       value={draft.bpm}
                       inputMode="numeric"
