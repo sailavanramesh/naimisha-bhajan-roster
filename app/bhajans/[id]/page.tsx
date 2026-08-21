@@ -20,6 +20,7 @@ import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { rosterable } from "@/lib/rosterEligibility";
 import { EditBhajanPanel, EditedDot } from "./EditBhajanPanel";
 import { TrackControl } from "@/components/TrackControl";
+import { trackStorageSummary } from "@/lib/trackStore";
 import { EDITABLE_FIELDS } from "@/lib/bhajanFields";
 import { getBhajanChoices } from "@/lib/bhajanChoices";
 
@@ -143,6 +144,13 @@ export default async function BhajanPage({
   // The same permission that corrects a raga adds a recording: both change what
   // the masterlist says about this bhajan.
   const canEditBhajan = can(role, "addBhajan");
+
+  /*
+   * How much of the shared track allowance is gone. Only for somebody who can
+   * upload — it walks the tracks directory, and there is no reason to make a
+   * member reading the words pay for a number they cannot act on.
+   */
+  const storage = canEditBhajan ? await trackStorageSummary() : null;
   const pickSinger = !signedIn || can(role, "assignSingers");
   const labelStrings = rungs.map((r) => r.label);
 
@@ -342,6 +350,15 @@ export default async function BhajanPage({
                   <span className="ml-1 font-normal">· added by {bhajan.trackUploadedBy}</span>
                 ) : null}
               </h2>
+              {/*
+                ONE recording, and no vocals toggle. The practice pair lives on a
+                SONG instead — Sailavan, 2026-08-21: "i need it not in the bhajans
+                but in the songs section … i don't need it in bhajans - at least
+                for now."
+
+                `Bhajan.karaokeTrack*` still exists, empty and unread, so turning
+                this back on is a UI change rather than another migration.
+              */}
               <TrackControl
                 endpoint={`/api/bhajans/${bhajan.id}/track`}
                 initial={{
@@ -353,10 +370,19 @@ export default async function BhajanPage({
                 canEdit={canEditBhajan}
                 addLabel="Add a recording"
               />
-              {!bhajan.trackFile && canEditBhajan ? (
+              {canEditBhajan ? (
                 <p className="text-[11px] text-on-surface-muted">
-                  MP3, M4A, OGG or WAV, up to 30 MB. Kept on the app&rsquo;s own storage, which
-                  has no backup — keep your copy.
+                  {!bhajan.trackFile ? <>MP3, M4A, OGG or WAV, up to 30 MB. </> : null}
+                  Kept on the app&rsquo;s own storage, which has no backup — keep your copy.
+                  {storage ? (
+                    <>
+                      {" "}
+                      <span className={storage.tight ? "text-warn" : undefined}>
+                        {storage.usedLabel} of {storage.budgetLabel} of track storage used
+                        {storage.tight ? " — getting tight" : ""}.
+                      </span>
+                    </>
+                  ) : null}
                 </p>
               ) : null}
             </section>

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
+import { resolveItemTracks } from "@/lib/songTracks";
 import { getRole, can, getSignedInSinger, type Role } from "@/lib/auth";
 import { jobsOf, runsSound } from "@/lib/sessionView";
 import { NoAccess } from "@/components/RequireRole";
@@ -49,6 +50,20 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
           song: {
             select: {
               title: true,
+              /*
+                The song's practice pair, so an item with no recording of its
+                own can play the song's — see lib/songTracks.ts, where the rule
+                lives: the item's own track WINS when it is set, because
+                somebody chose that one for this performance.
+              */
+              trackFile: true,
+              trackName: true,
+              trackBytes: true,
+              trackUploadedBy: true,
+              karaokeTrackFile: true,
+              karaokeTrackName: true,
+              karaokeTrackBytes: true,
+              karaokeTrackUploadedBy: true,
               // The words, so they can be read and edited ON the item rather
               // than two hops away in the catalogue.
               verses: {
@@ -202,6 +217,13 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
       bytes: item.trackBytes,
       uploadedBy: item.trackUploadedBy,
     },
+    /*
+      What this item should actually PLAY, item-first with the song's pair as
+      the fallback, and whether the pair allows a vocals toggle. Resolved on
+      the server by the one function all three views share, so the running
+      order, the desk and the song page cannot drift apart.
+    */
+    plays: resolveItemTracks(item, item.song),
     bpm: item.bpm === null ? "" : String(item.bpm),
     referenceUrl: item.referenceUrl ?? "",
     arrangement: item.arrangement ?? "",

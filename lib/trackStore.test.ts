@@ -122,6 +122,10 @@ describe('display', () => {
     expect(humanSize(512)).toBe('512 B');
     expect(humanSize(2048)).toBe('2 KB');
     expect(humanSize(7 * 1024 * 1024)).toBe('7.0 MB');
+    // The allowance is four gigabytes; printing it as 4096.0 MB made a reader
+    // do the conversion.
+    expect(humanSize(4 * 1024 * 1024 * 1024)).toBe('4.0 GB');
+    expect(humanSize(1024 * 1024 * 1024 - 1)).toBe('1024.0 MB');
   });
 });
 

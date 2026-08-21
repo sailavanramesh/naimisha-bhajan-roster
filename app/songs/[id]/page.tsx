@@ -7,6 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { performersLabel } from "@/lib/program";
 import { Verses } from "./Verses";
 import { VerseEditor } from "./VerseEditor";
+import { TrackControl } from "@/components/TrackControl";
+import { PracticePlayer } from "@/components/PracticePlayer";
+import { cn } from "@/components/ui";
+import { pairOf } from "@/lib/songTracks";
+import { trackStorageSummary } from "@/lib/trackStore";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +61,16 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
 
   // Words editing is the one thing a named person can be given on its own.
   const canEditWords = await canWithGrantsFor("editSongWords");
+  /*
+   * Uploading audio is gated on `editPrograms`, which already governs the
+   * programme-item upload — the only precedent for putting a file on this disk.
+   * Deliberately NOT the editSongWords grant: that exists so named people can
+   * keep the lyrics current without other editor power, and spending the shared
+   * storage allowance is a different thing from typing a verse.
+   */
+  const canEditTracks = can(role, "editPrograms");
+  const pair = pairOf(song);
+  const storage = canEditTracks ? await trackStorageSummary() : null;
 
   const facts = [song.language, song.tradition, song.composer].filter(Boolean).join(" · ");
 
@@ -101,6 +116,102 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
             </Link>
           ) : null}
         </div>
+      ) : null}
+
+      {/*
+        The practice pair, and the toggle that drops the voice in and out.
+
+        Sailavan, 2026-08-21: "i need it not in the bhajans but in the songs
+        section, for the tracks we upload there." It sits above the words on
+        purpose — somebody practising has the recording going while they read.
+
+        Above "Sung at" too, because that list is history and this is the thing
+        you came to use.
+      */}
+      {pair.original || pair.karaoke || canEditTracks ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Recording</CardTitle>
+            <p className="mt-1 text-sm text-on-surface-muted">
+              {pair.original && pair.karaoke
+                ? "The sung recording and the same one without the voice. The switch swaps them without losing your place, so a line can be heard and then sung."
+                : pair.original
+                  ? "Add the same recording with the voice taken out and a switch appears here, for practising."
+                  : "The recording the group learns this from, kept by the centre rather than linked to somebody else's site."}
+            </p>
+          </CardHeader>
+          <CardContent className="grid gap-2">
+            {pair.original && pair.karaoke ? (
+              <PracticePlayer
+                original={{ file: pair.original.file, name: pair.original.name }}
+                karaoke={{ file: pair.karaoke.file, name: pair.karaoke.name }}
+              />
+            ) : null}
+
+            <div className={cn("grid gap-2", canEditTracks && "sm:grid-cols-2")}>
+              <div className="grid gap-1">
+                {pair.original && pair.karaoke ? (
+                  <span className="text-[10px] uppercase tracking-wide text-on-surface-muted">
+                    Sung recording
+                  </span>
+                ) : null}
+                <TrackControl
+                  endpoint={`/api/songs/${song.id}/track`}
+                  initial={{
+                    file: song.trackFile,
+                    name: song.trackName,
+                    bytes: song.trackBytes,
+                    uploadedBy: song.trackUploadedBy,
+                  }}
+                  canEdit={canEditTracks}
+                  addLabel="Add a recording"
+                  playerHidden={Boolean(pair.original && pair.karaoke)}
+                />
+              </div>
+
+              {/* Only once there is a recording to pair it with: a karaoke on
+                  its own is not a practice pair. */}
+              {pair.original || pair.karaoke ? (
+                <div className="grid gap-1">
+                  {pair.original && pair.karaoke ? (
+                    <span className="text-[10px] uppercase tracking-wide text-on-surface-muted">
+                      Karaoke, same recording
+                    </span>
+                  ) : null}
+                  <TrackControl
+                    endpoint={`/api/songs/${song.id}/track?kind=karaoke`}
+                    initial={{
+                      file: song.karaokeTrackFile,
+                      name: song.karaokeTrackName,
+                      bytes: song.karaokeTrackBytes,
+                      uploadedBy: song.karaokeTrackUploadedBy,
+                    }}
+                    canEdit={canEditTracks}
+                    addLabel="Add the karaoke version"
+                    playerHidden={Boolean(pair.original && pair.karaoke)}
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            {canEditTracks ? (
+              <p className="text-[11px] text-on-surface-muted">
+                MP3, M4A, OGG or WAV, up to 30 MB. A programme item with no recording of its
+                own will play this pair, so uploading it once is enough.{" "}
+                Kept on the app&rsquo;s own storage, which has no backup — keep your copy.
+                {storage ? (
+                  <>
+                    {" "}
+                    <span className={storage.tight ? "text-warn" : undefined}>
+                      {storage.usedLabel} of {storage.budgetLabel} of track storage used
+                      {storage.tight ? " — getting tight" : ""}.
+                    </span>
+                  </>
+                ) : null}
+              </p>
+            ) : null}
+          </CardContent>
+        </Card>
       ) : null}
 
       <Card>
