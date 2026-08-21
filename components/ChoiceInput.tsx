@@ -2,8 +2,21 @@
 
 import { useState } from "react";
 
-/** The sentinel the dropdown uses for "not one of these". Never stored. */
-const SOMETHING_ELSE = "\u0000new";
+/**
+ * The escape option's value, and why it is not a sentinel string.
+ *
+ * It WAS "\u0000new" — a NUL character, chosen so it could never collide with a
+ * real raga. HTML does not allow that: parsing an attribute replaces U+0000 with
+ * U+FFFD, so the DOM held "\uFFFDnew" while the comparison tested "\u0000new",
+ * never matched, and the sentinel was written into the field as a value. Picking
+ * "Something else…" put a replacement character in the box, and saving would
+ * have put it in the database.
+ *
+ * So the options do not carry their values at all: each carries its INDEX, and
+ * the value is looked up. Nothing a person could type can collide with an index,
+ * and an index has no characters HTML can mangle.
+ */
+const ADD_NEW = "new";
 
 /**
  * A field whose value is normally one of a known set.
@@ -43,26 +56,29 @@ export function ChoiceField({
   return (
     <span className="grid gap-1">
       <select
-        value={asText ? SOMETHING_ELSE : value}
+        value={asText ? ADD_NEW : value === "" ? "" : String(options.indexOf(value))}
         onChange={(e) => {
-          if (e.target.value === SOMETHING_ELSE) {
+          const picked = e.target.value;
+          if (picked === ADD_NEW) {
             onTyping(true);
             // Deliberately keeps whatever is there, so picking "Something
             // else…" to adjust a value does not throw the value away first.
             return;
           }
           onTyping(false);
-          onValue(e.target.value);
+          onValue(picked === "" ? "" : (options[Number(picked)] ?? ""));
         }}
         className="h-9 w-full rounded-[10px] border border-rule-surface bg-field px-2 text-sm text-on-surface"
       >
         <option value="">— not recorded —</option>
-        {options.map((o) => (
-          <option key={o} value={o}>
+        {/* Index, not the value: see ADD_NEW above for what carrying real
+            values in these attributes cost. */}
+        {options.map((o, i) => (
+          <option key={o} value={String(i)}>
             {o}
           </option>
         ))}
-        <option value={SOMETHING_ELSE}>Something else…</option>
+        <option value={ADD_NEW}>Something else…</option>
       </select>
 
       {asText ? (
