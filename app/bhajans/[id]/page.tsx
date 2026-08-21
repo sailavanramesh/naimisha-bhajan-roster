@@ -20,6 +20,9 @@ import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { rosterable } from "@/lib/rosterEligibility";
 import { EditBhajanPanel, EditedDot } from "./EditBhajanPanel";
 import { TrackControl } from "@/components/TrackControl";
+import { PracticePlayer } from "@/components/PracticePlayer";
+import { cn } from "@/components/ui";
+import { trackStorageSummary } from "@/lib/trackStore";
 import { EDITABLE_FIELDS } from "@/lib/bhajanFields";
 import { getBhajanChoices } from "@/lib/bhajanChoices";
 
@@ -143,6 +146,13 @@ export default async function BhajanPage({
   // The same permission that corrects a raga adds a recording: both change what
   // the masterlist says about this bhajan.
   const canEditBhajan = can(role, "addBhajan");
+
+  /*
+   * How much of the shared track allowance is gone. Only for somebody who can
+   * upload — it walks the tracks directory, and there is no reason to make a
+   * member reading the words pay for a number they cannot act on.
+   */
+  const storage = canEditBhajan ? await trackStorageSummary() : null;
   const pickSinger = !signedIn || can(role, "assignSingers");
   const labelStrings = rungs.map((r) => r.label);
 
@@ -334,29 +344,103 @@ export default async function BhajanPage({
             add one, so a member browsing the masterlist sees nothing about
             uploads.
           */}
-          {bhajan.trackFile || canEditBhajan ? (
-            <section className="grid gap-1.5 rounded-[12px] border border-rule-surface bg-panel p-3">
+          {bhajan.trackFile || bhajan.karaokeTrackFile || canEditBhajan ? (
+            <section className="grid gap-2 rounded-[12px] border border-rule-surface bg-panel p-3">
               <h2 className="text-xs font-semibold text-on-surface-muted">
                 Recording
                 {bhajan.trackUploadedBy ? (
                   <span className="ml-1 font-normal">· added by {bhajan.trackUploadedBy}</span>
                 ) : null}
               </h2>
-              <TrackControl
-                endpoint={`/api/bhajans/${bhajan.id}/track`}
-                initial={{
-                  file: bhajan.trackFile,
-                  name: bhajan.trackName,
-                  bytes: bhajan.trackBytes,
-                  uploadedBy: bhajan.trackUploadedBy,
-                }}
-                canEdit={canEditBhajan}
-                addLabel="Add a recording"
-              />
-              {!bhajan.trackFile && canEditBhajan ? (
+
+              {/*
+                Both halves present: one player, and a switch that swaps which
+                one you hear without moving the playhead. See
+                components/PracticePlayer.tsx for why that is seamless and what
+                it does when a phone refuses two streams at once.
+              */}
+              {bhajan.trackFile && bhajan.karaokeTrackFile ? (
+                <PracticePlayer
+                  original={{ file: bhajan.trackFile, name: bhajan.trackName }}
+                  karaoke={{ file: bhajan.karaokeTrackFile, name: bhajan.karaokeTrackName }}
+                />
+              ) : null}
+
+              {/*
+                The two upload slots. Shown as plain controls when there is only
+                one file, because then there is nothing to toggle — and kept
+                visible for an editor even when the practice player is doing the
+                playing, since replacing or removing either has to stay possible.
+              */}
+              <div className={cn("grid gap-2", canEditBhajan && "sm:grid-cols-2")}>
+                <div className="grid gap-1">
+                  {bhajan.trackFile && bhajan.karaokeTrackFile ? (
+                    <span className="text-[10px] uppercase tracking-wide text-on-surface-muted">
+                      Sung recording
+                    </span>
+                  ) : null}
+                  <TrackControl
+                    endpoint={`/api/bhajans/${bhajan.id}/track`}
+                    initial={{
+                      file: bhajan.trackFile,
+                      name: bhajan.trackName,
+                      bytes: bhajan.trackBytes,
+                      uploadedBy: bhajan.trackUploadedBy,
+                    }}
+                    canEdit={canEditBhajan}
+                    addLabel="Add a recording"
+                    playerHidden={Boolean(bhajan.trackFile && bhajan.karaokeTrackFile)}
+                  />
+                </div>
+
+                {/*
+                  The karaoke slot only appears once there is a sung recording to
+                  pair it with: on its own it is not a practice pair, and
+                  offering it first invites two unrelated files.
+                */}
+                {bhajan.trackFile || bhajan.karaokeTrackFile ? (
+                  <div className="grid gap-1">
+                    {bhajan.trackFile && bhajan.karaokeTrackFile ? (
+                      <span className="text-[10px] uppercase tracking-wide text-on-surface-muted">
+                        Karaoke, same recording
+                      </span>
+                    ) : null}
+                    <TrackControl
+                      endpoint={`/api/bhajans/${bhajan.id}/track?kind=karaoke`}
+                      initial={{
+                        file: bhajan.karaokeTrackFile,
+                        name: bhajan.karaokeTrackName,
+                        bytes: bhajan.karaokeTrackBytes,
+                        uploadedBy: bhajan.karaokeTrackUploadedBy,
+                      }}
+                      canEdit={canEditBhajan}
+                      addLabel="Add the karaoke version"
+                      playerHidden={Boolean(bhajan.trackFile && bhajan.karaokeTrackFile)}
+                    />
+                  </div>
+                ) : null}
+              </div>
+
+              {canEditBhajan ? (
                 <p className="text-[11px] text-on-surface-muted">
-                  MP3, M4A, OGG or WAV, up to 30 MB. Kept on the app&rsquo;s own storage, which
-                  has no backup — keep your copy.
+                  {!bhajan.trackFile ? (
+                    <>MP3, M4A, OGG or WAV, up to 30 MB. </>
+                  ) : !bhajan.karaokeTrackFile ? (
+                    <>
+                      Add the same recording with the voice taken out and a switch appears, so
+                      the vocals can be dropped in and out while practising.{" "}
+                    </>
+                  ) : null}
+                  Kept on the app&rsquo;s own storage, which has no backup — keep your copy.
+                  {storage ? (
+                    <>
+                      {" "}
+                      <span className={storage.tight ? "text-warn" : undefined}>
+                        {storage.usedLabel} of {storage.budgetLabel} of track storage used
+                        {storage.tight ? " — getting tight" : ""}.
+                      </span>
+                    </>
+                  ) : null}
                 </p>
               ) : null}
             </section>

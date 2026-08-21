@@ -213,3 +213,30 @@ export function checkUpload({
   }
   return { ok: true, extension };
 }
+
+/**
+ * What the shared allowance is doing, in words a page can print.
+ *
+ * Sailavan chose "proceed, warn when it gets tight" over holding the practice
+ * pair back for storage, so the number has to be visible BEFORE an upload is
+ * refused rather than only in the refusal.
+ *
+ * Walks the directory, like `usedBytes` — the directory is the truth, and a
+ * failed upload or a hand-copied file counts against the plan whether or not the
+ * database knows about it.
+ */
+export async function trackStorageSummary(): Promise<{
+  used: number;
+  usedLabel: string;
+  budgetLabel: string;
+  /** Past three quarters of the allowance: worth saying out loud. */
+  tight: boolean;
+}> {
+  const used = await usedBytes();
+  return {
+    used,
+    usedLabel: humanSize(used),
+    budgetLabel: humanSize(BUDGET_BYTES),
+    tight: used > BUDGET_BYTES * 0.75,
+  };
+}

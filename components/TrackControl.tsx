@@ -161,6 +161,7 @@ export function TrackControl({
   canEdit,
   className,
   addLabel = "Add a track",
+  playerHidden = false,
 }: {
   /** Where POST uploads and DELETE removes. e.g. `/api/bhajans/<id>/track`. */
   endpoint: string;
@@ -169,6 +170,15 @@ export function TrackControl({
   className?: string;
   /** What the empty state's button says, when "Add a track" is too vague. */
   addLabel?: string;
+  /**
+   * Hide this control's own player, keeping the name, size and the
+   * replace/remove links.
+   *
+   * For the practice pair: PracticePlayer is already playing both files in sync,
+   * and a second copy of the same audio on the page would be two playheads for
+   * one recording.
+   */
+  playerHidden?: boolean;
 }) {
   const [track, setTrack] = useState<TrackInfo>(initial);
   const [progress, setProgress] = useState<number | null>(null);
@@ -223,14 +233,16 @@ export function TrackControl({
     <div className={cn("grid gap-1.5", className)}>
       {track.file ? (
         <>
-          <audio
-            controls
-            preload="metadata"
-            className="h-9 w-full"
-            src={`${TRACK_SRC}/${track.file}`}
-          >
-            Your browser cannot play audio.
-          </audio>
+          {playerHidden ? null : (
+            <audio
+              controls
+              preload="metadata"
+              className="h-9 w-full"
+              src={`${TRACK_SRC}/${track.file}`}
+            >
+              Your browser cannot play audio.
+            </audio>
+          )}
           <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-on-surface-muted">
             <span className="min-w-0 truncate">{track.name ?? "track"}</span>
             {track.bytes ? <span>{humanSize(track.bytes)}</span> : null}
