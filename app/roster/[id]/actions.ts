@@ -11,6 +11,7 @@ import { notifyHarmoniumIfReady } from "@/lib/notifyHarmonium";
 import { requireCapability, can } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
+import { mergeRow, describeConflicts, type RowConflict } from "@/lib/rowMerge";
 
 
 /**
@@ -35,6 +36,22 @@ export type SingerRowInput = {
    * `upsertSessionSingerRows`.
    */
   updatedAt?: string | null;
+  /**
+   * The row AS THIS BROWSER LOADED IT, so a save can tell "I set this" from "I
+   * am echoing back what I was shown".
+   *
+   * Without it every field a browser sends looks like an assertion, which is
+   * why last-writer-wins loses pitches and why refusing the whole save was the
+   * only safe alternative. See lib/rowMerge.ts.
+   */
+  base?: {
+    singerId?: string;
+    bhajanId?: string | null;
+    bhajanTitle?: string | null;
+    festivalBhajanTitle?: string | null;
+    confirmedPitch?: string | null;
+    alternativeTablaPitch?: string | null;
+  } | null;
 };
 
 /**
@@ -52,7 +69,23 @@ export type SingerRowInput = {
  * row would collide with the first one's own writes.
  */
 export type SaveRowsResult =
-  | { ok: true; stamps: { id: string; updatedAt: string }[] }
+  | {
+      ok: true;
+      stamps: { id: string; updatedAt: string }[];
+      /**
+       * Rows somebody else had also changed, where the two sets of edits did
+       * not overlap and were merged. Worth saying so — a value changing under
+       * you without explanation is worse than a refusal.
+       */
+      merged?: RowConflict[];
+      /**
+       * Rows left alone because the same field was changed two ways. The save
+       * still happened for everything else.
+       */
+      conflicts?: RowConflict[];
+      /** The summary to show, when there is one. */
+      notice?: string;
+    }
   | { ok: false; error: string };
 
 /**
@@ -172,6 +205,15 @@ export async function upsertSessionSingerRows(
     rows.sort((a, b) => (byId.get(a.id as string)!.position) - (byId.get(b.id as string)!.position));
   }
 
+  /*
+   * Filled inside the transaction, read after it. Rows somebody else also
+   * touched: `merged` where the edits combined, `conflicts` where one field was
+   * changed two ways, and `leaveAlone` for the ids that must not be written.
+   */
+  const merged: RowConflict[] = [];
+  const conflicts: RowConflict[] = [];
+  const leaveAlone = new Set<string>();
+
   // `.then/.catch` rather than a `try` block around the whole transaction, so
   // the body below keeps its indentation and stays readable.
   const refusal = await prisma.$transaction(async (tx) => {
@@ -215,21 +257,87 @@ export async function upsertSessionSingerRows(
     if (stamped.length > 0) {
       const current = await tx.sessionSlot.findMany({
         where: { id: { in: stamped.map((r) => r.id as string) } },
-        select: { id: true, updatedAt: true },
+        select: {
+          id: true,
+          updatedAt: true,
+          position: true,
+          singerId: true,
+          bhajanId: true,
+          bhajanTitle: true,
+          festivalBhajanTitle: true,
+          confirmedPitch: true,
+          alternativeTablaPitch: true,
+          singer: { select: { name: true } },
+        },
       });
-      const now = new Map(current.map((c) => [c.id, c.updatedAt.getTime()]));
+      const byId = new Map(current.map((c) => [c.id, c]));
       const clashed = stamped.filter((r) => {
-        const seen = now.get(r.id as string);
+        const seen = byId.get(r.id as string);
         // A row that has vanished is handled below by the P2025 catch.
         if (seen === undefined) return false;
-        return seen !== new Date(r.updatedAt as string).getTime();
+        return seen.updatedAt.getTime() !== new Date(r.updatedAt as string).getTime();
       });
-      if (clashed.length > 0) {
-        throw new Refusal(
-          `Somebody else saved this session while you had it open, so nothing was ` +
-            `written — your changes are still on screen. Open the session again in a ` +
-            `new tab to see theirs, then re-apply yours.`,
+
+      /*
+       * A THREE-WAY MERGE, not a refusal.
+       *
+       * It used to refuse the whole save the moment any row had moved on. That
+       * protected the pitches — the right instinct — but it made two people
+       * working on one session at once unworkable, which is exactly what a live
+       * Sunday is. Sailavan, 2026-08-23: "otherwise this is an issue in the
+       * live."
+       *
+       * So each row that moved is merged field by field against what this
+       * browser loaded. Different rows, or different fields on one row, both
+       * just work. Only a genuine disagreement about one field is held back,
+       * and that row is left EXACTLY as the other person left it — never
+       * guessed at, never half-written. The rule lives in lib/rowMerge.ts with
+       * its own tests, because it decides whether a confirmedPitch survives.
+       */
+      for (const r of clashed) {
+        const theirs = byId.get(r.id as string)!;
+        const outcome = mergeRow(
+          r.base ?? null,
+          {
+            singerId: r.singerId,
+            bhajanId: r.bhajanId,
+            bhajanTitle: r.bhajanTitle,
+            festivalBhajanTitle: r.festivalBhajanTitle,
+            confirmedPitch: r.confirmedPitch,
+            alternativeTablaPitch: r.alternativeTablaPitch,
+          },
+          {
+            singerId: theirs.singerId ?? "",
+            bhajanId: theirs.bhajanId,
+            bhajanTitle: theirs.bhajanTitle,
+            festivalBhajanTitle: theirs.festivalBhajanTitle,
+            confirmedPitch: theirs.confirmedPitch,
+            alternativeTablaPitch: theirs.alternativeTablaPitch,
+          },
         );
+
+        const summary: RowConflict = {
+          position: theirs.position,
+          singerName: theirs.singer?.name ?? null,
+          fields: outcome.clashes,
+        };
+
+        if (outcome.clashes.length > 0) {
+          // Their row stands. Writing a merge with a known disagreement in it
+          // would be inventing an answer nobody gave.
+          conflicts.push(summary);
+          leaveAlone.add(r.id as string);
+          continue;
+        }
+
+        // Merged cleanly. Write the combination rather than what was sent.
+        r.singerId = outcome.merged.singerId;
+        r.bhajanId = outcome.merged.bhajanId;
+        r.bhajanTitle = outcome.merged.bhajanTitle;
+        r.festivalBhajanTitle = outcome.merged.festivalBhajanTitle;
+        r.confirmedPitch = outcome.merged.confirmedPitch;
+        r.alternativeTablaPitch = outcome.merged.alternativeTablaPitch;
+        if (outcome.changedByMe) merged.push({ ...summary, fields: [] });
       }
     }
 
@@ -265,9 +373,15 @@ export async function upsertSessionSingerRows(
         await tx.sessionSlot.create({ data });
       } else {
         try {
+          /*
+           * A row held back by a real disagreement keeps THEIR values — but it
+           * still needs its position. Every surviving row was parked on a
+           * negative position a moment ago so the reorder could not collide
+           * with itself, so skipping this row outright would leave it there.
+           */
           await tx.sessionSlot.update({
             where: { id: r.id as string },
-            data,
+            data: leaveAlone.has(r.id as string) ? { position: data.position } : data,
           });
         } catch (e) {
           // If the row was deleted in another tab / earlier click, don't crash
@@ -330,8 +444,25 @@ export async function upsertSessionSingerRows(
 
   revalidatePath(`/roster/${sessionId}`);
 
+  /*
+   * A save that quietly merged somebody else's work, or quietly declined to
+   * overwrite it, must SAY so. A value changing under you with no explanation is
+   * worse than a refusal — and this sentence is what Sailavan asked for in place
+   * of the old flat "nothing was written".
+   */
+  const notice =
+    conflicts.length > 0
+      ? describeConflicts(conflicts)
+      : merged.length > 0
+        ? `Saved. ${merged.length === 1 ? "One row" : `${merged.length} rows`} had changes from ` +
+          `somebody else as well, and both were kept.`
+        : undefined;
+
   return {
     ok: true,
     stamps: saved.map((s) => ({ id: s.id, updatedAt: s.updatedAt.toISOString() })),
+    ...(merged.length > 0 ? { merged } : {}),
+    ...(conflicts.length > 0 ? { conflicts } : {}),
+    ...(notice ? { notice } : {}),
   };
 }

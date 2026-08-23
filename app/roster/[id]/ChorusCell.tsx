@@ -41,6 +41,7 @@ import {
 
 export function ChorusCell({
   slotId,
+  onSaveRow,
   singers,
   mics: fromServer,
   canEdit,
@@ -49,6 +50,16 @@ export function ChorusCell({
   onCopied,
 }: {
   slotId: string | null;
+  /**
+   * Save the grid, so an unsaved row becomes a real slot.
+   *
+   * Chorus mics are rows in the database hanging off a slot, so a row that has
+   * never been saved has nothing for them to hang off. That used to be a dead
+   * end — "save the row first", with the Save button somewhere else on a wide
+   * table. Sailavan, 2026-08-23: "when adding a row to a session, i can't copy
+   * down chorus mics until saving changes as it thinks no row exists yet."
+   */
+  onSaveRow?: () => void;
   singers: { id: string; name: string }[];
   mics: ChorusMic[];
   /** The cushions this session's desk carries, in channel order. */
@@ -143,10 +154,24 @@ export function ChorusCell({
     });
   }
 
-  // A row that has never been saved has no id to write against. It gets the
-  // controls once it exists, rather than silently dropping what was chosen.
+  /*
+   * A row that has never been saved has no id for a chorus mic to hang off, so
+   * the controls cannot appear yet — but the way out is one tap from here rather
+   * than a sentence pointing at a button somewhere else on a wide table.
+   */
   if (!slotId) {
-    return <span className="text-[11px] text-on-surface-muted">save the row first</span>;
+    return onSaveRow ? (
+      <button
+        type="button"
+        onClick={onSaveRow}
+        className="self-start text-left text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+        title="Chorus mics attach to a saved row. This saves the session, then the controls appear here."
+      >
+        save to add chorus mics
+      </button>
+    ) : (
+      <span className="text-[11px] text-on-surface-muted">save the row first</span>
+    );
   }
 
   const taken = new Set(mics.map((m) => m.singerId));
