@@ -157,3 +157,42 @@ export const WEEKDAY_NAMES = [
   "Friday",
   "Saturday",
 ] as const;
+
+/**
+ * How long after the scheduled start a session stops being worth chasing.
+ *
+ * Sailavan, 2026-08-23: "don't send notifications for a session 20-30 mins after
+ * its scheduled time if rows have been added after, usually that is
+ * retrospective. if its live, no one needs a notification."
+ *
+ * Twenty minutes, the near end of what he asked for, because the cost is
+ * asymmetric. A nudge that arrives a little too late is noise to somebody
+ * already in the hall; a nudge that never arrives is somebody turning up
+ * without knowing what they are singing. So err towards having sent it.
+ */
+export const NUDGE_GRACE_MINUTES = 20;
+
+/**
+ * Has this session already begun, so far as chasing people is concerned?
+ *
+ * The day-of nudge exists to catch a missing bhajan or pitch BEFORE anybody
+ * arrives. Once the session is under way it cannot do that any more, and the
+ * rows still filling in are usually being written down after the fact —
+ * somebody recording what was actually sung. Chasing that is worse than
+ * useless: it tells eleven people their phone needs them about a session they
+ * are sitting in.
+ *
+ * Pure, and takes `now`, so the boundary is a test rather than a thing to be
+ * observed at ten past seven on a Thursday.
+ *
+ * A session with no `startsAt` is never suppressed. Not knowing when it begins
+ * is not evidence that it has.
+ */
+export function sessionUnderWay(
+  startInstant: Date | null,
+  now: Date,
+  graceMinutes: number = NUDGE_GRACE_MINUTES,
+): boolean {
+  if (!startInstant) return false;
+  return now.getTime() >= startInstant.getTime() + graceMinutes * 60_000;
+}

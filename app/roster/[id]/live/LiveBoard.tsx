@@ -761,30 +761,64 @@ export function LiveBoard({
                       </span>
                     </div>
 
-                    <div className="flex min-w-0 items-end justify-between gap-2">
-                      <span className="min-w-0 truncate text-[13px] text-on-surface-muted">
-                        <span className="italic">{s.raga ?? "raga not recorded"}</span>
-                        {" \u00b7 tabla "}
-                        <span className="font-mono text-on-surface">{s.tablaPitch ?? "\u2014"}</span>
-                        {s.tablaPitch ? null : (
-                          <span className="ml-1 uppercase tracking-wide text-warn">none fits</span>
-                        )}
+                    {/*
+                      TWO ROWS, and which thing goes on which row is the point.
+
+                      It was one row: raga, tabla and words crammed into a
+                      truncating span, with the singer and chorus block beside it
+                      as `shrink-0`. So the singers took whatever width they
+                      needed and everything else was cut — from a real Sunday
+                      run of ten bhajans: "Hamsadhwani · tabla C# · …", with the
+                      tabla pitch half gone and the words link gone entirely.
+                      Sailavan, 2026-08-23: "can't see the tabla pitch in some,
+                      can't see the words link in some."
+
+                      Those are the two things a player and a singer actually
+                      reach for mid-session, so they get their own row and never
+                      compete with a name. Raga drops to the second row beside
+                      the chorus, which is where he suggested it go, and it is
+                      the right one to sacrifice: it is reference, not
+                      instruction, and it is the only thing here that can be cut
+                      without stopping somebody playing.
+                    */}
+                    <div className="flex min-w-0 items-center justify-between gap-2">
+                      <span className="flex min-w-0 shrink-0 items-center gap-2 text-[13px] text-on-surface-muted">
+                        <span className="whitespace-nowrap">
+                          {"tabla "}
+                          <span className="font-mono text-on-surface">
+                            {s.tablaPitch ?? "\u2014"}
+                          </span>
+                          {s.tablaPitch ? null : (
+                            <span className="ml-1 uppercase tracking-wide text-warn">
+                              none fits
+                            </span>
+                          )}
+                        </span>
                         {s.lyrics || s.bhajanId ? (
-                          <>
-                            {" \u00b7 "}
-                            <button
-                              type="button"
-                              onClick={() => setWords(s.position)}
-                              className="uppercase tracking-wide underline underline-offset-2 hover:text-on-surface"
-                            >
-                              words
-                            </button>
-                          </>
+                          <button
+                            type="button"
+                            onClick={() => setWords(s.position)}
+                            className="shrink-0 rounded-full border border-rule-surface px-2 py-0.5 text-[11px] uppercase tracking-wide hover:border-brass/50 hover:text-on-surface"
+                          >
+                            words
+                          </button>
                         ) : null}
                       </span>
 
-                      <span className="flex shrink-0 flex-col items-end leading-tight">
-                        <span className="text-[15px] font-medium">{s.singerName}</span>
+                      {/* The lead singer, still the bottom-right anchor a
+                          reader looks for, now on its own line so a long name
+                          cannot squeeze the tabla pitch. */}
+                      <span className="min-w-0 truncate text-[15px] font-medium">
+                        {s.singerName}
+                      </span>
+                    </div>
+
+                    <div className="flex min-w-0 items-end justify-between gap-2">
+                      <span className="min-w-0 truncate text-[13px] italic text-on-surface-muted">
+                        {s.raga ?? "raga not recorded"}
+                      </span>
+
+                      <span className="flex min-w-0 shrink flex-col items-end leading-tight">
                         <ChorusLine mics={s.chorus} dense />
                         {dot ? <span className="sr-only">{dot.label} mic cushion</span> : null}
                       </span>

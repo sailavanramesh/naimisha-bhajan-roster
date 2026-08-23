@@ -178,6 +178,8 @@ export function SessionSingersGrid(props: {
 }) {
   const [isPending, startTransition] = useTransition();
   const [saveError, setSaveError] = useState<string | null>(null);
+  /** What a save did about a parallel edit: merged it, or held a row back. */
+  const [saveNotice, setSaveNotice] = useState<string | null>(null);
   const singerById = useMemo(() => new Map(props.singers.map((s) => [s.id, s])), [props.singers]);
 
   /*
@@ -1054,22 +1056,51 @@ export function SessionSingersGrid(props: {
     startTransition(async () => {
       // recommendedPitch and raga are deliberately not sent: both are derived
       // from the bhajan and are no longer columns on the slot.
-      const payload: SingerRowInput[] = rows.map((r) => ({
-        id: r.id,
-        singerId: r.singerId,
-        bhajanId: r.bhajanId,
-        bhajanTitle: r.bhajanTitle,
-        festivalBhajanTitle: r.festivalBhajanTitle,
-        confirmedPitch: r.confirmedPitch,
-        alternativeTablaPitch: r.alternativeTablaPitch,
-        updatedAt: r.updatedAt ?? null,
-      }));
+      /*
+       * `base` is the row AS THIS BROWSER LOADED IT, which is what lets a save
+       * merge instead of refuse: with it the server can tell "I set this pitch"
+       * from "I am echoing back the pitch I was shown". `baseline` already holds
+       * exactly that — it is what the unsaved-changes tracking compares against
+       * — so it costs nothing to send. See lib/rowMerge.ts.
+       */
+      const baseById = new Map(baseline.map((b) => [b.id, b]));
+      const payload: SingerRowInput[] = rows.map((r) => {
+        const b = r.id ? baseById.get(r.id) : undefined;
+        return {
+          id: r.id,
+          singerId: r.singerId,
+          bhajanId: r.bhajanId,
+          bhajanTitle: r.bhajanTitle,
+          festivalBhajanTitle: r.festivalBhajanTitle,
+          confirmedPitch: r.confirmedPitch,
+          alternativeTablaPitch: r.alternativeTablaPitch,
+          updatedAt: r.updatedAt ?? null,
+          base: b
+            ? {
+                singerId: b.singerId,
+                bhajanId: b.bhajanId,
+                bhajanTitle: b.bhajanTitle,
+                festivalBhajanTitle: b.festivalBhajanTitle,
+                confirmedPitch: b.confirmedPitch,
+                alternativeTablaPitch: b.alternativeTablaPitch,
+              }
+            : null,
+        };
+      });
       try {
         const res = await upsertSessionSingerRows(props.sessionId, payload);
         if (!res.ok) {
           setSaveError(res.error);
           return;
         }
+        /*
+         * What the save did about somebody else's work.
+         *
+         * A held-back row is NOT a failed save — everything else was written —
+         * so it goes in its own line rather than the error slot, which the grid
+         * uses for "nothing happened".
+         */
+        setSaveNotice(res.notice ?? null);
         setSaveError(null);
 
         /*
@@ -1267,6 +1298,33 @@ export function SessionSingersGrid(props: {
           className="rounded-[12px] border border-warn/50 bg-warn/10 px-3 py-2 text-sm"
         >
           {saveError}
+        </div>
+      ) : null}
+
+      {/*
+        What the save did about somebody else working at the same time.
+
+        `status`, not `alert`, and not the warning colour: the save SUCCEEDED.
+        Either two sets of edits were combined, or one row was left as the other
+        person left it while everything else went in. Dressing that as a failure
+        is what would send somebody hunting for work that is not lost.
+
+        It is dismissable because it can be long — it names the row, the person
+        and the field — and it sits above a grid somebody is mid-way through.
+      */}
+      {saveNotice ? (
+        <div
+          role="status"
+          className="flex items-start gap-3 rounded-[12px] border border-brass/40 bg-brass/[0.08] px-3 py-2 text-sm"
+        >
+          <span className="min-w-0 flex-1">{saveNotice}</span>
+          <button
+            type="button"
+            onClick={() => setSaveNotice(null)}
+            className="shrink-0 text-xs text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+          >
+            dismiss
+          </button>
         </div>
       ) : null}
 
@@ -1756,7 +1814,15 @@ export function SessionSingersGrid(props: {
                   <td data-label="Chorus mics" className="px-2 py-1.5 align-top">
                     <ChorusCell
                       key={`chorus-${r.id ?? r._localId}-${(r.id && chorusVersion[r.id]) || 0}`}
-                      slotId={r.id ?? null}
+                      /*
+                        THE REAL id only. A new row carries a `new_…` id so the
+                        grid can track it, and passing that through meant every
+                        chorus write went to the server against a slot that does
+                        not exist — which is why it read as "no row exists yet"
+                        rather than as "not saved".
+                      */
+                      slotId={r.id && !String(r.id).startsWith("new_") ? r.id : null}
+                      onSaveRow={props.canEdit ? () => saveAll() : undefined}
                       singers={props.singers}
                       mics={(r.id ? chorusFresh[r.id] : undefined) ?? r.chorus ?? []}
                       /* Everybody signed in, not just an editor: a chorus mic
@@ -1765,7 +1831,9 @@ export function SessionSingersGrid(props: {
                       cushions={props.cushions}
                       /* Nothing to copy onto from the last bhajan, and an
                          unsaved row has no slot for the server to copy from. */
-                      canCopyDown={Boolean(r.id) && i < rows.length - 1}
+                      canCopyDown={
+                        Boolean(r.id && !String(r.id).startsWith("new_")) && i < rows.length - 1
+                      }
                       onCopied={takeChorusCopy}
                     />
                   </td>
