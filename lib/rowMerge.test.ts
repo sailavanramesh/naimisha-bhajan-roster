@@ -133,3 +133,30 @@ describe("describeConflicts", () => {
     expect(describeConflicts([])).toBe("");
   });
 });
+
+/**
+ * The tabla pitch is derived from the confirmed pitch, so when two people set
+ * different pitches it differing is a consequence rather than a second
+ * argument. Saying it twice invites somebody to hunt for a tabla decision
+ * nobody made.
+ */
+describe("a derived field does not become a second disagreement", () => {
+  it("drops the tabla clash when the pitch itself clashed", () => {
+    const base = row({ confirmedPitch: "2 Pancham / D", alternativeTablaPitch: "D" });
+    const mine = row({ confirmedPitch: "7 Pancham / B", alternativeTablaPitch: "F#" });
+    const theirs = row({ confirmedPitch: "4 Pancham / F", alternativeTablaPitch: "C" });
+    const r = mergeRow(base, mine, theirs);
+    expect(r.clashes.map((c) => c.field)).toEqual(["confirmedPitch"]);
+    // Still not written: the whole row is held back either way.
+    expect(r.merged.alternativeTablaPitch).toBe("C");
+  });
+
+  it("still reports a tabla clash on its own, when the pitch agreed", () => {
+    const base = row({ confirmedPitch: "2 Pancham / D", alternativeTablaPitch: "D" });
+    const mine = row({ alternativeTablaPitch: "E" });
+    const theirs = row({ alternativeTablaPitch: "C" });
+    expect(mergeRow(base, mine, theirs).clashes.map((c) => c.field)).toEqual([
+      "alternativeTablaPitch",
+    ]);
+  });
+});

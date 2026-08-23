@@ -134,7 +134,25 @@ export function mergeRow(
     // Only they moved it, so theirs is already in `merged` — nothing to do.
   }
 
-  return { merged, clashes, changedByMe };
+  /*
+   * One disagreement, reported once.
+   *
+   * `alternativeTablaPitch` is DERIVED from the confirmed pitch — the grid
+   * recomputes it whenever the pitch changes — so when two people set different
+   * pitches, the tabla differing is a consequence, not a second argument.
+   * Reported live it read: 'the pitch — theirs "4 Pancham / F", yours "7 Pancham
+   * / B"; the tabla pitch — theirs "C", yours "F#"', which invites somebody to
+   * go looking for a tabla decision nobody made.
+   *
+   * The value is still not written — the whole row is held back either way.
+   * This only stops the summary saying it twice.
+   */
+  const pitchClashed = clashes.some((c) => c.field === "confirmedPitch");
+  const reported = pitchClashed
+    ? clashes.filter((c) => c.field !== "alternativeTablaPitch")
+    : clashes;
+
+  return { merged, clashes: reported, changedByMe };
 }
 
 /** How a field is named when explaining a clash to somebody. */
