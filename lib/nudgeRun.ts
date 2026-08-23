@@ -4,9 +4,11 @@ import { missingParts, nudgeNotification, type NoticeKind } from "@/lib/notify";
 import {
   dueNudgeUnder,
   resolveRule,
+  sessionUnderWay,
   weekdayOfISO,
   type ScopedRule,
 } from "@/lib/nudgeRules";
+import { sessionInstant } from "@/lib/timezones";
 import { melbourneTodayISO, melbourneHour } from "@/lib/dates";
 import { NOT_ARCHIVED } from "./archive";
 
@@ -31,6 +33,8 @@ export type NudgeRun = {
   nudged: number;
   /** Rostered people whose rows were already complete. */
   complete: number;
+  /** Sessions left alone because they were already under way. */
+  underWay?: number;
   skipped?: string;
 };
 
@@ -65,6 +69,9 @@ export async function runNudges(now: Date = new Date()): Promise<NudgeRun> {
     where: { ...NOT_ARCHIVED, date: new Date(`${date}T00:00:00.000Z`), format: "bhajans" },
     select: {
       id: true,
+      // To tell whether it has already started — see sessionUnderWay.
+      startsAt: true,
+      timeZone: true,
       slots: {
         orderBy: { position: "asc" },
         select: {
@@ -82,10 +89,27 @@ export async function runNudges(now: Date = new Date()): Promise<NudgeRun> {
   let due = 0;
   let nudged = 0;
   let complete = 0;
+  /** Sessions skipped because they had already started. */
+  let underWay = 0;
 
   if (sessions.length === 0) return { ...base, skipped: "nothing on today" };
 
   for (const session of sessions) {
+    /*
+     * Once it is under way, stop chasing. A day-of nudge exists to catch a
+     * missing bhajan or pitch BEFORE anybody arrives; past that the rows still
+     * appearing are usually somebody writing down what was actually sung, and
+     * telling eleven people their phone needs them about a session they are
+     * sitting in is worse than saying nothing.
+     */
+    const startInstant = session.startsAt
+      ? sessionInstant(date, session.startsAt, session.timeZone)
+      : null;
+    if (sessionUnderWay(startInstant, now)) {
+      underWay++;
+      continue;
+    }
+
     const rule = resolveRule(rules, { id: session.id, weekday: weekdayOfISO(date) });
 
     const sentBySinger = new Map<string, NoticeKind[]>();
@@ -144,5 +168,7 @@ export async function runNudges(now: Date = new Date()): Promise<NudgeRun> {
     }
   }
 
-  return { ...base, due, nudged, complete };
+  // `underWay` only when it happened: a run that skipped nothing should not
+  // report a zero for a thing that did not come up.
+  return { ...base, due, nudged, complete, ...(underWay > 0 ? { underWay } : {}) };
 }

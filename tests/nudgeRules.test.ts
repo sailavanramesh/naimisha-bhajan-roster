@@ -8,6 +8,7 @@ import {
   ruleProblem,
   weekdayOfISO,
   type ScopedRule,
+  sessionUnderWay,
 } from "@/lib/nudgeRules";
 
 const rule = (
@@ -142,5 +143,42 @@ describe("weekdayOfISO", () => {
   it("reads the session's own day", () => {
     expect(weekdayOfISO("2026-08-13")).toBe(4); // a Thursday
     expect(weekdayOfISO("2026-08-16")).toBe(0); // a Sunday
+  });
+});
+
+/**
+ * Once a session has started, stop chasing people about it.
+ *
+ * Sailavan, 2026-08-23: "don't send notifications for a session 20-30 mins after
+ * its scheduled time if rows have been added after, usually that is
+ * retrospective. if its live, no one needs a notification."
+ */
+describe("sessionUnderWay", () => {
+  const start = new Date("2026-08-23T09:00:00.000Z"); // 7pm Melbourne
+
+  it("is false before the start", () => {
+    expect(sessionUnderWay(start, new Date("2026-08-23T08:30:00.000Z"))).toBe(false);
+  });
+
+  it("is still false at the start, and through the grace", () => {
+    // Somebody setting a pitch at 7pm sharp is still worth a nudge: the grace
+    // is there because a session rarely begins on the minute.
+    expect(sessionUnderWay(start, new Date("2026-08-23T09:00:00.000Z"))).toBe(false);
+    expect(sessionUnderWay(start, new Date("2026-08-23T09:19:00.000Z"))).toBe(false);
+  });
+
+  it("is true once the grace has passed", () => {
+    expect(sessionUnderWay(start, new Date("2026-08-23T09:20:00.000Z"))).toBe(true);
+    expect(sessionUnderWay(start, new Date("2026-08-23T10:30:00.000Z"))).toBe(true);
+  });
+
+  it("honours a grace passed in, so the boundary is testable rather than folklore", () => {
+    expect(sessionUnderWay(start, new Date("2026-08-23T09:25:00.000Z"), 30)).toBe(false);
+    expect(sessionUnderWay(start, new Date("2026-08-23T09:31:00.000Z"), 30)).toBe(true);
+  });
+
+  it("never suppresses a session with no start time", () => {
+    // Not knowing when it begins is not evidence that it has.
+    expect(sessionUnderWay(null, new Date("2026-08-23T23:00:00.000Z"))).toBe(false);
   });
 });
