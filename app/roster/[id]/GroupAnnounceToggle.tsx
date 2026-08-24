@@ -84,7 +84,16 @@ export function GroupAnnounceToggle({
     : "Only the people singing are notified. The rest of the group will not hear that this session exists.";
 
   return (
-    <span className="inline-flex flex-col items-start gap-0.5">
+    /*
+     * RELATIVE, and exactly as tall as the pill.
+     *
+     * The countdown used to sit under the button inside a flex column, which
+     * made this one item taller than every other pill in the header row — so
+     * the row centred itself on it and Live view drifted out of line. The time
+     * now rides inside the pill, and the error, which is exceptional, hangs off
+     * an absolute position where it cannot push anything around.
+     */
+    <span className="relative inline-flex">
       <button
         type="button"
         role="switch"
@@ -101,22 +110,21 @@ export function GroupAnnounceToggle({
       >
         <Bell on={state.announce} aria-hidden />
         {pending ? "Saving…" : label}
+        {/*
+          The countdown, inside the pill. It is the part that makes this
+          actionable rather than informational — twenty minutes is long enough
+          to change your mind and short enough that you need to know it is
+          running — but it is secondary to the state, so it is muted and it only
+          appears while there is something to count down to.
+        */}
+        {state.announce && !pending ? <Countdown dueAtISO={state.dueAtISO} /> : null}
       </button>
 
-      {/*
-        The countdown, under the pill and only while it is on. It is the part
-        that makes the toggle actionable rather than informational: twenty
-        minutes is long enough to change your mind and short enough that you
-        need to know it is running.
-      */}
-      {state.announce ? (
-        <span className="ps-1 text-[10px] text-on-surface-muted">
-          <Countdown dueAtISO={state.dueAtISO} />
-        </span>
-      ) : null}
-
       {error ? (
-        <span role="alert" className="ps-1 text-[10px] text-warn">
+        <span
+          role="alert"
+          className="absolute start-0 top-full mt-0.5 whitespace-nowrap text-[10px] text-warn"
+        >
           {error}
         </span>
       ) : null}
@@ -136,12 +144,14 @@ function Bell({ on }: { on: boolean; "aria-hidden"?: boolean }) {
 }
 
 /**
- * "In about 14 minutes", filled in after mount.
+ * "· 12 min", inside the pill, filled in after mount.
  *
  * The server has no clock it can offer — a countdown rendered there would be
  * stale by the time it arrived and would differ from the browser's first
  * render, which is a hydration mismatch. Same reasoning as SessionTime: render
- * the part that cannot be wrong, then add the part that needs a reader.
+ * the part that cannot be wrong, then add the part that needs a reader. Here
+ * that means the pill reads "Group will be told" on the server and grows its
+ * time a moment later.
  *
  * Ticks every thirty seconds. It is a twenty-minute deadline, not a stopwatch.
  */
@@ -154,13 +164,9 @@ function Countdown({ dueAtISO }: { dueAtISO: string }) {
 
     const tick = () => {
       const mins = Math.round((due - Date.now()) / 60_000);
-      setText(
-        mins <= 0
-          ? "on the next save, or within the hour"
-          : mins === 1
-            ? "in about a minute, unless the roster changes"
-            : `in about ${mins} minutes, unless the roster changes`,
-      );
+      // Past the window it is no longer a countdown: on dev nothing sweeps, so
+      // "due" is honest where "0 min" would look stuck.
+      setText(mins <= 0 ? "due" : `${mins} min`);
     };
 
     tick();
@@ -168,5 +174,6 @@ function Countdown({ dueAtISO }: { dueAtISO: string }) {
     return () => clearInterval(id);
   }, [dueAtISO]);
 
-  return <>{text ?? "once the roster has stopped changing"}</>;
+  if (!text) return null;
+  return <span className="font-normal opacity-70">· {text}</span>;
 }

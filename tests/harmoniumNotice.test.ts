@@ -48,6 +48,26 @@ describe("isReadyForHarmonium", () => {
 });
 
 describe("harmoniumLines", () => {
+  /*
+   * Sailavan, 2026-08-24: harmonium players "should get updates if the song or
+   * the pitch is changed, not if the singer has been changed."
+   *
+   * That holds because of the SHAPE of a line, not because of a rule anywhere:
+   * a line is a position, a bhajan and a pitch, so who is singing it cannot
+   * reach the comparison and a swap is literally indistinguishable from no
+   * edit at all. Adding a `singer` field to HarmoniumLine would silently start
+   * buzzing them on every reshuffle, so this pins the shape rather than the
+   * consequence.
+   */
+  it("carries no singer, so swapping one can never be a change", () => {
+    const slots = [{ position: 1, bhajan: "Ganesha Sharanam", pitch: "2 Pancham / D" }];
+    expect(Object.keys(harmoniumLines(slots)[0]).sort()).toEqual(["bhajan", "pitch", "position"]);
+    expect(decideHarmoniumNotice(harmoniumLines(slots), harmoniumLines(slots))).toEqual({
+      send: "nothing",
+      why: "unchanged",
+    });
+  });
+
   it("orders by position and trims", () => {
     expect(
       harmoniumLines([
