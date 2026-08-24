@@ -95,6 +95,55 @@ jobs:
           app-name: ${{ env.AZURE_WEBAPP_NAME }}
           package: deploy.zip
 
+      # ------------------------------------------------------------------
+      # Boot the new instance HERE, so the first real visitor does not.
+      #
+      # Deploying replaces the container. Always On keeps an EXISTING process
+      # alive and does nothing for a fresh one, and there is a single worker, so
+      # there is no old process left to cover the gap. On 2026-08-24 that showed
+      # up as two 5xx during the swap and a first page load that sat spinning.
+      #
+      # Neither step may fail the deploy. The code is already live by this point
+      # — a warm-up that could not run is a slow first page, not a bad release,
+      # and failing the job here would only make the Actions tab lie about it.
+      # ------------------------------------------------------------------
+      - name: Wait for the new instance to answer
+        env:
+          BASE: ${{ secrets.WARM_URL }}
+        run: |
+          set -uo pipefail
+          if [ -z "${BASE:-}" ]; then
+            echo "WARM_URL is not set; skipping. The app is deployed either way."
+            exit 0
+          fi
+          for i in $(seq 1 40); do
+            code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 20 "$BASE/api/health" || echo 000)
+            if [ "$code" = "200" ]; then
+              echo "Healthy after ${i} attempt(s)."
+              exit 0
+            fi
+            echo "attempt ${i}: HTTP ${code}"
+            sleep 5
+          done
+          echo "Never returned 200. Not failing the deploy — the app is live."
+
+      - name: Read the masterlist once, so /explore is warm
+        env:
+          BASE: ${{ secrets.WARM_URL }}
+          SECRET: ${{ secrets.NUDGE_SECRET }}
+        run: |
+          set -uo pipefail
+          if [ -z "${BASE:-}" ] || [ -z "${SECRET:-}" ]; then
+            echo "WARM_URL or NUDGE_SECRET is not set; skipping."
+            exit 0
+          fi
+          # A restart empties the `masterlist` cache, and that read is
+          # essentially all of /explore. See app/api/warm/route.ts.
+          curl -sS -X POST "$BASE/api/warm" \
+            -H "Authorization: Bearer $SECRET" \
+            --max-time 120 || echo "(warm-up did not answer; not fatal)"
+          echo
+
       - name: Azure logout
         if: always()
         run: az logout || true

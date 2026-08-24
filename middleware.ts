@@ -70,7 +70,21 @@ function canonicalRedirect(req: NextRequest): NextResponse | null {
   return NextResponse.redirect(target, 308);
 }
 
+/**
+ * The health check, before anything else can touch it.
+ *
+ * App Service probes the instance on its OWN azurewebsites.net name, not on
+ * the canonical host, so `canonicalRedirect` would answer the probe with a 308
+ * — and App Service reads anything outside 2xx as unhealthy. The result would
+ * be every instance permanently marked sick by the very check meant to protect
+ * them. It has to come first, ahead of the redirect and ahead of the cookie
+ * work, and it must never grow a dependency.
+ */
+const HEALTH_PATH = "/api/health";
+
 export function middleware(req: NextRequest) {
+  if (req.nextUrl.pathname === HEALTH_PATH) return NextResponse.next();
+
   const moved = canonicalRedirect(req);
   if (moved) return moved;
 
