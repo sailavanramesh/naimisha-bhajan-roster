@@ -19,6 +19,16 @@ const SaveDraft = z.object({
   templateId: z.string().min(1).nullable(),
   seed: z.string().min(1),
   type: z.nativeEnum(SessionType),
+  /**
+   * Whether the rest of the group is told this session exists.
+   *
+   * A checkbox, so an unticked box sends nothing at all and arrives here as
+   * `false` — which is exactly what unticking it means. The default lives in
+   * the FORM, ticked, rather than in a `.default(true)` here: a default that is
+   * only in the schema is a default nobody can see, and the point of this one
+   * is that the person creating the session sees it.
+   */
+  announceToGroup: z.boolean(),
   slots: z
     .array(
       z.object({
@@ -57,13 +67,14 @@ export async function saveDraftSession(formData: FormData): Promise<void> {
     templateId: (formData.get("templateId") as string) || null,
     seed: String(formData.get("seed") ?? ""),
     type: String(formData.get("type") ?? "Weekday"),
+    announceToGroup: formData.get("announceToGroup") === "on",
     slots: rawSlots,
   });
 
   if (!parsed.success) {
     throw new Error(`Cannot save draft: ${parsed.error.issues[0]?.message ?? "invalid input"}`);
   }
-  const { date, templateId, seed, type, slots } = parsed.data;
+  const { date, templateId, seed, type, announceToGroup, slots } = parsed.data;
 
   const sessionDate = new Date(`${date}T00:00:00.000Z`);
 
@@ -91,7 +102,11 @@ export async function saveDraftSession(formData: FormData): Promise<void> {
     const session = existing
       ? await tx.session.update({
           where: { id: existing.id },
-          data: { seed, templateId, type, status: SessionStatus.Draft },
+          // announceToGroup carried through on an overwrite too: this is the
+          // same draft being regenerated, and the answer given on the Build
+          // page is the current one. It stays changeable in the session header
+          // for the twenty minutes before anything is sent.
+          data: { seed, templateId, type, announceToGroup, status: SessionStatus.Draft },
         })
       : await tx.session.create({
           data: {
@@ -99,6 +114,7 @@ export async function saveDraftSession(formData: FormData): Promise<void> {
             seed,
             templateId,
             type,
+            announceToGroup,
             status: SessionStatus.Draft,
           },
         });

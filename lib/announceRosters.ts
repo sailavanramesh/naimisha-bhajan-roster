@@ -31,6 +31,12 @@ import { NOT_ARCHIVED } from "./archive";
  * The alerting "you are rostered" stays immediate. That one asks somebody to
  * do something, and it is right the moment it is sent because it names their
  * own rows.
+ *
+ * AND SOMETIMES IT DOES NOT GO AT ALL. `Session.announceToGroup` is on for every
+ * session unless whoever made it turned it off — a small one where the other
+ * nine do not need telling it exists. This module is the only thing that reads
+ * that column. The people singing are told either way; that is the distinction
+ * the whole feature rests on.
  */
 
 /**
@@ -45,6 +51,8 @@ export const SETTLE_MINUTES = 20;
 export type AnnounceOutcome =
   | "announced"
   | "already announced"
+  /** Deliberately silent — too few singers, or somebody said so. */
+  | "kept quiet"
   | "still changing"
   | "nobody rostered"
   | "in the past"
@@ -73,6 +81,7 @@ export async function announceRosterIfSettled(
         date: true,
         createdAt: true,
         rosterChangedAt: true,
+        announceToGroup: true,
         slots: { where: { singerId: { not: null } }, select: { singerId: true } },
         notices: { where: { kind: "published" }, select: { id: true } },
       },
@@ -84,12 +93,33 @@ export async function announceRosterIfSettled(
     if (session.slots.length === 0) return "nobody rostered";
     if (session.notices.length > 0) return "already announced";
 
+    /*
+     * The one gate for the quiet notice.
+     *
+     * Here rather than at either call site, so the per-save call and the hourly
+     * backstop cannot disagree — and BEFORE the settle check, so a session that
+     * is never going to be announced says so plainly instead of reporting itself
+     * as still changing for the rest of the week.
+     *
+     * Nothing is recorded when it is silent. That is what keeps the decision
+     * reversible: switch a session back on and the announcement goes out on the
+     * next save or the next hourly tick, because no SessionNotice is standing in
+     * its way.
+     */
+    if (!session.announceToGroup) return "kept quiet";
+
+    /*
+     * DISTINCT PEOPLE, not slots. One singer taking three bhajans is one person
+     * rostered — "3 singers rostered" for one person singing three times would
+     * simply be wrong, and that count goes into the message.
+     */
+    const rostered = new Set(session.slots.map((s) => s.singerId!));
+
     // Sessions that predate this column have no stamp; their creation time is
     // the honest fallback and is long past for anything already in the book.
     const changedAt = session.rosterChangedAt ?? session.createdAt;
     if (now.getTime() - changedAt.getTime() < SETTLE_MINUTES * 60_000) return "still changing";
 
-    const rostered = new Set(session.slots.map((s) => s.singerId!));
     const others = await prisma.singer.findMany({
       where: { id: { notIn: [...rostered] } },
       select: { id: true },
@@ -146,6 +176,8 @@ export async function announceSettledRosters(now: Date = new Date()): Promise<An
         format: "bhajans",
         slots: { some: { singerId: { not: null } } },
         notices: { none: { kind: "published" } },
+        // Sessions somebody has silenced never need asking about again.
+        announceToGroup: true,
       },
       select: { id: true },
     });

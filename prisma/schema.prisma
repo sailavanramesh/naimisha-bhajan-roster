@@ -447,6 +447,34 @@ model Session {
   /// decided, which is what the quiet "the roster is up" announces. Slot
   /// updatedAt cannot answer it, because every pitch edit bumps that too.
   rosterChangedAt DateTime?
+
+  /// Whether the whole group is told "the roster is up" for this session.
+  ///
+  /// Only the QUIET, group-wide notice. The alerting "you are singing" always
+  /// goes to the people actually rostered, whatever this says — see lib/notify.ts
+  /// for the difference between the two kinds. That distinction is the point of
+  /// the column: a dozen people cannot all be buzzed every time a session is
+  /// planned, but the three or four who have to turn up and sing must be.
+  ///
+  /// TRUE BY DEFAULT, and the default is not hidden. Sailavan, 2026-08-24: the
+  /// option "should be set by default but visible to the person creating the
+  /// session when they do it… so they can manually toggle it on/off as
+  /// appropriate or required." So every session announces unless somebody says
+  /// otherwise, and the toggle that says otherwise sits in the session header
+  /// and on the Build page rather than behind a disclosure.
+  ///
+  /// A size rule briefly lived here — sessions of two or fewer went quiet on
+  /// their own. It was removed on the same instruction: how many people are
+  /// singing is not the app's business to infer, and a default that changes
+  /// shape by itself is harder to trust than one that is always the same and
+  /// always on screen.
+  ///
+  /// Reversible right up until it is sent: no SessionNotice rows are written
+  /// while a session is quiet, so switching it back on lets the announcement go
+  /// out normally. Once sent it cannot be unsent, and the toggle says so rather
+  /// than offering a click that would do nothing.
+  announceToGroup Boolean @default(true)
+
   /// Which desk this programme is mixed on. Null until one is picked.
   /// ARCHIVED, not deleted.
   ///
