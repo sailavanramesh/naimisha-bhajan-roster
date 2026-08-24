@@ -569,6 +569,29 @@ export default async function BuildPage({
                   })),
                 )}
               />
+              {/*
+                Who hears about this session, asked where the session is made.
+
+                Ticked, always — Sailavan, 2026-08-24: the option "should be set
+                by default but visible to the person creating the session when
+                they do it". So it is a visible default rather than a hidden
+                one, and untick it for the small session that the other nine do
+                not need to hear about.
+
+                It says GROUP on purpose. The people rostered are alerted the
+                moment they are put on, whatever this box says, and a label that
+                read "notify" would look like it governed both.
+              */}
+              <label className="inline-flex items-center gap-2 text-xs text-on-surface-muted">
+                <input
+                  type="checkbox"
+                  name="announceToGroup"
+                  defaultChecked
+                  className="h-3.5 w-3.5"
+                />
+                Tell the group this roster is up
+              </label>
+
               <Button type="submit" variant="primary">
                 Save as draft session on {date}
               </Button>

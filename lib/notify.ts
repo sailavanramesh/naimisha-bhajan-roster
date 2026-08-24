@@ -117,6 +117,27 @@ export function shouldNotifyForSession(sessionISO: string, todayISO: string): bo
 }
 
 /* ------------------------------------------------------------------ *\
+ * Who hears about a session at all.
+ *
+ * Two audiences, and they are told different things for different reasons.
+ * The people ROSTERED are always alerted: they have to turn up and sing, and
+ * that message is the app's whole job. THE REST OF THE GROUP get the quiet
+ * "roster is up", which is a courtesy — and `Session.announceToGroup` is the
+ * one switch that decides whether it goes.
+ *
+ * True by default, on every session, whatever its size. There is no rule that
+ * infers silence from a small roster: a default that changes shape by itself is
+ * harder to trust than one that is always the same and always on screen, and
+ * the person creating the session is the one who knows whether the other nine
+ * need telling. See the toggle in the session header and on the Build page.
+ *
+ * Nothing here is a function, deliberately. The decision is a single stored
+ * boolean read at one place — lib/announceRosters.ts — and wrapping it in a
+ * helper that returns its own argument would only make it look like a rule.
+\* ------------------------------------------------------------------ */
+
+
+/* ------------------------------------------------------------------ *\
  * The day-of nudge.
  *
  * A rostered row is only useful once it says WHAT is being sung and AT WHAT

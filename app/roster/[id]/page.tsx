@@ -15,12 +15,15 @@ import { CopyRowsPanel } from "./CopyRowsPanel";
 import { SessionMetaPanel } from "@/components/SessionMetaPanel";
 import { DeleteSessionButton } from "@/components/DeleteSessionButton";
 import { NotifyPanel } from "./NotifyPanel";
+import { GroupAnnounceToggle } from "./GroupAnnounceToggle";
+import type { GroupAnnounceState } from "./GroupAnnounceToggle";
+import { SETTLE_MINUTES } from "@/lib/announceRosters";
 import { melbourneTodayISO } from "@/lib/dates";
 import { cushionsForSession } from "@/lib/sessionDesk";
 import { sortByStart, sessionLabel, hasSeveral, startMinutes, USUAL_START } from "@/lib/sessionsOfDay";
 import { DayPanel } from "./DayPanel";
 import { resolveSessionView, jobBanner, jobsOf } from "@/lib/sessionView";
-import { missingParts } from "@/lib/notify";
+import { missingParts, shouldNotifyForSession } from "@/lib/notify";
 import type { NotifyPerson } from "./NotifyPanel";
 import { NOT_ARCHIVED } from "@/lib/archive";
 
@@ -37,6 +40,53 @@ const PILL =
  * whether to poke somebody wants to read "no pitch yet", not interpret a pair
  * of booleans.
  */
+/**
+ * What the group is about to hear about this session, if anything.
+ *
+ * Null when the question does not arise — a session in the past, which is most
+ * of them. Filling in last Thursday's pitches must not raise a panel about
+ * notifying anybody, and `shouldNotifyForSession` is the same test the sender
+ * itself applies, so the panel cannot promise something that will not happen.
+ *
+ * Two cheap counts, asked together and only for somebody who may act on the
+ * answer.
+ */
+async function announceState(session: {
+  id: string;
+  date: Date;
+  createdAt: Date;
+  rosterChangedAt: Date | null;
+  announceToGroup: boolean;
+  slots: { singerId: string | null }[];
+}): Promise<GroupAnnounceState | null> {
+  const dateISO = session.date.toISOString().slice(0, 10);
+  if (!shouldNotifyForSession(dateISO, melbourneTodayISO())) return null;
+
+  const rosteredCount = new Set(
+    session.slots.map((x) => x.singerId).filter((x): x is string => Boolean(x)),
+  ).size;
+
+  const [singerTotal, sent] = await Promise.all([
+    // Everybody, unfiltered — the same population the announcement goes to.
+    prisma.singer.count(),
+    prisma.sessionNotice.findFirst({
+      where: { sessionId: session.id, kind: "published" },
+      select: { id: true },
+    }),
+  ]);
+
+  // The clock the sender uses: when the PEOPLE last changed, not when anything
+  // on the session was last touched. See Session.rosterChangedAt.
+  const changedAt = session.rosterChangedAt ?? session.createdAt;
+
+  return {
+    announce: session.announceToGroup,
+    othersCount: Math.max(0, singerTotal - rosteredCount),
+    announced: Boolean(sent),
+    dueAtISO: new Date(changedAt.getTime() + SETTLE_MINUTES * 60_000).toISOString(),
+  };
+}
+
 async function notifyCandidates(sessionId: string): Promise<NotifyPerson[]> {
   const slots = await prisma.sessionSlot.findMany({
     where: { sessionId, singerId: { not: null } },
@@ -219,6 +269,7 @@ export default async function RosterSessionPage({
     sessionPlaceRows,
     sameDayRows,
     notifyPeople,
+    groupAnnounce,
     tablaOverrideRows,
     allSingers,
   ] = await Promise.all([
@@ -283,6 +334,13 @@ export default async function RosterSessionPage({
      * own, and a viewer would be paying for a control they never see.
      */
     canNotify ? notifyCandidates(sessionId) : Promise.resolve([] as NotifyPerson[]),
+
+    /*
+     * Who else is about to hear about this session. Same gate as the reminder
+     * list above, and for the same reason: a viewer cannot change it, so a
+     * viewer should not pay two queries to be told about it.
+     */
+    canNotify ? announceState(session) : Promise.resolve(null),
 
     // The grid recomputes a row's tabla in the browser as the pitch is edited,
     // so it needs the overrides rather than a pre-computed answer.
@@ -692,6 +750,16 @@ export default async function RosterSessionPage({
                 <Link href="/admin/desks" className={PILL} title="The desks, their strips and cushions">
                   Sound desk
                 </Link>
+              ) : null}
+
+              {/*
+                Who else hears about this session — in the header, because the
+                person who just created one is looking at the top of this page
+                and has about twenty minutes in which the answer can still
+                change. See GroupAnnounceToggle.
+              */}
+              {groupAnnounce ? (
+                <GroupAnnounceToggle sessionId={sessionId} initial={groupAnnounce} />
               ) : null}
 
               <Link
