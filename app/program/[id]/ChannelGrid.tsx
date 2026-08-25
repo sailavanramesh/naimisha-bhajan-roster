@@ -80,7 +80,6 @@ export function ChannelGrid({
   singers,
   instruments,
   guests,
-  canEdit,
   canSetUpDesk,
 }: {
   sessionId: string;
@@ -92,17 +91,27 @@ export function ChannelGrid({
   instruments: { id: string; name: string }[];
   /** Names typed onto this programme who are not roster singers. */
   guests: string[];
-  canEdit: boolean;
   /**
-   * May SET UP the desk on this programme: which desk it is on, taking its
-   * strips again, and the channel list itself.
+   * May WORK THE DESK on this programme: which desk it is on, taking its strips
+   * again, the channel list, which channels are open on each item, and who is
+   * on each mic.
    *
-   * Editors, plus whoever is down as sound engineer or mic coordinator under
-   * "Who is running it". Wider than `canEdit` on purpose — the person running
-   * the sound is usually not an editor, and they are the one who needs it.
+   * Editors, plus whoever is down as sound engineer or mic coordinator. Wider
+   * than `editPrograms` on purpose — the person running the sound is usually
+   * not an editor, and they are the one standing at the desk.
    *
-   * Hiding these is a courtesy, not the permission: the actions enforce the same
-   * rule server-side. See deskActions.ts.
+   * THE ONLY PERMISSION THIS CARD ASKS ABOUT, as of 2026-08-26. It used to take
+   * an `editPrograms` flag as well, and gate the per-item allocations on that —
+   * so a mic coordinator could re-patch the channel list but could not tap a
+   * strip to say who was on it, which is the one thing the job consists of.
+   * Sailavan: "mic coordinators and sound engineers should have the option to
+   * update mic allocations in the song view ... add the option of sharing a mic
+   * etc that editors see. they should see that."
+   *
+   * Every action behind these controls already enforced exactly this rule —
+   * `requireDeskSetup` in deskActions.ts — so nothing new is being permitted
+   * server-side; the buttons were hidden from people the server would have let
+   * through. Hiding a control was never the permission.
    */
   canSetUpDesk: boolean;
 }) {
@@ -171,7 +180,7 @@ export function ChannelGrid({
             </p>
           </div>
 
-          {canEdit ? (
+          {canSetUpDesk ? (
             <div className="flex flex-wrap items-center gap-2">
               {desks.length > 0 ? (
                 <>
@@ -440,7 +449,7 @@ export function ChannelGrid({
                   </td>
 
                   <td className="px-1 py-1 text-center">
-                    {canEdit ? (
+                    {canSetUpDesk ? (
                       <input
                         defaultValue={item.sceneNumber}
                         aria-label={`Scene number for ${item.title || "this item"}`}
@@ -463,7 +472,7 @@ export function ChannelGrid({
                       <td key={c.id} className="px-0.5 py-1 text-center">
                         <button
                           type="button"
-                          disabled={!canEdit || pending}
+                          disabled={!canSetUpDesk || pending}
                           role="switch"
                           aria-checked={open}
                           aria-label={`Channel ${stripNumber(c.number, c.stereo)} on ${item.title || "this item"}`}
@@ -471,7 +480,7 @@ export function ChannelGrid({
                             open
                               ? "border-brass/60 bg-brass/20 text-brass-ink"
                               : "border-rule-surface bg-field text-transparent"
-                          } ${canEdit ? "hover:border-brass/50" : ""}`}
+                          } ${canSetUpDesk ? "hover:border-brass/50" : ""}`}
                           onClick={() =>
                             startTransition(async () => {
                               const res = await setChannelOpen({
@@ -565,7 +574,7 @@ export function ChannelGrid({
               neither the open set nor an answer already given, so it can be
               pressed twice or after a correction without undoing anything.
             */}
-            {canEdit && items[0]?.id !== deskItem.id ? (
+            {canSetUpDesk && items[0]?.id !== deskItem.id ? (
               <button
                 type="button"
                 disabled={pending}
@@ -604,7 +613,7 @@ export function ChannelGrid({
             }))}
             openIds={deskOpen}
             swappedIds={new Set(deskSwaps.keys())}
-            onPick={canEdit ? (id) => setDeskStripId(id === deskStripId ? null : id) : undefined}
+            onPick={canSetUpDesk ? (id) => setDeskStripId(id === deskStripId ? null : id) : undefined}
           />
 
           {/*
@@ -631,7 +640,7 @@ export function ChannelGrid({
                 <input
                   type="checkbox"
                   checked={deskOpen.has(deskStrip.id)}
-                  disabled={!canEdit || pending}
+                  disabled={!canSetUpDesk || pending}
                   className="h-3.5 w-3.5"
                   onChange={(e) =>
                     startTransition(async () => {
@@ -660,7 +669,7 @@ export function ChannelGrid({
                   singers={singers}
                   instruments={instruments}
                   guests={guests}
-                  disabled={!canEdit || pending}
+                  disabled={!canSetUpDesk || pending}
                   emptyLabel={deskStrip.who ?? "usual"}
                   label={`Who is on channel ${stripNumber(deskStrip.number, deskStrip.stereo)} for this item`}
                   onPick={(picked) =>
@@ -679,7 +688,7 @@ export function ChannelGrid({
                 <Input
                   key={`${deskItem.id}-${deskStrip.id}`}
                   defaultValue={deskSwapRow?.person ?? ""}
-                  disabled={!canEdit || pending}
+                  disabled={!canSetUpDesk || pending}
                   aria-label="Or a name for this item"
                   placeholder="or a name"
                   className="h-7 w-28 text-[11px]"
@@ -716,7 +725,7 @@ export function ChannelGrid({
                   singers={singers}
                   instruments={[]}
                   guests={guests}
-                  disabled={!canEdit || pending}
+                  disabled={!canSetUpDesk || pending}
                   emptyLabel="nobody"
                   label={`Who shares channel ${stripNumber(deskStrip.number, deskStrip.stereo)} on this item`}
                   onPick={(picked) =>
