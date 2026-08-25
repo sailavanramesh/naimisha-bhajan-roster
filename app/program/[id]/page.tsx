@@ -127,8 +127,9 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
   const canEdit = can(role, "editPrograms");
 
   /*
-   * Who may SET UP THE DESK on this programme — which desk it is on, taking its
-   * strips again, and the channel list.
+   * Who may WORK THE DESK on this programme — which desk it is on, taking its
+   * strips again, the channel list, and (from 2026-08-26) which channels are
+   * open on each item and who is on each mic.
    *
    * Sailavan: those "shouldn't be available to anyone but editors and people
    * marked as sound engineers or mic coordinators". Both are now roles on the
@@ -370,7 +371,6 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
         singers={singers}
         instruments={instruments}
         guests={guests}
-        canEdit={canEdit}
         canSetUpDesk={canSetUpDesk}
       />
 

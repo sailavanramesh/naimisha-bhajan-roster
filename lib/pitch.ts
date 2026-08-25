@@ -484,3 +484,25 @@ export function lowestPitch(
   }
   return best;
 }
+
+/**
+ * Step a BARE NOTE up or down by whole semitones, wrapping round the octave.
+ *
+ * The counterpart to `transposeLabel`, for the other spelling of pitch this app
+ * holds: a programme item records its pitch as the note alone — see
+ * `ProgramItem.pitchNote` — so there is no step number and no series to
+ * preserve, and nothing to snap to a label the group already uses.
+ *
+ * Wrapping is honest here rather than sloppy: everything downstream of a bare
+ * note is a pitch CLASS. The tanpura picks its recording from Sa mod 12, so
+ * stepping B up to C sounds exactly like the C somebody would have picked from
+ * the dropdown, which is the only claim this function makes.
+ *
+ * Returns null for anything that is not one of the twelve notes — including a
+ * full shruti label, which belongs to `transposeLabel`.
+ */
+export function stepNote(note: string | null | undefined, by: number): NoteName | null {
+  const at = PITCH_CLASS[(note ?? '').trim().toUpperCase() as NoteName];
+  if (at === undefined) return null;
+  return NOTE_NAMES[(((at + Math.round(by)) % 12) + 12) % 12];
+}

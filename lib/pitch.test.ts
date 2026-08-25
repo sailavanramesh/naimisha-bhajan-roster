@@ -19,6 +19,7 @@ import {
   stepWithinSeries,
   pitchRank,
   lowestPitch,
+  stepNote,
 } from './pitch';
 
 /**
@@ -539,5 +540,39 @@ describe('transposeLabel with a fractional offset', () => {
   it('stays in the reference series, so the group reads its own vocabulary', () => {
     expect(transposeLabel('4 Madhyam / A#', 1, LABELS)).toMatch(/Madhyam/);
     expect(transposeLabel('1 Pancham / C', 1, LABELS)).toMatch(/Pancham/);
+  });
+});
+
+/**
+ * A programme item's pitch is a bare note, so stepping it is a different
+ * operation from stepping a shruti label — no step number, no series.
+ */
+describe('stepNote', () => {
+  it('steps up and down by whole semitones', () => {
+    expect(stepNote('F', 1)).toBe('F#');
+    expect(stepNote('F', -1)).toBe('E');
+    expect(stepNote('C', 2)).toBe('D');
+    expect(stepNote('A#', 1)).toBe('B');
+  });
+
+  it('wraps round the octave, because everything downstream is a pitch class', () => {
+    expect(stepNote('B', 1)).toBe('C');
+    expect(stepNote('C', -1)).toBe('B');
+    expect(stepNote('C', 12)).toBe('C');
+    expect(stepNote('C', -13)).toBe('B');
+  });
+
+  it('reads a note however it was typed, and rounds a fractional step', () => {
+    expect(stepNote(' f# ', 0)).toBe('F#');
+    expect(stepNote('f', 1)).toBe('F#');
+    expect(stepNote('F', 0.5)).toBe('F#');
+  });
+
+  it('is null for anything that is not one of the twelve notes', () => {
+    expect(stepNote(null, 1)).toBeNull();
+    expect(stepNote('', 1)).toBeNull();
+    expect(stepNote('H', 1)).toBeNull();
+    // A full shruti label belongs to transposeLabel, not here.
+    expect(stepNote('2 Pancham / D', 1)).toBeNull();
   });
 });

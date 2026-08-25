@@ -9,6 +9,7 @@ import { Verses } from "@/components/Verses";
 import { VerseEditor } from "@/components/VerseEditor";
 import { TrackControl } from "@/components/TrackControl";
 import { PracticePlayer } from "@/components/PracticePlayer";
+import { SongShrutiFinder } from "@/components/SongShrutiFinder";
 import { cn } from "@/components/ui";
 import { pairOf } from "@/lib/songTracks";
 import { trackStorageSummary } from "@/lib/trackStore";
@@ -23,8 +24,20 @@ export const dynamic = "force-dynamic";
  * they can easily be found again, recycled". A Doc could hold the lyrics; it
  * could never answer "what did we sing this at last time, and who sang it".
  */
-export default async function SongPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function SongPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  /**
+   * `item` — which programme brought them here. The running order links with
+   * it so the shruti finder below opens on THAT programme's pitch; arriving
+   * from the catalogue instead, the most recent one is the honest default.
+   */
+  searchParams: Promise<{ item?: string }>;
+}) {
   const { id } = await params;
+  const { item: fromItem } = await searchParams;
   const role = await getRole();
   if (role === "viewer" && !can(role, "viewAllPages")) {
     return <NoAccess what="This song" role={role} />;
@@ -71,6 +84,22 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
   const canEditTracks = can(role, "editPrograms");
   const pair = pairOf(song);
   const storage = canEditTracks ? await trackStorageSummary() : null;
+
+  /*
+   * WHICH PITCH THIS SONG IS SUNG AT.
+   *
+   * Sailavan, 2026-08-26: the finder should default "to the shruti or pitch
+   * allocated for the song". A song has no pitch of its own — the allocation
+   * lives on the programme item that sings it (`ProgramItem.pitchNote`), which
+   * is right: the same song is taken lower for a different set of singers.
+   *
+   * So the finder is always about ONE programme, named on screen so it is never
+   * a mystery number: the one that linked here, and failing that the most
+   * recent, which is what `items` is already ordered by. Re-ascribing writes
+   * back to that item and nothing else.
+   */
+  const pitchItem = song.items.find((i) => i.id === fromItem) ?? song.items[0] ?? null;
+  const canEditPrograms = can(role, "editPrograms");
 
   const facts = [song.language, song.tradition, song.composer].filter(Boolean).join(" · ");
 
@@ -214,6 +243,22 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
         </Card>
       ) : null}
 
+      {/*
+        THE SHRUTI, ABOVE THE WORDS.
+
+        This page is where the running order's "Words" button lands, and
+        whoever pressed it is about to sing — so the drone the group is singing
+        against belongs here, not two screens away on the programme. Stepping it
+        is practice and saves nothing; an editor may write it back to the
+        programme that allocated it. See components/SongShrutiFinder.tsx.
+      */}
+      <SongShrutiFinder
+        itemId={pitchItem?.id ?? null}
+        allocated={pitchItem?.pitchNote ?? null}
+        canAscribe={canEditPrograms}
+        where={pitchItem ? programmeLabel(pitchItem) : null}
+      />
+
       <Card>
         <CardHeader>
           <CardTitle>Words</CardTitle>
@@ -291,4 +336,24 @@ export default async function SongPage({ params }: { params: Promise<{ id: strin
       </Card>
     </div>
   );
+}
+
+/**
+ * Which programme an allocated pitch came from, in one line.
+ *
+ * Named rather than implied: this page is reached from several programmes and
+ * from the catalogue, and "sung at F" means nothing without saying whose F —
+ * least of all to the editor about to press the button that changes it.
+ */
+function programmeLabel(item: {
+  session: { date: Date; topic: string | null; category: { name: string } | null };
+}): string {
+  const when = new Intl.DateTimeFormat("en-AU", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(item.session.date);
+  const what = item.session.topic?.trim() || item.session.category?.name || "Music program";
+  return `${what} · ${when}`;
 }
