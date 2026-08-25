@@ -157,6 +157,56 @@ export async function updateProgramItem(input: {
 }
 
 /**
+ * Set the pitch this song is sung at in this programme, and nothing else.
+ *
+ * `updateProgramItem` above writes every field on the item at once, which is
+ * right for the editor that holds all of them and wrong for everywhere else: a
+ * shruti finder beside the words knows the pitch and nothing about the
+ * arrangement notes, and saving through the wide action would have to send back
+ * whatever it happened to be told about the rest.
+ *
+ * Sailavan, 2026-08-26: a shruti finder on the words "defaults to the shruti or
+ * pitch allocated for the song, but can be changed for practice purposes (and
+ * reascribed to the song as an option)". This is that option — the same
+ * `editPrograms` rule as the pitch dropdown in the running order, because it
+ * writes the same field.
+ *
+ * Also revalidates the SONG page: the finder there is reached from a running
+ * order, and it must not still be showing the old allocation after saving.
+ */
+export async function setItemPitch(input: { itemId: string; pitch: string }): Promise<Result> {
+  await requireCapability("editPrograms");
+
+  const parsed = z
+    .object({
+      itemId: Id,
+      pitch: z
+        .string()
+        .trim()
+        .toUpperCase()
+        .transform((s) => (s.length === 0 ? null : s))
+        .refine((s) => s === null || NOTES.includes(s), { message: "not a note" }),
+    })
+    .safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Pitch should be a note like A# or D." };
+
+  const item = await prisma.programItem.findUnique({
+    where: { id: parsed.data.itemId },
+    select: { sessionId: true, songId: true },
+  });
+  if (!item) return { ok: false, error: "That item is gone." };
+
+  await prisma.programItem.update({
+    where: { id: parsed.data.itemId },
+    data: { pitchNote: parsed.data.pitch },
+  });
+
+  if (item.songId) revalidatePath(`/songs/${item.songId}`);
+  await refresh(item.sessionId);
+  return ok;
+}
+
+/**
  * Move an item one place up or down.
  *
  * The whole order is rewritten from `moveItem`, which is pure and tested — the

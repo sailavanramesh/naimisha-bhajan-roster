@@ -20,6 +20,7 @@ import {
   updateProgramItem,
 } from "./actions";
 import { createSong, renameSong, setItemSong } from "@/app/songs/actions";
+import { SongShrutiFinder } from "@/components/SongShrutiFinder";
 import { Verses, type VerseView } from "@/components/Verses";
 import { VerseEditor } from "@/components/VerseEditor";
 
@@ -340,7 +341,9 @@ function ItemCard({
           */}
           {!isReading && item.songId ? (
             <Link
-              href={`/songs/${item.songId}`}
+              /* `?item=` so the song page's shruti finder opens on THIS
+                 programme's pitch rather than the most recent one. */
+              href={`/songs/${item.songId}?item=${item.id}`}
               title="Words and meaning"
               className="shrink-0 rounded-key border border-rule-surface px-2 py-1 text-xs text-on-surface-muted hover:border-brass/50 hover:text-on-surface"
             >
@@ -561,6 +564,27 @@ function ItemCard({
                     </span>
                   </summary>
                   <div className="grid gap-3 px-3 pb-3">
+                    {/*
+                      THE SHRUTI, WHERE THE WORDS ARE.
+
+                      Sailavan, 2026-08-26: a finder that "defaults to the
+                      shruti or pitch allocated for the song, but can be changed
+                      for practice purposes (and reascribed to the song as an
+                      option)". Somebody who opens the words is about to sing
+                      them, and the drone is the first thing they want; the Pitch
+                      dropdown further up this card is where an editor SETS the
+                      programme's pitch, which is a different act.
+
+                      `where` is null: the programme being talked about is the
+                      page you are already on.
+                    */}
+                    <SongShrutiFinder
+                      itemId={item.id}
+                      allocated={draft.pitchNote}
+                      canAscribe={canEdit}
+                      where={null}
+                      onAscribed={(pitch) => setDraft({ ...draft, pitchNote: pitch })}
+                    />
                     <Verses verses={item.verses} />
                     <VerseEditor songId={item.songId} verses={item.verses} canEdit={canEdit} />
                   </div>
@@ -673,7 +697,9 @@ function SongLink({
     return (
       <span className="flex flex-wrap items-center gap-2 text-xs">
         <Link
-          href={`/songs/${item.songId}`}
+          /* With the item, as the "Words" button above — the song page opens on
+             this programme's pitch. */
+          href={`/songs/${item.songId}?item=${item.id}`}
           className="text-brass-ink underline underline-offset-2"
         >
           Words and meaning →
