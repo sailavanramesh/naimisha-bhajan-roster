@@ -31,7 +31,7 @@ export default async function ProgramDeskPage({
   if (!can(role, "setMicCushion")) {
     return (
       <div className="rounded-[14px] border border-card-edge bg-surface p-6">
-        <h1 className="font-display text-2xl font-semibold">Desk view</h1>
+        <h1 className="font-display text-2xl font-semibold">Live view</h1>
         <p className="mt-2 text-sm text-on-surface-muted">
           You need to be signed in as a member or an editor to see this.
         </p>

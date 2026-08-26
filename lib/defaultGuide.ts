@@ -199,17 +199,17 @@ The button under the × switches to the **mic view**: the desk drawn as strips, 
   {
     key: "desk-view",
     position: 12,
-    title: "The desk view",
+    title: "The live view",
     href: "/program",
     blurb: "For the night itself — the sound desk, the running order and the words on one screen.",
     coordinatorOnly: false,
-    body: `Open a programme and press **Desk view**. The desk is drawn as strips, the way it looks on the metal: the number on top, the name below, and the mic cushion's own colour behind it, so channel 1 reads as the blue cushion at a glance.
+    body: `Open a programme and press **Live view**, beside the running order. The desk is drawn as strips, the way it looks on the metal: the number on top, the name below, and the mic cushion's own colour behind it, so channel 1 reads as the blue cushion at a glance.
 
 - **All songs** shows every song's mic layout at once, with the song the room is on ringed in brass. Tap any song to move the whole room to it — the current item is shared, so the desk, the stage and anybody watching are on the same one.
 - **Words** shows the lyrics for the song you are on.
-- A mic can change hands between songs — a singer's mic on the mridangam for one piece — and two people can share one mic. The desk view says who, per song.
+- A mic can change hands between songs — a singer's mic on the mridangam for one piece — and two people can share one mic. The live view says who, per song.
 
-> Setting the desk up — choosing which desk a programme is on, and taking its strips again after the desk has changed — is for editors and for whoever is down as **sound engineer** or **mic coordinator**. Channels are named in one place, **Admin → Sound desks**, reached from **Set up the desk** beside the grid.`,
+> **Mics and channels** — the grid on the programme page saying which channels are open on each item — is shown only to editors and to whoever is down as **sound engineer** or **mic coordinator**. Everybody else gets the running order and the live view, which is all a singer needs. Channels are named in one place, **Admin → Sound desks**, reached from **Set up the desk** beside the grid.`,
   },
   {
     key: "alerts",

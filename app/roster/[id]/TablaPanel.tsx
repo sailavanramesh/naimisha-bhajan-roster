@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { setTablaOverride } from "./tablaActions";
@@ -77,13 +78,41 @@ export function TablaPanel({
 
   return (
     <div className="grid gap-3 rounded-[14px] border border-brass/35 bg-brass/[0.05] p-3 sm:p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <h2 className="text-sm font-semibold uppercase tracking-wide text-on-surface-muted">
           Tablas to bring
         </h2>
-        <span className="text-xs text-on-surface-muted">
-          Ashram has {ASHRAM_TABLAS.join(", ")}
-        </span>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <span className="text-xs text-on-surface-muted">
+            Ashram has {ASHRAM_TABLAS.join(", ")}
+          </span>
+          {/*
+            THE LIVE VIEW, FOR THE ONE PERSON THIS PANEL PUSHES DOWN THE PAGE.
+
+            There is already a Live view button in the session header — but this
+            panel sits ABOVE that header, and it is the only thing on the page
+            that does. It has to: it answers "which drums do I put in the car",
+            which is asked before leaving home, so it cannot be below the
+            roster grid.
+
+            The cost is paid by the same person who benefits. On a session with
+            a dozen bhajans the working list below is a dozen rows, and on a
+            phone that is most of a screen to scroll past before the header
+            button comes into view — at exactly the moment a tabla player wants
+            it, which is when the session is starting. Sailavan, 2026-08-27:
+            "if there are many bhajans the tablas to use section fills up the
+            page on the phone and they have to scroll to get to the live view."
+
+            So the button is repeated here, at the top of the thing that is in
+            its way. Same destination as the header's; nobody else sees two.
+          */}
+          <Link
+            href={`/roster/${sessionId}/live`}
+            className="inline-flex h-7 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-brass/45 bg-brass/10 px-3 text-[13px] font-semibold text-brass-ink hover:border-brass/70"
+          >
+            <span aria-hidden>▶</span> Live view
+          </Link>
+        </div>
       </div>
 
       {calls.length === 0 && unresolved.length === 0 ? (
