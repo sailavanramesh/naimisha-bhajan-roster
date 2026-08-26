@@ -107,9 +107,34 @@ export function ProgramEditor({
 
   return (
     <div className="grid gap-3">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <h2 className="font-display text-xl font-semibold">Running order</h2>
-        <p className="text-sm text-on-surface-muted">{runningOrderLabel(items)}</p>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          <p className="text-sm text-on-surface-muted">{runningOrderLabel(items)}</p>
+          {/*
+            THE WAY INTO THE NIGHT ITSELF, and the reason it is here rather than
+            further down.
+
+            It used to be a "Desk view" link in the header of "Mics and
+            channels", which is below this list — so on a programme with eleven
+            items somebody had to scroll the whole running order on a phone to
+            reach the one screen they open when the programme starts. And that
+            card is now shown only to the people who work the desk, which would
+            have taken the link away from everybody else entirely.
+
+            Same screen, renamed: "Live view", to match the button on a bhajan
+            session. It is the same thing on both sides of the app — what is
+            happening now — and calling it "desk view" on one and "live view"
+            on the other made it read as two different screens. Sailavan: "it
+            works the same as desk view, just relabel to live view."
+          */}
+          <Link
+            href={`/program/${sessionId}/desk`}
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-brass/45 bg-brass/10 px-3 text-[13px] font-semibold text-brass-ink hover:border-brass/70"
+          >
+            <span aria-hidden>▶</span> Live view
+          </Link>
+        </div>
       </div>
 
       {/*

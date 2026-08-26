@@ -268,15 +268,13 @@ export function ChannelGrid({
           <h2 className="font-display text-xl font-semibold">Mics and channels</h2>
           <div className="flex flex-wrap items-center gap-3">
             {/*
-              The desk view first: it is what somebody opens ON THE NIGHT,
-              whereas the sheet is what they printed the day before.
+              The live view used to sit here, as "Desk view". It has moved up
+              beside the running order — it is what somebody opens ON THE NIGHT,
+              and this card is now shown only to the people who work the desk,
+              so leaving the one link everybody needs inside it would have hidden
+              it from the rest. What is left here is the sheet, which is what
+              gets printed the day before, and it belongs with the desk.
             */}
-            <Link
-              href={`/program/${sessionId}/desk`}
-              className="text-sm font-semibold text-brass-ink underline underline-offset-2"
-            >
-              Desk view →
-            </Link>
             <Link
               href={`/program/${sessionId}/print`}
               target="_blank"

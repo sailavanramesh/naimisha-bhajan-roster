@@ -164,8 +164,8 @@ export function DeskBoard({
       <aside className="flex w-9 shrink-0 flex-col items-center justify-between border-r border-rule bg-surface/50 py-3">
         <Link
           href={`/program/${sessionId}`}
-          aria-label="Exit desk view"
-          title="Exit desk view"
+          aria-label="Exit the live view"
+          title="Exit the live view"
           className="inline-flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-surface text-[15px] leading-none text-on-surface-muted hover:border-brass/50 hover:text-on-surface"
         >
           <span aria-hidden>×</span>

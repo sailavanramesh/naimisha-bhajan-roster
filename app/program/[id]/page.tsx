@@ -303,76 +303,96 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
         canEdit={canEdit}
       />
 
-      <ChannelGrid
-        sessionId={session.id}
-        deskName={session.desk?.name ?? null}
-        desks={desks.map((d) => ({ id: d.id, name: d.name, channels: d._count.channels }))}
-        channels={sortChannels(session.channels).map((c) => ({
-          id: c.id,
-          number: c.number,
-          label: c.label,
-          kind: c.kind,
-          colour: c.colour,
-          mic: c.mic,
-          stereo: c.stereo,
-          singerId: c.singerId,
-          instrumentId: c.instrumentId,
-          withSingerId: c.withSingerId,
-          withPerson: c.withPerson,
-          person: c.person,
-          // What to show in brackets: the person on it, or the instrument.
-          who: sharedName(
-            c.singer?.name ?? c.person ?? c.instrument?.name ?? null,
-            c.withSinger?.name ?? c.withPerson,
-          ),
-        }))}
-        items={session.programItems.map((item) => ({
-          id: item.id,
-          position: item.position,
-          kind: item.kind,
-          title: item.title ?? "",
-          sceneNumber: item.sceneNumber === null ? "" : String(item.sceneNumber),
-          open: item.channels.filter((c) => c.open).map((c) => c.channelId),
-          swaps: item.channels
-            .map((c) => ({
-              channelId: c.channelId,
-              singerId: c.singerId,
-              instrumentId: c.instrumentId,
-              person: c.person,
-              withSingerId: c.withSingerId,
-              withPerson: c.withPerson,
-              who: sharedName(
-                occupantFor(
-                  { who: null },
-                  {
-                    instrumentName: c.instrument?.name,
-                    singerName: c.singer?.name,
-                    person: c.person,
-                  },
-                ),
-                c.withSinger?.name ?? c.withPerson,
-              ),
-            }))
-            .filter(
-              (
-                s,
-              ): s is {
-                channelId: string;
-                singerId: string | null;
-                instrumentId: string | null;
-                person: string | null;
-                withSingerId: string | null;
-                withPerson: string | null;
-                who: string;
-              } =>
-                s.who !== null,
+      {/*
+        MICS AND CHANNELS — for the people who work the desk, and nobody else.
+
+        Sailavan, 2026-08-27: "for non-editors and non-mic coordinators and
+        sound engineers, hide the mics and channels from the program page."
+
+        It is the biggest thing on the page — one row per item, one column per
+        channel — and to a singer it answers a question they were never asked:
+        which faders are up. What they want from a programme is the running
+        order above and the live view button beside it, both of which they now
+        reach without scrolling past a grid meant for somebody else.
+
+        `canSetUpDesk` is already the rule for every control inside the card
+        (editors, plus whoever is down as sound engineer or mic coordinator), so
+        this hides a card that was read-only to everybody it hides it from —
+        no permission changes, and the server-side rules in deskActions.ts are
+        untouched.
+      */}
+      {canSetUpDesk ? (
+        <ChannelGrid
+          sessionId={session.id}
+          deskName={session.desk?.name ?? null}
+          desks={desks.map((d) => ({ id: d.id, name: d.name, channels: d._count.channels }))}
+          channels={sortChannels(session.channels).map((c) => ({
+            id: c.id,
+            number: c.number,
+            label: c.label,
+            kind: c.kind,
+            colour: c.colour,
+            mic: c.mic,
+            stereo: c.stereo,
+            singerId: c.singerId,
+            instrumentId: c.instrumentId,
+            withSingerId: c.withSingerId,
+            withPerson: c.withPerson,
+            person: c.person,
+            // What to show in brackets: the person on it, or the instrument.
+            who: sharedName(
+              c.singer?.name ?? c.person ?? c.instrument?.name ?? null,
+              c.withSinger?.name ?? c.withPerson,
             ),
-        }))}
-        singers={singers}
-        instruments={instruments}
-        guests={guests}
-        canSetUpDesk={canSetUpDesk}
-      />
+          }))}
+          items={session.programItems.map((item) => ({
+            id: item.id,
+            position: item.position,
+            kind: item.kind,
+            title: item.title ?? "",
+            sceneNumber: item.sceneNumber === null ? "" : String(item.sceneNumber),
+            open: item.channels.filter((c) => c.open).map((c) => c.channelId),
+            swaps: item.channels
+              .map((c) => ({
+                channelId: c.channelId,
+                singerId: c.singerId,
+                instrumentId: c.instrumentId,
+                person: c.person,
+                withSingerId: c.withSingerId,
+                withPerson: c.withPerson,
+                who: sharedName(
+                  occupantFor(
+                    { who: null },
+                    {
+                      instrumentName: c.instrument?.name,
+                      singerName: c.singer?.name,
+                      person: c.person,
+                    },
+                  ),
+                  c.withSinger?.name ?? c.withPerson,
+                ),
+              }))
+              .filter(
+                (
+                  s,
+                ): s is {
+                  channelId: string;
+                  singerId: string | null;
+                  instrumentId: string | null;
+                  person: string | null;
+                  withSingerId: string | null;
+                  withPerson: string | null;
+                  who: string;
+                } =>
+                  s.who !== null,
+              ),
+          }))}
+          singers={singers}
+          instruments={instruments}
+          guests={guests}
+          canSetUpDesk={canSetUpDesk}
+        />
+      ) : null}
 
       {/*
         "Who is running it" used to sit here — two pickers naming the sound
