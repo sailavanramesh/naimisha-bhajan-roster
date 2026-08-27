@@ -61,7 +61,7 @@ export default async function ProgramsPage() {
 
       {programs.length === 0 ? (
         <Card>
-          <CardContent className="py-6 text-sm text-on-surface-muted">
+          <CardContent className="py-6 text-sm text-on-surface-muted sm:py-6">
             No programs yet.
           </CardContent>
         </Card>

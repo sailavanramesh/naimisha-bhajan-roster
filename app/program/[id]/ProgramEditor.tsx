@@ -149,7 +149,7 @@ export function ProgramEditor({
       */}
       {items.length === 0 ? (
         <Card>
-          <CardContent className="py-6 text-sm text-on-surface-muted">
+          <CardContent className="py-6 text-sm text-on-surface-muted sm:py-6">
             Nothing in the program yet.
           </CardContent>
         </Card>
@@ -258,7 +258,9 @@ function ItemCard({
 
   return (
     <Card>
-      <CardContent className="grid grid-cols-[minmax(0,1fr)] gap-2 py-3">
+      {/* `sm:py-3` is not a typo: this card has no header, and CardContent's
+          own `sm:pt-0` beats an unprefixed `py-3` from 640px up. See ui.tsx. */}
+      <CardContent className="grid grid-cols-[minmax(0,1fr)] gap-2 py-3 sm:py-3">
         <div className="flex min-w-0 items-start gap-3">
           <span
             className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 font-mono text-xs ${

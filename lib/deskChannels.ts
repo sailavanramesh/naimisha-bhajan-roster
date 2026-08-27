@@ -33,6 +33,15 @@ export type ProposedChannel = {
   stereo?: boolean;
 };
 
+/**
+ * How many mics one instrument may claim.
+ *
+ * Eight. Past that it is not an instrument, it is a drum kit, and whoever is
+ * patching that is not going to be helped by this list. Named here because both
+ * the proposal and the admin action that writes the parts must agree on it.
+ */
+export const MAX_MIC_PARTS = 8;
+
 export type ItemPeople = {
   itemId: string;
   performers: Array<{ singerId?: string | null; name?: string | null }>;
@@ -56,8 +65,11 @@ export function proposeChannels(
   names: {
     singerName: (id: string) => string | undefined;
     instrumentName: (id: string) => string | undefined;
-    /** How many strips this instrument needs. Absent means one, as it was. */
-    instrumentChannels?: (id: string) => number | undefined;
+    /**
+     * Which mics this instrument takes — `["R", "L"]` on a two-headed drum.
+     * Absent, empty or a single part all mean one unnamed strip, as it was.
+     */
+    instrumentParts?: (id: string) => readonly string[] | undefined;
   },
 ): ProposedChannel[] {
   const vocals: ProposedChannel[] = [];
@@ -99,22 +111,32 @@ export function proposeChannels(
       const kind: ChannelKind = /karaoke|track/i.test(label) ? "track" : "instrument";
 
       /*
-       * ONE STRIP PER MIC, not one per instrument.
+       * ONE STRIP PER MIC, not one per instrument, and each one NAMED.
        *
        * A two-headed drum is miked on each head and a stereo keyboard takes a
-       * pair, so an instrument says how many channels it needs (Instrument.
-       * channels, set in /admin). Proposing one strip for a mridangam left
-       * somebody to discover on the night that half of it was not going
-       * through the desk.
+       * pair, so an instrument says which mics it takes (Instrument.micParts,
+       * set in /admin). Proposing one strip for a mridangam left somebody to
+       * discover on the night that half of it was not going through the desk.
        *
-       * Numbered in the label only when there is more than one, because
-       * "Tabla 1" with no Tabla 2 anywhere is a question rather than a fact.
+       * "Mridangam R" and "Mridangam L", not 1 and 2: the person patching has
+       * to know which head a strip is, and the two are not interchangeable.
+       *
+       * Named only when there is more than one, because "Tabla 1" — or "Tabla
+       * R" — with no second Tabla anywhere is a question rather than a fact.
        */
-      const count = Math.max(1, Math.min(names.instrumentChannels?.(i.instrumentId) ?? 1, 8));
-      for (let n = 1; n <= count; n++) {
+      const parts = (names.instrumentParts?.(i.instrumentId) ?? [])
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0)
+        .slice(0, MAX_MIC_PARTS);
+
+      if (parts.length < 2) {
+        instruments.push({ number: "", label, kind, instrumentId: i.instrumentId });
+        continue;
+      }
+      for (const part of parts) {
         instruments.push({
           number: "",
-          label: count > 1 ? `${label} ${n}` : label,
+          label: `${label} ${part}`,
           kind,
           instrumentId: i.instrumentId,
         });

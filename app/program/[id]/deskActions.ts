@@ -213,7 +213,7 @@ export async function suggestChannels(input: {
       },
     }),
     prisma.singer.findMany({ select: { id: true, name: true } }),
-    prisma.instrument.findMany({ select: { id: true, name: true, channels: true } }),
+    prisma.instrument.findMany({ select: { id: true, name: true, micParts: true } }),
     prisma.sessionChannel.findMany({
       where: { sessionId: parsed.data.sessionId },
       select: { number: true, singerId: true, person: true, instrumentId: true },
@@ -222,8 +222,8 @@ export async function suggestChannels(input: {
 
   const singerName = new Map(singers.map((s) => [s.id, s.name]));
   const instrumentName = new Map(instruments.map((i) => [i.id, i.name]));
-  // A two-headed drum is two strips. See Instrument.channels.
-  const instrumentChannels = new Map(instruments.map((i) => [i.id, i.channels]));
+  // A two-headed drum is two strips, one per head. See Instrument.micParts.
+  const instrumentParts = new Map(instruments.map((i) => [i.id, i.micParts]));
 
   const proposed = proposeChannels(
     items.map((i) => ({
@@ -234,7 +234,7 @@ export async function suggestChannels(input: {
     {
       singerName: (id) => singerName.get(id),
       instrumentName: (id) => instrumentName.get(id),
-      instrumentChannels: (id) => instrumentChannels.get(id),
+      instrumentParts: (id) => instrumentParts.get(id),
     },
   );
 
@@ -242,13 +242,37 @@ export async function suggestChannels(input: {
   const havePerson = new Set(
     existing.map((c) => (c.person ?? "").trim().toLowerCase()).filter(Boolean),
   );
-  const haveInstrument = new Set(existing.map((c) => c.instrumentId).filter(Boolean));
   const usedNumbers = new Set(existing.map((c) => c.number));
+
+  /*
+   * HOW MANY strips an instrument already has, not merely whether it has one.
+   *
+   * A person is one mic and "have I got them" is the whole question. An
+   * instrument may be two, and asking the same yes/no of it meant that raising
+   * the mridangam from one mic to two and pressing this again added nothing:
+   * a mridangam strip existed, so both proposed strips were dropped, and the
+   * second head stayed off the desk exactly as before. Counting instead tops
+   * the instrument up to what it now needs.
+   *
+   * The strips already there are the ones kept — so a mridangam labelled by
+   * hand keeps its label and gains "Mridangam L" beside it, rather than being
+   * relabelled underneath somebody.
+   */
+  const haveInstrument = new Map<string, number>();
+  for (const c of existing) {
+    if (!c.instrumentId) continue;
+    haveInstrument.set(c.instrumentId, (haveInstrument.get(c.instrumentId) ?? 0) + 1);
+  }
 
   const missing = proposed.filter((c) => {
     if (c.singerId) return !haveSinger.has(c.singerId);
     if (c.person) return !havePerson.has(c.person.trim().toLowerCase());
-    if (c.instrumentId) return !haveInstrument.has(c.instrumentId);
+    if (c.instrumentId) {
+      const have = haveInstrument.get(c.instrumentId) ?? 0;
+      if (have === 0) return true;
+      haveInstrument.set(c.instrumentId, have - 1);
+      return false;
+    }
     return false;
   });
   if (missing.length === 0) return { ok: true, added: 0 };

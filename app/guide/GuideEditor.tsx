@@ -154,7 +154,7 @@ function SectionEditor({
 
   return (
     <Card>
-      <CardContent className="grid gap-3 py-4">
+      <CardContent className="grid gap-3 py-4 sm:py-4">
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="grid gap-1">
             <FieldLabel>Title</FieldLabel>

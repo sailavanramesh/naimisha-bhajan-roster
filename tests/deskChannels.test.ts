@@ -382,26 +382,41 @@ describe("proposeChannels — instruments that need more than one strip", () => 
   const names = {
     singerName: (id: string) => ({ s1: "Prasanna" })[id],
     instrumentName: (id: string) => ({ mridangam: "Mridangam", tabla: "Tabla" })[id],
-    instrumentChannels: (id: string) => ({ mridangam: 2, tabla: 1 })[id],
+    instrumentParts: (id: string) => ({ mridangam: ["R", "L"], tabla: [] })[id],
   };
 
-  it("gives a two-headed drum a strip per head, numbered", () => {
+  /* Which head, not merely how many — the two are not interchangeable. */
+  it("gives a two-headed drum a strip per head, named", () => {
     const labels = proposeChannels(items, names).map((c) => c.label);
-    expect(labels).toEqual(["Prasanna", "Mridangam 1", "Mridangam 2", "Tabla"]);
+    expect(labels).toEqual(["Prasanna", "Mridangam R", "Mridangam L", "Tabla"]);
   });
 
-  /* "Tabla 1" with no Tabla 2 anywhere is a question, not a fact. */
-  it("does not number an instrument that only needs one", () => {
+  it("keeps the parts in the order they were written", () => {
+    const labels = proposeChannels(items, {
+      ...names,
+      instrumentParts: () => ["Treble", "Bass"],
+    })
+      .filter((c) => c.instrumentId === "mridangam")
+      .map((c) => c.label);
+    expect(labels).toEqual(["Mridangam Treble", "Mridangam Bass"]);
+  });
+
+  /* "Tabla R" with no second Tabla anywhere is a question, not a fact. */
+  it("does not name the mic on an instrument that only takes one", () => {
     expect(proposeChannels(items, names).find((c) => c.instrumentId === "tabla")?.label).toBe(
       "Tabla",
     );
+    const one = proposeChannels(items, { ...names, instrumentParts: () => ["R"] });
+    expect(one.filter((c) => c.instrumentId === "mridangam").map((c) => c.label)).toEqual([
+      "Mridangam",
+    ]);
   });
 
   it("still numbers every strip in order across the whole list", () => {
     expect(proposeChannels(items, names).map((c) => c.number)).toEqual(["1", "2", "3", "4"]);
   });
 
-  it("treats a missing count as one, so nothing changes for existing desks", () => {
+  it("treats no parts at all as one strip, so nothing changes for existing desks", () => {
     const labels = proposeChannels(items, {
       singerName: names.singerName,
       instrumentName: names.instrumentName,
@@ -409,8 +424,22 @@ describe("proposeChannels — instruments that need more than one strip", () => 
     expect(labels).toEqual(["Prasanna", "Mridangam", "Tabla"]);
   });
 
-  it("refuses a silly count rather than making a hundred strips", () => {
-    const many = proposeChannels(items, { ...names, instrumentChannels: () => 999 });
+  /* A trailing comma is how anybody types a list they are still editing. */
+  it("ignores a blank part rather than proposing a strip with no name", () => {
+    const labels = proposeChannels(items, {
+      ...names,
+      instrumentParts: () => ["R", "  ", "L"],
+    })
+      .filter((c) => c.instrumentId === "mridangam")
+      .map((c) => c.label);
+    expect(labels).toEqual(["Mridangam R", "Mridangam L"]);
+  });
+
+  it("refuses a silly list rather than making a hundred strips", () => {
+    const many = proposeChannels(items, {
+      ...names,
+      instrumentParts: () => Array.from({ length: 99 }, (_, n) => `m${n}`),
+    });
     expect(many.filter((c) => c.instrumentId === "mridangam")).toHaveLength(8);
   });
 });

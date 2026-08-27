@@ -52,6 +52,22 @@ export function CardTitle(props: { children: React.ReactNode; className?: string
   );
 }
 
+/**
+ * The body of a card.
+ *
+ * `pt-0` because it normally hangs under a CardHeader, whose own padding has
+ * already stood the content off the top edge.
+ *
+ * A CARD WITH NO HEADER MUST SAY ITS TOP PADDING AT BOTH WIDTHS — `py-3
+ * sm:py-3`, and the repetition is the point. An unprefixed `py-3` does not
+ * override `sm:pt-0`: they are different modifiers, so tailwind-merge keeps
+ * both and the media query wins from 640px up. The content then sits flat
+ * against the top edge of the card on every screen bigger than a phone.
+ *
+ * Which is what happened to the running order — 12px above and below on a
+ * phone, nothing above and 24px below on a laptop. Sailavan: "the text of the
+ * card is too close to the upper margin of the card".
+ */
 export function CardContent(props: { children: React.ReactNode; className?: string }) {
   return <div className={cn("p-5 pt-0 sm:p-6 sm:pt-0", props.className)}>{props.children}</div>;
 }

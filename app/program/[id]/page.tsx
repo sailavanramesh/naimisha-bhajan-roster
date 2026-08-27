@@ -274,7 +274,7 @@ export default async function ProgramPage({ params }: { params: Promise<{ id: st
       </div>
 
       <Card>
-        <CardContent className="pt-4">
+        <CardContent className="pt-4 sm:pt-4">
           <SessionMetaPanel
             sessionId={session.id}
             categories={categories}
