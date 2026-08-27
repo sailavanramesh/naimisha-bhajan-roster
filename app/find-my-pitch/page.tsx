@@ -111,7 +111,7 @@ export default async function FindMyPitchPage({
       </div>
 
       <Card>
-        <CardContent className="grid gap-3">
+        <CardContent className="grid gap-3 py-5 sm:py-6">
           <BhajanPicker currentId={chosen?.id ?? null} />
 
           {chosen ? (

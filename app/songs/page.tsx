@@ -89,7 +89,7 @@ export default async function SongsPage({
 
       {songs.length === 0 ? (
         <Card>
-          <CardContent className="py-6 text-sm text-on-surface-muted">
+          <CardContent className="py-6 text-sm text-on-surface-muted sm:py-6">
             {query ? `Nothing matches "${query}".` : "No songs yet. They arrive with a program."}
           </CardContent>
         </Card>

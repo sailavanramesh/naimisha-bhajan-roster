@@ -171,7 +171,7 @@ export function ChannelGrid({
   if (channels.length === 0) {
     return (
       <Card>
-        <CardContent className="grid gap-3 py-4">
+        <CardContent className="grid gap-3 py-4 sm:py-4">
           <div>
             <h2 className="font-display text-xl font-semibold">Mics and channels</h2>
             <p className="mt-1 text-sm text-on-surface-muted">
@@ -258,7 +258,7 @@ export function ChannelGrid({
 
   return (
     <Card>
-      <CardContent className="grid gap-3 py-4">
+      <CardContent className="grid gap-3 py-4 sm:py-4">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
           {/*
             No help text. Sailavan: "don't need any help text here" — by the
