@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { RepertoireKind } from "@prisma/client";
 import { hasBeenSung, melbourneNowLocal } from "@/lib/sungCutoff";
 import { NOT_ARCHIVED } from "./archive";
+import { decideFromSung, type ListedRow } from "./repertoirePromotion";
 
 /**
  * lib/repertoireFromHistory.ts — singing something puts it on your list.
@@ -23,18 +24,28 @@ import { NOT_ARCHIVED } from "./archive";
  *    plan; a pitch typed while planning is not evidence that anybody sang
  *    anything. This used to compare DATES, so a 7pm session counted from
  *    midnight — Sailavan caught it. See lib/sungCutoff.ts.
- * 2. NEVER DOWNGRADE. If the bhajan is already on their list at any stage it
- *    stays where it is. Somebody who has it as "learning" has said something
- *    about themselves that a roster row does not overrule.
+ * 2. FORWARDS ONLY. Singing it moves it to "Know it" from "Want to learn" or
+ *    "Learning"; nothing ever moves back, and a row already at "Know it" is
+ *    left exactly as it is.
+ *
+ *    This rule USED to be "never downgrade", implemented as never touching an
+ *    existing row at all — so a bhajan somebody had listed as wanting to learn
+ *    stayed there after they sang it. Sailavan, 2026-08-27, on Prithvi and
+ *    "Sai Guna Gao Sai Naam": "it should automatically go into the known and
+ *    sung buckets". lib/repertoireGuard.ts had already settled the same
+ *    argument the same way for anything added AFTER the singing; this brings
+ *    the rows written before it into line. See lib/repertoirePromotion.ts.
  * 3. NEVER OVERWRITE A PITCH. A blank preferredPitch is filled from what they
- *    sang; one they chose is left alone.
+ *    sang; one they chose is left alone. Same for a note they wrote.
  * 4. NEVER BREAK THE SAVE. Same rule as the notifications — this runs after
- *    the roster is written and any failure is swallowed.
+ *    the roster is written and any failure is swallowed. One bhajan that
+ *    cannot be written must not take the rest of the session with it, so each
+ *    row is written on its own.
  */
 export async function recordSungAsKnown(
   sessionId: string,
-): Promise<{ added: number; pitchFilled: number; skipped?: string }> {
-  const nothing = { added: 0, pitchFilled: 0 };
+): Promise<{ added: number; promoted: number; pitchFilled: number; skipped?: string }> {
+  const nothing = { added: 0, promoted: 0, pitchFilled: 0 };
 
   try {
     const session = await prisma.session.findUnique({
@@ -66,54 +77,103 @@ export async function recordSungAsKnown(
         singerId: { in: session.slots.map((s) => s.singerId!) },
         bhajanId: { in: session.slots.map((s) => s.bhajanId!) },
       },
-      select: { id: true, singerId: true, bhajanId: true, preferredPitch: true },
+      select: {
+        id: true,
+        singerId: true,
+        bhajanId: true,
+        kind: true,
+        preferredPitch: true,
+        note: true,
+      },
     });
-    const have = new Map(existing.map((e) => [`${e.singerId}|${e.bhajanId}`, e]));
+    /*
+     * EVERY row for a pair, not one of them.
+     *
+     * The unique key is (singer, kind, title), so the same bhajan can sit at
+     * two stages at once — the seed built these lists from several sheets. This
+     * used to keep whichever row the map saw last, which decided nothing
+     * because the only question asked was "is there one". Now that a row can
+     * MOVE, which row moves matters. See decideFromSung.
+     */
+    const have = new Map<string, ListedRow[]>();
+    for (const e of existing) {
+      const key = `${e.singerId}|${e.bhajanId}`;
+      have.set(key, [...(have.get(key) ?? []), e]);
+    }
 
     let added = 0;
+    let promoted = 0;
     let pitchFilled = 0;
 
     for (const slot of session.slots) {
       const key = `${slot.singerId}|${slot.bhajanId}`;
-      const seen = have.get(key);
-
-      if (seen) {
-        if (!seen.preferredPitch && slot.confirmedPitch) {
-          await prisma.singerRepertoire.update({
-            where: { id: seen.id },
-            data: { preferredPitch: slot.confirmedPitch },
-          });
-          pitchFilled++;
-        }
-        continue;
-      }
+      const rows = have.get(key) ?? [];
+      const decision = decideFromSung(rows, slot.confirmedPitch);
+      if (decision === null) continue;
 
       const title = slot.bhajan?.title;
-      if (!title) continue;
+      if (decision.action === "create" && !title) continue;
 
-      await prisma.singerRepertoire.create({
-        data: {
-          singerId: slot.singerId!,
-          bhajanId: slot.bhajanId,
-          title,
-          kind: RepertoireKind.known,
-          preferredPitch: slot.confirmedPitch,
-          note: `Added from the roster — sung on ${dateISO}.`,
-        },
-      });
-      // Two rows for the same person and bhajan cannot both be created here,
-      // because the map is consulted first — but a concurrent save could. The
-      // list de-duplicates on read, and a stray duplicate is removable.
-      have.set(key, {
-        id: "",
-        singerId: slot.singerId!,
-        bhajanId: slot.bhajanId,
-        preferredPitch: slot.confirmedPitch,
-      });
-      added++;
+      /*
+       * ONE ROW AT A TIME, each in its own try.
+       *
+       * A promotion can collide where nothing else could: the unique key is on
+       * the TITLE, so a person carrying a free-text "known" row from the sheet
+       * AND a linked "want to learn" row for the same title has two rows that
+       * cannot both be known. That is a stray from the import, not something to
+       * repair from here — but it must not stop the next singer's bhajan from
+       * being recorded, which is what one try around the whole loop did.
+       */
+      try {
+        if (decision.action === "create") {
+          await prisma.singerRepertoire.create({
+            data: {
+              singerId: slot.singerId!,
+              bhajanId: slot.bhajanId,
+              title: title!,
+              kind: RepertoireKind.known,
+              preferredPitch: slot.confirmedPitch,
+              note: `Added from the roster — sung on ${dateISO}.`,
+            },
+          });
+          added++;
+          // So a bhajan sung twice in one session is not created twice.
+          have.set(key, [
+            {
+              id: "",
+              kind: RepertoireKind.known,
+              preferredPitch: slot.confirmedPitch,
+              note: null,
+            },
+          ]);
+          continue;
+        }
+
+        await prisma.singerRepertoire.update({
+          where: { id: decision.id },
+          data: {
+            ...(decision.promote ? { kind: RepertoireKind.known } : {}),
+            ...(decision.fillPitch ? { preferredPitch: slot.confirmedPitch } : {}),
+            ...(decision.setNote
+              ? { note: `Moved to "Know it" from the roster — sung on ${dateISO}.` }
+              : {}),
+          },
+        });
+        if (decision.promote) promoted++;
+        if (decision.fillPitch) pitchFilled++;
+
+        // Keep the map honest for a repeated pair in the same session.
+        const row = rows.find((r) => r.id === decision.id);
+        if (row) {
+          if (decision.promote) row.kind = RepertoireKind.known;
+          if (decision.fillPitch) row.preferredPitch = slot.confirmedPitch;
+        }
+      } catch (e) {
+        console.error("recordSungAsKnown could not write one row", key, e);
+      }
     }
 
-    return { added, pitchFilled };
+    return { added, promoted, pitchFilled };
   } catch (e) {
     console.error("recordSungAsKnown failed", e);
     return { ...nothing, skipped: "error" };
@@ -140,7 +200,7 @@ export async function recordSungAsKnown(
  */
 export async function syncSungRepertoire(
   days = 21,
-): Promise<{ sessions: number; added: number; pitchFilled: number }> {
+): Promise<{ sessions: number; added: number; promoted: number; pitchFilled: number }> {
   const now = new Date();
   const from = new Date(now);
   from.setUTCDate(from.getUTCDate() - days);
@@ -156,6 +216,7 @@ export async function syncSungRepertoire(
 
   let touched = 0;
   let added = 0;
+  let promoted = 0;
   let pitchFilled = 0;
 
   for (const s of sessions) {
@@ -164,8 +225,9 @@ export async function syncSungRepertoire(
     const result = await recordSungAsKnown(s.id);
     touched++;
     added += result.added;
+    promoted += result.promoted;
     pitchFilled += result.pitchFilled;
   }
 
-  return { sessions: touched, added, pitchFilled };
+  return { sessions: touched, added, promoted, pitchFilled };
 }
