@@ -129,7 +129,24 @@ export default async function FindMyPitchPage({
                 </Link>
               </div>
 
+              {/*
+                KEYED ON THE BHAJAN, and it is not decoration.
+
+                The finder holds the pitch in state, seeded once from
+                `startPitch`. The picker above navigates by SEARCH PARAM, which
+                does not change the route segment — so React reconciled the
+                same PitchFinder instance and kept the old bhajan's pitch on
+                screen while the title beside it changed. Sailavan, 2026-08-27:
+                "the song updates, but the pitch doesn't update til refreshing
+                the page". A refresh remounted it, which is what made it look
+                like a caching problem rather than a stale instance.
+
+                A different bhajan is a different finder: the key remounts it,
+                so the starting pitch, the saved pitch and any message all come
+                from the bhajan now on screen.
+              */}
               <PitchFinder
+                key={chosen.id}
                 singerId={signedIn.id}
                 title={chosen.title}
                 startPitch={prediction?.label ?? reference ?? null}
