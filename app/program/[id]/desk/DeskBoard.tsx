@@ -121,6 +121,18 @@ export function DeskBoard({
    * fight the finger.
    */
   const songRows = useRef(new Map<number, HTMLLIElement | null>());
+  /*
+   * The same courtesy for the running order across the top.
+   *
+   * That strip scrolls sideways and its bar is hidden, so on a nine-song
+   * programme the chip for song 7 was simply not on screen and nothing said
+   * so. Following the item keeps the marked chip where it can be seen, which
+   * is the whole reason the strip is there.
+   */
+  const currentChip = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    currentChip.current?.scrollIntoView({ inline: "nearest", block: "nearest" });
+  }, [position]);
   useEffect(() => {
     if (pane !== "all") return;
     const row = songRows.current.get(position ?? -1) ?? null;
@@ -246,12 +258,28 @@ export function DeskBoard({
               private notion of "current" would undo that quietly.
             */}
             {items.length > 1 ? (
-              <div className="flex shrink-0 gap-1 overflow-x-auto px-4 pb-2">
+              /*
+                NO SCROLLBAR ON THIS STRIP, and a line of air under it.
+
+                Sailavan, 2026-08-27, on a laptop: "the layout on the live view
+                is cramped around the songs scrollbar thing". With macOS set to
+                show scrollbars always, the bar is drawn INSIDE the strip's
+                8px of bottom padding and lands on top of the All songs / Words
+                buttons — a grey rule across the width that reads as a broken
+                divider rather than a control.
+
+                Hidden rather than styled: the chips are the affordance, the
+                item follows them, and the marked one is scrolled into view
+                above. A phone never drew a bar here in the first place, which
+                is why this only ever looked wrong on the laptop.
+              */
+              <div className="flex shrink-0 gap-1 overflow-x-auto px-4 py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {items.map((it) => {
                   const here = it.position === item.position;
                   return (
                     <button
                       key={it.position}
+                      ref={here ? currentChip : null}
                       type="button"
                       aria-pressed={here}
                       disabled={pending}
@@ -266,7 +294,18 @@ export function DeskBoard({
                       <span className="font-mono">
                         {it.kind === "narration" ? "read" : it.songNumber}
                       </span>
-                      <span className="ms-1.5 max-w-[10rem] truncate align-middle">{it.title}</span>
+                      {/*
+                        `inline-block`, and it matters: `max-w` and the overflow
+                        `truncate` sets are both ignored on an INLINE element,
+                        so every chip was as wide as its full title — "Shree
+                        krishna govinda hare murare" ran to 224px against the
+                        160px it asks for. Nine of those is a strip half again
+                        as wide as it needs to be, which is what put a scrollbar
+                        there at all on a laptop.
+                      */}
+                      <span className="ms-1.5 inline-block max-w-[10rem] truncate align-middle">
+                        {it.title}
+                      </span>
                     </button>
                   );
                 })}
