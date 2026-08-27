@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import { MAX_MIC_PARTS } from "@/lib/deskChannels";
 
 /**
  * The managed list of instruments the centre plays.
@@ -114,30 +115,45 @@ export async function setInstrumentScope(input: {
 }
 
 /**
- * How many desk channels this instrument needs.
+ * Which mics this instrument takes.
  *
- * One for nearly everything. A two-headed drum — a dholak, a mridangam, a khol
- * — is miked on each head and takes two, and a stereo keyboard takes two.
- * Building a programme's channel list used to give every instrument one strip,
- * so the mridangam arrived with half a mic and somebody found out on the night.
+ * One, unnamed, for nearly everything — which is what an empty list means. A
+ * two-headed drum — a dholak, a mridangam, a khol — is miked on each head and
+ * takes two, and a stereo keyboard takes two. Building a programme's channel
+ * list used to give every instrument one strip, so the mridangam arrived with
+ * half a mic and somebody found out on the night.
  *
- * Capped at 8: past that it is not an instrument, it is a drum kit, and whoever
- * is patching that is not going to be helped by a number box.
+ * NAMES rather than a count, because "Mridangam 1" does not tell the person
+ * patching which head they are holding. Typed as they are written on the sheet
+ * — "R, L" — and free text on purpose: the centre may prefer "Treble, Bass",
+ * and neither this action nor the desk has any reason to have an opinion.
+ *
+ * Capped at MAX_MIC_PARTS: past that it is not an instrument, it is a drum kit,
+ * and whoever is patching that is not going to be helped by this box. Each part
+ * is short because it is written after the instrument's own name on a tile
+ * about three characters wide.
  */
-export async function setInstrumentChannels(input: {
+export async function setInstrumentMicParts(input: {
   id: string;
-  channels: number;
+  parts: string[];
 }): Promise<Result> {
   await requireCapability("manageAllocations");
 
   const parsed = z
-    .object({ id: z.string().min(1), channels: z.number().int().min(1).max(8) })
+    .object({
+      id: z.string().min(1),
+      parts: z.array(z.string().trim().max(12)).max(MAX_MIC_PARTS),
+    })
     .safeParse(input);
-  if (!parsed.success) return { ok: false, error: "That is not a number of channels." };
+  if (!parsed.success) return { ok: false, error: "That is not a list of mics." };
+
+  // Blanks fall out rather than becoming a strip called "Mridangam " — a
+  // trailing comma is how anybody types a list they are still editing.
+  const parts = parsed.data.parts.filter((part) => part.length > 0);
 
   await prisma.instrument.update({
     where: { id: parsed.data.id },
-    data: { channels: parsed.data.channels },
+    data: { micParts: parts },
   });
 
   revalidatePath("/admin");

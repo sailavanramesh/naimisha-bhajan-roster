@@ -852,7 +852,7 @@ model Instrument {
   scope  InstrumentScope @default(program)
   active Boolean         @default(true)
 
-  /// How many desk channels this instrument needs.
+  /// WHICH mics this instrument takes, not just how many.
   ///
   /// One for nearly everything, and not for everything: a two-headed drum — a
   /// dholak, a mridangam, a khol — is miked on each head and takes two strips,
@@ -860,9 +860,25 @@ model Instrument {
   /// programme's players used to give each instrument one strip and leave
   /// somebody to notice, on the night, that the mridangam had half a mic.
   ///
-  /// Read by lib/deskChannels.ts `proposeChannels`, which numbers the extra
-  /// strips and labels them "Mridangam 1", "Mridangam 2".
-  channels Int @default(1)
+  /// This was a COUNT, and a count is the wrong fact: "Mridangam 1" and
+  /// "Mridangam 2" tell the person patching nothing about which is which, and
+  /// the two mics are not interchangeable. `["R", "L"]` names them the way the
+  /// heads are actually named — a mridangam's right head is the treble one, a
+  /// dholak's dayan and bayan the same way round — and a stereo keyboard is
+  /// genuinely L and R. Whatever the centre wants to write is allowed:
+  /// `["Treble", "Bass"]` proposes those.
+  ///
+  /// Empty is ONE strip, unnamed, which is nearly every instrument on the list.
+  /// A single named part is the same thing: one mic needs no naming.
+  ///
+  /// Read by lib/deskChannels.ts `proposeChannels`, which builds one strip per
+  /// part and labels them "Mridangam R", "Mridangam L".
+  ///
+  /// NOT the same fact as SessionChannel.stereo, which is ONE fader carrying
+  /// two inputs — the 13/14 pair on the MG20XU. Two mics on a drum is two
+  /// faders, and conflating them would put one head where the desk cannot
+  /// reach it.
+  micParts String[] @default([])
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt

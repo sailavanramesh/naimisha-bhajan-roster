@@ -87,7 +87,7 @@ export default async function AdminPage({
         name: true,
         scope: true,
         active: true,
-        channels: true,
+        micParts: true,
         _count: { select: { programItems: true } },
       },
     }),
@@ -100,7 +100,7 @@ export default async function AdminPage({
     name: i.name,
     scope: i.scope,
     active: i.active,
-    channels: i.channels,
+    micParts: i.micParts,
     used: i._count.programItems,
     eligible: eligibleByName.get(i.name) ?? 0,
   }));

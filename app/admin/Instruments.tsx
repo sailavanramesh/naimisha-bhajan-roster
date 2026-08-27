@@ -6,7 +6,7 @@ import {
   addInstrument,
   moveInstrument,
   renameInstrument,
-  setInstrumentChannels,
+  setInstrumentMicParts,
   setInstrumentActive,
   setInstrumentScope,
 } from "./instrumentActions";
@@ -18,8 +18,8 @@ export type InstrumentRow = {
   active: boolean;
   /** How many program items already name it. Retiring is safe; deleting is not. */
   used: number;
-  /** How many desk channels it needs. Two for a two-headed drum. */
-  channels: number;
+  /** Which mics it takes — ["R","L"] on a two-headed drum. Empty is one. */
+  micParts: string[];
   /** How many people are listed as eligible for it, by name. */
   eligible: number;
 };
@@ -51,6 +51,8 @@ export function Instruments({
   const [name, setName] = useState("");
   const [scope, setScope] = useState<InstrumentRow["scope"]>("program");
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
+  /* The mic list being typed, as typed — "R, L" is a string until it is saved. */
+  const [mics, setMics] = useState<{ id: string; text: string } | null>(null);
   const [pending, startTransition] = useTransition();
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -70,6 +72,24 @@ export function Instruments({
       const res = await renameInstrument(editing);
       say(res, `Renamed to "${editing.name.trim()}".`);
       if (res.ok) setEditing(null);
+    });
+
+  const commitMics = () =>
+    startTransition(async () => {
+      if (!mics) return;
+      const parts = mics.text
+        .split(",")
+        .map((part) => part.trim())
+        .filter(Boolean);
+      const name = instruments.find((i) => i.id === mics.id)?.name ?? "It";
+      const res = await setInstrumentMicParts({ id: mics.id, parts });
+      say(
+        res,
+        parts.length > 1
+          ? `${name} takes ${parts.length} mics — ${parts.join(", ")}.`
+          : `${name} takes one mic.`,
+      );
+      if (res.ok) setMics(null);
     });
 
   const active = instruments.filter((i) => i.active);
@@ -123,7 +143,7 @@ export function Instruments({
                     {SCOPE_LABEL[i.scope]}
                     {/* Only worth saying when it is not one — every other
                         instrument on the list needs exactly one strip. */}
-                    {i.channels > 1 ? ` · ${i.channels} channels` : ""}
+                    {i.micParts.length > 1 ? ` · mics ${i.micParts.join(", ")}` : ""}
                     {i.eligible > 0 ? ` · ${i.eligible} eligible` : ""}
                     {i.used > 0 ? ` · on ${i.used} item${i.used === 1 ? "" : "s"}` : ""}
                   </span>
@@ -133,33 +153,38 @@ export function Instruments({
               {canEdit && editing?.id !== i.id ? (
                 <>
                   {/*
-                    How many strips it takes on the desk. A dholak is miked on
-                    both heads; a keyboard in stereo is a pair. See
-                    lib/deskChannels.ts proposeChannels, which builds that many.
+                    WHICH MICS IT TAKES, written as they go on the sheet.
+
+                    A dholak is miked on both heads; a keyboard in stereo is a
+                    pair. This was a count, and a count could not say which
+                    strip was which head — the two are not interchangeable, and
+                    "Mridangam 1" is not something anybody can patch from. So:
+                    "R, L", and the desk gets "Mridangam R" and "Mridangam L".
+
+                    Free text because the naming is the centre's: "Treble,
+                    Bass" is as good an answer, and neither this box nor the
+                    desk has a reason to prefer one. Empty is one mic, which is
+                    every other instrument on the list.
+
+                    See lib/deskChannels.ts proposeChannels, which builds them.
                   */}
                   <label className="flex items-center gap-1 text-[11px] text-on-surface-muted">
-                    <span className="sr-only sm:not-sr-only">channels</span>
-                    <select
-                      value={i.channels}
+                    <span className="sr-only sm:not-sr-only">mics</span>
+                    <Input
+                      value={mics?.id === i.id ? mics.text : i.micParts.join(", ")}
                       disabled={pending}
-                      aria-label={`How many channels ${i.name} needs`}
-                      className="h-7 rounded-key border border-rule-surface bg-field px-1 text-[11px]"
-                      onChange={(e) =>
-                        startTransition(async () => {
-                          const res = await setInstrumentChannels({
-                            id: i.id,
-                            channels: Number(e.target.value),
-                          });
-                          say(res, "");
-                        })
-                      }
-                    >
-                      {[1, 2, 3, 4].map((n) => (
-                        <option key={n} value={n}>
-                          {n}
-                        </option>
-                      ))}
-                    </select>
+                      placeholder="R, L"
+                      aria-label={`Which mics ${i.name} takes, separated by commas`}
+                      className="h-7 w-20 px-1 text-[11px]"
+                      onChange={(e) => setMics({ id: i.id, text: e.target.value })}
+                      onBlur={() => {
+                        if (mics?.id === i.id) commitMics();
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") commitMics();
+                        if (e.key === "Escape") setMics(null);
+                      }}
+                    />
                   </label>
                   <span className="flex items-center gap-1">
                     <button
