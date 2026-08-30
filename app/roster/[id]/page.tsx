@@ -26,6 +26,7 @@ import { resolveSessionView, jobBanner, jobsOf } from "@/lib/sessionView";
 import { missingParts, shouldNotifyForSession } from "@/lib/notify";
 import type { NotifyPerson } from "./NotifyPanel";
 import { NOT_ARCHIVED } from "@/lib/archive";
+import { SessionFormat } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
 /** One look for every action in the session header. */
@@ -401,33 +402,56 @@ export default async function RosterSessionPage({
    * session created later can sit earlier in the calendar.
    */
   /*
-   * Only days with a bhajan actually scheduled. A session record can outlive
-   * its contents — build one, empty it, and the row remains — and stepping
-   * through those was landing on blank days that are indistinguishable from a
-   * day with nothing on it.
+   * A day worth stepping onto is one that has BEEN ROSTERED, which is not the
+   * same as one that has bhajans on it.
    *
-   * A bhajan may be recorded three ways: linked to the masterlist, or as free
-   * text kept from the sheet, or as a festival title. Any of them counts.
+   * This used to require a bhajan — linked, free text, or a festival title.
+   * The point of that was to skip husks: a session record can outlive its
+   * contents, and landing on one is indistinguishable from landing on a day
+   * with nothing on it. But it also skipped every session that has singers on
+   * it and no bhajans chosen yet, which is exactly what NEXT Thursday looks
+   * like. So from the moment a few future evenings were rostered, forward
+   * stopped working entirely: on 2026-08-31 the four sessions ahead all had
+   * three singers and no bhajans, and "next" found nothing at all.
+   *
+   * Sailavan, 2026-08-31: "now we have some future sessions rostered, so it
+   * would be useful to go forwards or backwards if there is a session in
+   * either direction."
+   *
+   * So the question is "has anybody put a singer or a bhajan on this day", and
+   * the husk — a record with nothing on it at all — still fails it. That is
+   * word for word the rule app/page.tsx uses to choose the session to open on,
+   * which is the same question asked from a different place; the two should
+   * agree about which days exist, and until now they did not.
+   *
+   * Programs are excluded outright. They live at /program/[id] and this page
+   * redirects to it, so an arrow labelled "next session" would step sideways
+   * into a different kind of evening. Until now they were skipped only by
+   * accident, having items rather than slots.
    */
-  // Not `as const`: Prisma's filter type wants a mutable array.
-  const HAS_A_BHAJAN = {
-    some: {
-      OR: [
-        { bhajanId: { not: null } },
-        { bhajanTitle: { not: null } },
-        { festivalBhajanTitle: { not: null } },
-      ],
+  const IS_A_ROSTERED_SESSION = {
+    ...NOT_ARCHIVED,
+    format: { not: SessionFormat.program },
+    slots: {
+      some: {
+        OR: [
+          { singerId: { not: null } },
+          { bhajanId: { not: null } },
+          { bhajanTitle: { not: null } },
+          { festivalBhajanTitle: { not: null } },
+        ],
+      },
     },
   };
 
   const [previousSession, nextSession] = await Promise.all([
     prisma.session.findFirst({
-      where: { ...NOT_ARCHIVED, date: { lt: session.date }, slots: HAS_A_BHAJAN },
+      where: { ...IS_A_ROSTERED_SESSION, date: { lt: session.date } },
       orderBy: { date: "desc" },
       select: { id: true, date: true },
     }),
     prisma.session.findFirst({
-      where: { ...NOT_ARCHIVED, date: { gt: session.date }, slots: HAS_A_BHAJAN },
+      where: { ...IS_A_ROSTERED_SESSION, date: { gt: session.date } },
       orderBy: { date: "asc" },
       select: { id: true, date: true },
     }),
