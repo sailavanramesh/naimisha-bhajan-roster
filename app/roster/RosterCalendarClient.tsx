@@ -8,6 +8,7 @@ import { Button, Input } from "@/components/ui";
 import { fetchMonthInfo, createSessionForDate } from "./calendarActions";
 import { sortByStart, sessionLabel, hasSeveral, USUAL_START } from "@/lib/sessionsOfDay";
 import { deviceTodayISO } from "@/lib/dates";
+import { countTap, type Tap } from "@/lib/doubleTap";
 import {
   dayMarks,
   dayKindLabel,
@@ -167,12 +168,39 @@ export default function RosterCalendarClient(props: {
   const gridStart = startOfWeekSundayUTC(monthDate);
   const grid = Array.from({ length: 42 }, (_, i) => addDaysUTC(gridStart, i));
 
+  /*
+   * ONE TAP SELECTS, TWO TAPS OPEN.
+   *
+   * A single tap used to navigate straight into the day's session, which made
+   * the calendar unusable for the thing it is best at. Sailavan, 2026-08-31:
+   * "its hard to scan through future rostered sessions in that view" — every
+   * glance at next Thursday cost a page load and a trip back. So a tap now
+   * only moves the selection, and the panel below answers the question; going
+   * in is a deliberate second tap, or the "Open this session" link that has
+   * always been there.
+   *
+   * The counting is in lib/doubleTap.ts, where its edges can be tested — a
+   * third tap, a pair split across two days, a pair that straddles the window.
+   * Not onDoubleClick, because `dblclick` is not something to rely on under a
+   * finger: iOS reserves the double tap for zoom and fires the event late or
+   * not at all. The cells carry `touch-manipulation` to take that gesture out
+   * of the way.
+   */
+  const lastTapRef = useRef<Tap | null>(null);
+
   async function onDayClick(dateISO: string) {
     setSelected(dateISO);
     setJumpDate(dateISO);
+    // A refusal from an earlier day should not still be on screen while
+    // somebody reads a different one.
+    setDenied(null);
+
+    const { open, next } = countTap(lastTapRef.current, dateISO, Date.now());
+    lastTapRef.current = next;
+    if (!open) return;
 
     const existing = sortByStart(dayInfo[dateISO]?.sessions ?? []);
-    // One session: go straight there, as tapping a day always did.
+    // One session: go straight there, as a double tap on a day now does.
     if (existing.length === 1) {
       router.push(`/roster/${existing[0].id}`);
       return;
@@ -350,7 +378,10 @@ export default function RosterCalendarClient(props: {
               onClick={() => onDayClick(date)}
               title={dayTooltip(marks, rows, daySessions.length)}
               className={[
-                "relative rounded-[12px] border px-2 py-2 text-left hover:bg-panel-hover",
+                // `touch-manipulation` so iOS does not answer the second tap
+                // with a zoom, `select-none` so a desktop double click does
+                // not leave the date highlighted behind the navigation.
+                "relative touch-manipulation select-none rounded-[12px] border px-2 py-2 text-left hover:bg-panel-hover",
                 isSelected ? "border-slate-900" : "border-slate-200",
                 inMonth ? "bg-panel" : "bg-panel text-slate-400",
               ].join(" ")}
@@ -544,7 +575,7 @@ export default function RosterCalendarClient(props: {
           <div className="grid justify-items-start gap-2">
             <p className="text-on-surface-muted">
               {canEdit
-                ? "Nothing on this day. Tap it to start a session."
+                ? "Nothing on this day. Double-tap it to start a session."
                 : "Nothing on this day."}
             </p>
             {canEdit ? (

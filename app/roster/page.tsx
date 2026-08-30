@@ -343,7 +343,7 @@ export default async function RosterPage({
               <CardTitle>Roster</CardTitle>
               <div className="mt-1 text-sm text-on-surface-muted">
                 {view === "calendar"
-                  ? "Tap a day to open the session (edit mode will create if missing)."
+                  ? "Tap a day to see it below. Double-tap to open the session (edit mode will create if missing)."
                   : "List view. Search singers, bhajans, session kinds, places and notes."}
               </div>
             </div>
