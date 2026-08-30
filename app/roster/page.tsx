@@ -12,6 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle, Input, Button } from "@/compo
 import RosterCalendarClient from "./RosterCalendarClient";
 import { nextThursday, melbourneTodayISO } from "@/lib/dates";
 import { resolveRosterView } from "@/lib/rosterView";
+import { kindImageSrc } from "@/lib/categoryMark";
 import { NOT_ARCHIVED } from "@/lib/archive";
 
 export const dynamic = "force-dynamic";
@@ -146,6 +147,9 @@ export default async function RosterPage({
     name: k.name,
     v: k.image ? k.updatedAt.getTime() : null,
   }));
+  // The list view names its kind and shows its picture from the same rows, so
+  // it never has to carry a data URL of its own. See the list query below.
+  const kindsById = new Map(kinds.map((k) => [k.id, k]));
 
   const monthSessions = await prisma.session.findMany({
     where: { ...NOT_ARCHIVED, date: { gte: monthStart, lt: monthEndExclusive } },
@@ -226,7 +230,7 @@ export default async function RosterPage({
         notes: string | null;
         startsAt: string | null;
         timeZone: string;
-        category: { name: string; image: string | null } | null;
+        categoryId: string | null;
         slots: {
           singer: { name: string } | null;
           bhajan: { title: string } | null;
@@ -291,11 +295,40 @@ export default async function RosterPage({
       },
       orderBy: { date: "desc" },
       take: 200,
-      include: {
-        category: { select: { name: true, image: true } },
+      /*
+       * SELECT, not include, and the kind's PICTURE IS NOT IN IT.
+       *
+       * This used to `include` the category with its `image` and the slots with
+       * their whole singer row. The pictures are data URLs of 17–68KB living in
+       * the database (see SessionCategory), so two hundred sessions carried
+       * 4.6MB of them — the same dozen images repeated, inlined into the HTML
+       * and again into the RSC payload — out of a 5.3MB page. Sailavan,
+       * 2026-08-31: the list view "doesn't load when i click it" on a phone.
+       * On one bar of signal it never would.
+       *
+       * The calendar solved this months ago and the list never heard: the
+       * pictures come from /api/session-kinds/[id]/image, stamped with the
+       * kind's updatedAt and cached for a year, so a page costs one request per
+       * KIND rather than one copy per session. `kinds` above already holds
+       * everything needed to build those URLs, so the session only has to say
+       * which kind it is. 5.3MB → 0.2MB.
+       */
+      select: {
+        id: true,
+        date: true,
+        notes: true,
+        startsAt: true,
+        timeZone: true,
+        categoryId: true,
         slots: {
           orderBy: [{ position: "asc" }],
-          include: { singer: true, bhajan: { select: { title: true } } },
+          select: {
+            confirmedPitch: true,
+            bhajanTitle: true,
+            festivalBhajanTitle: true,
+            singer: { select: { name: true } },
+            bhajan: { select: { title: true } },
+          },
         },
       },
     });
@@ -310,7 +343,7 @@ export default async function RosterPage({
               <CardTitle>Roster</CardTitle>
               <div className="mt-1 text-sm text-on-surface-muted">
                 {view === "calendar"
-                  ? "Tap a day to open the session (edit mode will create if missing)."
+                  ? "Tap a day to see it below. Double-tap to open the session (edit mode will create if missing)."
                   : "List view. Search singers, bhajans, session kinds, places and notes."}
               </div>
             </div>
@@ -443,7 +476,10 @@ export default async function RosterPage({
               ) : null}
 
               <div className="grid gap-2">
-                {(listSessions ?? []).map((s) => (
+                {(listSessions ?? []).map((s) => {
+                  const kind = s.categoryId ? kindsById.get(s.categoryId) ?? null : null;
+                  const kindSrc = kind ? kindImageSrc(kind) : null;
+                  return (
                   /*
                     One slot per line, not a run-on sentence. The old version
                     joined every singer and bhajan with a middle dot, so a
@@ -466,12 +502,12 @@ export default async function RosterPage({
                       Shown only under ?tile=band while Sailavan compares it
                       with the badge — one of the two will be deleted.
                     */}
-                    {tile === "band" && s.category?.image ? (
+                    {tile === "band" && kindSrc ? (
                       <span
                         aria-hidden
                         className="pointer-events-none absolute inset-x-0 top-0 h-16 opacity-[0.18]"
                         style={{
-                          backgroundImage: `url(${s.category.image})`,
+                          backgroundImage: `url(${kindSrc})`,
                           backgroundSize: "cover",
                           backgroundPosition: "center",
                           maskImage: "linear-gradient(to bottom, black, transparent)",
@@ -495,17 +531,18 @@ export default async function RosterPage({
                           })}
                         </Link>
                         {/* What kind of session it was, where the eye already is. */}
-                        {s.category ? (
+                        {kind ? (
                           <span className="inline-flex items-center gap-1.5 rounded-full border border-brass/40 bg-brass/[0.08] py-0.5 pe-2 ps-0.5 text-[10px] uppercase tracking-wide text-on-surface-muted">
-                            {tile !== "band" && s.category.image ? (
+                            {tile !== "band" && kindSrc ? (
                               /* eslint-disable-next-line @next/next/no-img-element */
                               <img
-                                src={s.category.image}
+                                src={kindSrc}
                                 alt=""
+                                loading="lazy"
                                 className="h-4 w-4 rounded-full object-cover"
                               />
                             ) : null}
-                            <Marked text={s.category.name} query={q} />
+                            <Marked text={kind.name} query={q} />
                           </span>
                         ) : null}
                         {s.startsAt && s.startsAt !== USUAL_START ? (
@@ -580,7 +617,8 @@ export default async function RosterPage({
                     </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </>
           )}

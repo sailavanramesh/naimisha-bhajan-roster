@@ -131,7 +131,14 @@ export async function LearningList({
             bhajanId: { in: bhajanIds },
             session: { date: { lte: historyCutoff() } },
           },
-          select: { bhajanId: true, confirmedPitch: true },
+          /*
+           * The DATE comes back too, so a card can say when it was last sung.
+           *
+           * Free — this query already runs, already covers every bhajan on the
+           * list, and already excludes the future for the same reason. See
+           * `lastSung` below for why the card needs it.
+           */
+          select: { bhajanId: true, confirmedPitch: true, session: { select: { date: true } } },
         })
       : Promise.resolve([]),
     getSingerProfile(singerId, singerName),
@@ -141,6 +148,34 @@ export async function LearningList({
   for (const s of sung) {
     if (!s.bhajanId || !s.confirmedPitch) continue;
     sungPitches.set(s.bhajanId, [...(sungPitches.get(s.bhajanId) ?? []), s.confirmedPitch]);
+  }
+
+  /*
+   * WHEN THEY LAST SANG IT — on every card, from the roster.
+   *
+   * The only thing on a card that ever mentioned singing was the note
+   * `recordSungAsKnown` leaves when it MOVES an entry to "Know it". So Sailavan
+   * sang three bhajans on 2026-08-27; two of them moved and said so, and the
+   * third — already at "Know it" since the 24th, so correctly left alone — said
+   * nothing at all. 2026-08-31: "The other 2 bhajans say moved to 'know it'
+   * from the roster, whereas it didn't move." Nothing was wrong; the card was
+   * simply silent about the singing, and silence next to two neighbours
+   * announcing the same evening reads as a failure.
+   *
+   * A note is a record of one event that happened once. This is a fact about
+   * the roster, so it is read from the roster every time: it appears on all
+   * three stages, it is right for an entry created long after the singing, and
+   * it stays right when the history changes underneath it.
+   *
+   * A pitch is not required — a slot can record that somebody sang without
+   * anybody having written the shruti down, and that still happened.
+   */
+  const lastSung = new Map<string, Date>();
+  for (const s of sung) {
+    if (!s.bhajanId) continue;
+    const at = s.session.date;
+    const best = lastSung.get(s.bhajanId);
+    if (!best || at > best) lastSung.set(s.bhajanId, at);
   }
 
   const labelStrings = labels.map((l) => l.label);
@@ -206,6 +241,7 @@ export async function LearningList({
               ) : (
                 rows.map((e) => {
                   const hint = hintFor(e);
+                  const sungAt = e.bhajanId ? lastSung.get(e.bhajanId) ?? null : null;
                   return (
                   <div
                     key={e.id}
@@ -270,6 +306,24 @@ export async function LearningList({
                             </span>
                           ) : null}
                         </div>
+                        {/*
+                          Quiet, and above the note rather than inside it: this
+                          is a fact read from the roster, the note is whatever
+                          the singer or the sweep wrote. `timeZone: "UTC"`
+                          because Session.date is a calendar date stored at UTC
+                          midnight — see CLAUDE.md.
+                        */}
+                        {sungAt ? (
+                          <p className="mt-1 text-[11px] text-on-surface-muted">
+                            last sung{" "}
+                            {sungAt.toLocaleDateString("en-AU", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                              timeZone: "UTC",
+                            })}
+                          </p>
+                        ) : null}
                         {e.note ? (
                           <p className="mt-1 whitespace-pre-wrap text-sm">{e.note}</p>
                         ) : null}
