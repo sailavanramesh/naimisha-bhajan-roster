@@ -3,11 +3,13 @@ import {
   categoryInitials,
   kindImageSrc,
   dayMarks,
+  dayStripChips,
   dayKindLabel,
   fullnessStep,
   sessionCountLabel,
   dayTooltip,
   type KindLite,
+  type DayMark,
 } from "@/lib/categoryMark";
 
 const kind = (id: string, name: string, v: number | null = 1): KindLite => ({ id, name, v });
@@ -207,5 +209,39 @@ describe("dayTooltip", () => {
 
   it("is empty when the day holds no session", () => {
     expect(dayTooltip([], 0, 0)).toBe("");
+  });
+});
+
+describe("dayStripChips", () => {
+  const mark = (id: string): DayMark => ({
+    id,
+    name: id,
+    initials: id.slice(0, 2).toUpperCase(),
+    src: null,
+    count: 1,
+  });
+
+  it("shows both chips when both fit", () => {
+    const s = dayStripChips([mark("a"), mark("b")], 0);
+    expect(s.shown.map((m) => m.id)).toEqual(["a", "b"]);
+    expect(s.more).toBe(0);
+  });
+
+  it("spends the last slot on a count when there is more to say", () => {
+    // Two pictures AND a "+1" beside them is about 45px in a 36px cell, which
+    // is how a chip ended up outside the cell's own border.
+    const s = dayStripChips([mark("a"), mark("b")], 1);
+    expect(s.shown.map((m) => m.id)).toEqual(["a"]);
+    expect(s.more).toBe(2);
+  });
+
+  it("counts marks that did not fit as well as the overflow", () => {
+    const s = dayStripChips([mark("a"), mark("b"), mark("c")], 2, 2);
+    expect(s.shown.map((m) => m.id)).toEqual(["a"]);
+    expect(s.more).toBe(4);
+  });
+
+  it("is empty for a day with nothing on it", () => {
+    expect(dayStripChips([], 0)).toEqual({ shown: [], more: 0 });
   });
 });

@@ -11,6 +11,7 @@ import { deviceTodayISO } from "@/lib/dates";
 import { countTap, type Tap } from "@/lib/doubleTap";
 import {
   dayMarks,
+  dayStripChips,
   dayKindLabel,
   fullnessStep,
   sessionCountLabel,
@@ -362,6 +363,7 @@ export default function RosterCalendarClient(props: {
           const daySessions = sortByStart(dayInfo[date]?.sessions ?? []);
           const hasSession = daySessions.length > 0;
           const { marks, overflow } = dayMarks(daySessions, kindsById);
+          const strip = dayStripChips(marks, overflow);
           const rows = daySessions.reduce((n, s) => n + s.entries, 0);
           const step = fullnessStep(rows);
           const kindLabel = [dayKindLabel(marks, overflow), sessionCountLabel(daySessions)]
@@ -413,31 +415,53 @@ export default function RosterCalendarClient(props: {
 
               <span className="relative block">
               {/*
-                The date, and what kind of session the day holds.
+                THE DATE, on a line of its own.
 
-                The bar below stays: it says how FULL the day is, which is a
-                different question from what kind of thing it is. The mark
-                answers the second one — the kind's own picture, because at
-                this size a picture is the only honest way to say "Ramayana"
-                (the live view's rail reached the same conclusion). The name
-                is in the tooltip, and on a wide enough screen it also gets a
-                line of its own under the date.
+                It used to share a flex row with the kind chips, which was fine
+                for one chip and not for two: a phone cell offers about 28px of
+                usable width, the date takes ten of them, and the second picture
+                ended up drawn outside the cell's own border (Sailavan,
+                2026-08-31, on the days holding two sessions). The fix could not
+                come out of the date — a column of dates that shifts along by a
+                few pixels wherever a day is busy is worse than the overflow was
+                — so the chips got a line to themselves instead, below, where
+                the whole width of the cell is theirs.
               */}
-              <span className="flex items-start justify-between gap-1">
-                <span
-                  className={[
-                    "text-xs",
-                    // No wash means an empty day OR a session with nobody on
-                    // it. The date says which — this is the day a coordinator
-                    // is looking for.
-                    awaitingRoster ? "font-semibold text-brass-ink underline decoration-dotted underline-offset-2" : "",
-                  ].join(" ")}
-                >
-                  {d.getUTCDate()}
-                </span>
-                {marks.length > 0 ? (
-                  <span className="flex shrink-0 items-center -space-x-1">
-                    {marks.map((m) =>
+              <span
+                className={[
+                  "block text-xs",
+                  // No wash means an empty day OR a session with nobody on
+                  // it. The date says which — this is the day a coordinator
+                  // is looking for.
+                  awaitingRoster ? "font-semibold text-brass-ink underline decoration-dotted underline-offset-2" : "",
+                ].join(" ")}
+              >
+                {d.getUTCDate()}
+              </span>
+
+              {/*
+                WHAT KIND of session the day holds.
+
+                The wash behind the cell says how FULL the day is, which is a
+                different question. The chips answer this one — the kind's own
+                picture, because at this size a picture is the only honest way
+                to say "Ramayana" (the live view's rail reached the same
+                conclusion). The name is in the tooltip, and on a wide enough
+                screen it sits beside the chips on this same line.
+
+                Two slots, filled by `dayStripChips`, so the strip is the same
+                width whatever the day holds and the third thing is a count
+                rather than a chip hanging over the edge.
+
+                The negative margin is deliberate. Two 16px chips need 34px and
+                the padded box offers 28, so the strip is allowed to use the
+                cell's own side padding; sitting flush like that reads as a
+                strip along the cell rather than as something escaping it.
+              */}
+              {strip.shown.length > 0 ? (
+                <span className="mt-1 flex items-center gap-1">
+                  <span className="-mx-1 flex shrink-0 items-center gap-0.5 sm:mx-0">
+                    {strip.shown.map((m) =>
                       m.src ? (
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img
@@ -446,29 +470,36 @@ export default function RosterCalendarClient(props: {
                           alt=""
                           title={m.count > 1 ? `${m.name} ×${m.count}` : m.name}
                           loading="lazy"
-                          className="h-4 w-4 rounded-full border border-rule bg-panel object-cover sm:h-5 sm:w-5"
+                          className="h-4 w-4 shrink-0 rounded-full border border-rule bg-panel object-cover sm:h-5 sm:w-5"
                         />
                       ) : (
                         <span
                           key={m.id ?? "none"}
                           title={m.count > 1 ? `${m.name} ×${m.count}` : m.name}
-                          className="grid h-4 w-4 place-items-center rounded-full border border-rule bg-brass/15 text-[7px] font-semibold text-on-surface-muted sm:h-5 sm:w-5 sm:text-[8px]"
+                          className="grid h-4 w-4 shrink-0 place-items-center rounded-full border border-rule bg-brass/15 text-[7px] font-semibold text-on-surface-muted sm:h-5 sm:w-5 sm:text-[8px]"
                         >
                           {m.initials}
                         </span>
                       ),
                     )}
-                    {overflow > 0 ? (
-                      <span className="pl-1 text-[9px] text-on-surface-muted">+{overflow}</span>
+                    {strip.more > 0 ? (
+                      /* A chip, not text beside the chips — same width, so the
+                         strip cannot grow past the cell. */
+                      <span
+                        title={dayTooltip(marks, rows, daySessions.length)}
+                        className="grid h-4 w-4 shrink-0 place-items-center rounded-full border border-rule bg-panel text-[7px] font-semibold text-on-surface-muted sm:h-5 sm:w-5 sm:text-[9px]"
+                      >
+                        +{strip.more}
+                      </span>
                     ) : null}
                   </span>
-                ) : null}
-              </span>
 
-              {/* Room for the name only where there is room for the name. */}
-              {kindLabel ? (
-                <span className="mt-0.5 hidden truncate text-[10px] leading-tight text-on-surface-muted sm:block">
-                  {kindLabel}
+                  {/* Room for the name only where there is room for the name. */}
+                  {kindLabel ? (
+                    <span className="hidden min-w-0 truncate text-[10px] leading-tight text-on-surface-muted sm:block">
+                      {kindLabel}
+                    </span>
+                  ) : null}
                 </span>
               ) : null}
               </span>

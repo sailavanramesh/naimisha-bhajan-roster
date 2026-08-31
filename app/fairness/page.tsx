@@ -9,6 +9,7 @@ import {
   parseFilters,
   filtersToQuery,
   describeFilters,
+  toggleId,
   PRESETS,
   MORNING_BEFORE,
 } from "@/lib/fairnessFilters";
@@ -28,6 +29,7 @@ export default async function FairnessPage({
     from?: string;
     to?: string;
     cat?: string;
+    catmode?: string;
     when?: string;
   }>;
 }) {
@@ -44,20 +46,37 @@ export default async function FairnessPage({
    * over-used against one who does the reverse, when neither is — hence the
    * kind-of-session and part-of-day filters, not just a window length.
    */
+  const kindWhere =
+    filters.categoryIds.length === 0
+      ? {}
+      : filters.categoryMode === "include"
+        ? { categoryId: { in: filters.categoryIds } }
+        : // A session with no kind at all is not one of the kinds being left
+          // out, so it stays. Said explicitly because `notIn` compiles to SQL
+          // NOT IN, which is never true for a NULL and would silently drop
+          // every uncategorised session the moment anything was excluded.
+          { OR: [{ categoryId: { notIn: filters.categoryIds } }, { categoryId: null }] };
+
+  const whenWhere =
+    filters.partOfDay === "morning"
+      ? { startsAt: { lt: MORNING_BEFORE } }
+      : // Null startsAt means the usual evening (Session.startsAt), so
+        // "evenings" has to include it — otherwise a session nobody gave a
+        // time to vanishes from a filter it plainly belongs in.
+        filters.partOfDay === "evening"
+        ? { OR: [{ startsAt: { gte: MORNING_BEFORE } }, { startsAt: null }] }
+        : {};
+
+  // AND rather than spreading both in: each of the two can be an OR, and one
+  // object cannot hold two `OR` keys — the second would win and the first
+  // filter would quietly stop applying.
   const sessionWhere = {
     ...LIVE_SESSION,
     date: {
       gte: new Date(`${filters.fromISO}T00:00:00.000Z`),
       lte: new Date(`${filters.toISO}T00:00:00.000Z`),
     },
-    ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
-    ...(filters.partOfDay === "morning" ? { startsAt: { lt: MORNING_BEFORE } } : {}),
-    // Null startsAt means the usual evening (Session.startsAt), so "evenings"
-    // has to include it — otherwise a session nobody gave a time to vanishes
-    // from a filter it plainly belongs in.
-    ...(filters.partOfDay === "evening"
-      ? { OR: [{ startsAt: { gte: MORNING_BEFORE } }, { startsAt: null }] }
-      : {}),
+    AND: [kindWhere, whenWhere],
   };
 
   const [singers, slots, allSlots, categories] = await Promise.all([
@@ -85,7 +104,11 @@ export default async function FairnessPage({
     }),
   ]);
 
-  const categoryName = categories.find((c) => c.id === filters.categoryId)?.name ?? null;
+  // In the order the chips are drawn, not the order they were clicked, so the
+  // sentence under the heading reads the same as the row above it.
+  const categoryNames = categories
+    .filter((c) => filters.categoryIds.includes(c.id))
+    .map((c) => c.name);
 
   const counts = new Map<string, number>();
   for (const s of slots) if (s.singerId) counts.set(s.singerId, (counts.get(s.singerId) ?? 0) + 1);
@@ -127,7 +150,7 @@ export default async function FairnessPage({
         <CardHeader>
           <CardTitle>Fairness</CardTitle>
           <div className="mt-1 text-sm text-on-surface-muted">
-            {total} slots over {describeFilters(filters, categoryName, todayISO)} · group mean{" "}
+            {total} slots over {describeFilters(filters, categoryNames, todayISO)} · group mean{" "}
             {mean.toFixed(1)} each. Anyone more than {Math.round(LOAD_TOLERANCE * 100)}% either
             side of the mean is called out.
           </div>
@@ -154,29 +177,63 @@ export default async function FairnessPage({
             {categories.length > 0 ? (
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs text-on-surface-muted">Kind:</span>
+
+                {/*
+                  * Only/Except reads the SAME set of chips the other way round,
+                  * rather than being a third state on each chip. "Everything
+                  * but a festival" is one question about the whole row, and
+                  * three-state chips would make the reader work out which of
+                  * six pills was in which state to answer it.
+                  */}
+                <span className="inline-flex overflow-hidden rounded-full border border-rule-surface text-xs">
+                  {(["include", "exclude"] as const).map((m) => (
+                    <Link
+                      key={m}
+                      href={`/fairness${filtersToQuery(filters, { catMode: m })}`}
+                      className={
+                        filters.categoryMode === m
+                          ? "bg-brass/15 px-2.5 py-0.5 text-on-surface"
+                          : "px-2.5 py-0.5 text-on-surface-muted hover:bg-panel-hover"
+                      }
+                    >
+                      {m === "include" ? "Only" : "Except"}
+                    </Link>
+                  ))}
+                </span>
+
                 <Link
                   href={`/fairness${filtersToQuery(filters, { cat: null })}`}
                   className={
-                    filters.categoryId === null
+                    filters.categoryIds.length === 0
                       ? "rounded-full border border-brass/60 bg-brass/15 px-3 py-0.5 text-xs"
                       : "rounded-full border border-rule-surface px-3 py-0.5 text-xs hover:bg-panel-hover"
                   }
                 >
                   All
                 </Link>
-                {categories.map((c) => (
-                  <Link
-                    key={c.id}
-                    href={`/fairness${filtersToQuery(filters, { cat: c.id })}`}
-                    className={
-                      filters.categoryId === c.id
-                        ? "rounded-full border border-brass/60 bg-brass/15 px-3 py-0.5 text-xs"
-                        : "rounded-full border border-rule-surface px-3 py-0.5 text-xs hover:bg-panel-hover"
-                    }
-                  >
-                    {c.name}
-                  </Link>
-                ))}
+                {categories.map((c) => {
+                  const on = filters.categoryIds.includes(c.id);
+                  return (
+                    <Link
+                      key={c.id}
+                      // Each chip links to "these filters with this kind
+                      // flipped", which is what makes a row of links behave
+                      // like checkboxes on a page with no client JavaScript.
+                      href={`/fairness${filtersToQuery(filters, {
+                        cat: toggleId(filters.categoryIds, c.id),
+                      })}`}
+                      aria-pressed={on}
+                      className={
+                        on
+                          ? "rounded-full border border-brass/60 bg-brass/15 px-3 py-0.5 text-xs"
+                          : "rounded-full border border-rule-surface px-3 py-0.5 text-xs hover:bg-panel-hover"
+                      }
+                    >
+                      {on ? "\u2713 " : ""}
+                      {c.name}
+                    </Link>
+                  );
+                })}
               </div>
             ) : null}
 
