@@ -473,6 +473,12 @@ export default async function RosterSessionPage({
    * phone, or sent before a person was rostered at all. So the session says it
    * too, every time it is opened, which is the surface nobody can miss.
    *
+   * Coordinators ONLY, gated on `assignSingers` — the same capability as the
+   * job the banner is asking for. It went out to everybody until 2026-09-01,
+   * so a member opening the session read that a named singer had dropped out,
+   * which is somebody else's business and nothing they can act on. Gated at
+   * the query, not just the render, so a member's page never reads the table.
+   *
    * Dates only, as everywhere else — the roster is told THAT somebody cannot
    * sing and never why.
    */
@@ -487,7 +493,7 @@ export default async function RosterSessionPage({
   const latestStart = Math.max(...sameDay.map((x) => startMinutes(x.startsAt)), startMinutes(USUAL_START));
   const suggestedStart = `${String(Math.min(23, Math.floor(latestStart / 60) + 1)).padStart(2, "0")}:${String(latestStart % 60).padStart(2, "0")}`;
   const unavailableIds = new Set(
-    (await rosterAvailability(sessionISO, sessionISO)).map((a) => a.singerId),
+    canAssign ? (await rosterAvailability(sessionISO, sessionISO)).map((a) => a.singerId) : [],
   );
   const droppedOut = [
     ...new Map(
@@ -630,13 +636,9 @@ export default async function RosterSessionPage({
           </strong>{" "}
           <span className="text-on-surface-muted">
             They are still on this roster.{" "}
-            {canAssign ? (
-              <Link href={`/roster/${sessionId}/assign`} className="underline">
-                Find somebody else
-              </Link>
-            ) : (
-              "A coordinator will need to find somebody else."
-            )}
+            <Link href={`/roster/${sessionId}/assign`} className="underline">
+              Find somebody else
+            </Link>
             .
           </span>
         </div>
