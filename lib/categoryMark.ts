@@ -134,6 +134,31 @@ export function dayMarks(
 }
 
 /**
+ * What actually fits across a cell: at most `slots` round chips.
+ *
+ * `dayMarks` answers "what kinds are on this day", which is a question about
+ * the day. This answers "how many chips can be drawn", which is a question
+ * about a box roughly 36px wide on a phone — and the two were being conflated.
+ * Two 16px chips and a "+1" beside them is about 45px, so the third one hung
+ * out over the edge of the cell (Sailavan, 2026-08-31, on days holding two
+ * sessions: "its overflowing out of the date's square").
+ *
+ * So the strip is a fixed number of slots, and the LAST slot is spent on the
+ * count when there is more to say than fits. Never both a full row of pictures
+ * and a count beside them — that is the combination that does not fit, and the
+ * width of the strip is now the same whatever the day holds.
+ */
+export function dayStripChips(
+  marks: DayMark[],
+  overflow: number,
+  slots = 2,
+): { shown: DayMark[]; more: number } {
+  const total = marks.length + overflow;
+  if (total <= slots) return { shown: marks.slice(0, slots), more: 0 };
+  return { shown: marks.slice(0, slots - 1), more: total - (slots - 1) };
+}
+
+/**
  * The one-line label under the date, where there is room for it.
  *
  * "Ramayana", or "Ramayana +1" when the day holds more than one kind. Empty
