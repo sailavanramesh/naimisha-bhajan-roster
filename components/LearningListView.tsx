@@ -13,14 +13,18 @@ import {
   isFiltered,
   daysSince,
   disagrees,
+  toggleValue,
+  ANY_VALUES,
   EMPTY_FILTER,
   RECENT_DAYS,
   STALE_DAYS,
   type ListFilter,
-  type ShrutiFilter,
+  type ShrutiState,
   type SortKey,
-  type SungFilter,
+  type SungState,
+  type ValueFilter,
 } from "@/lib/learningListFilter";
+import { MultiFilter } from "@/components/MultiFilter";
 
 /**
  * components/LearningListView.tsx — the list you can actually find things in.
@@ -133,11 +137,11 @@ export function LearningListView({
 }) {
   const [query, setQuery] = useState("");
   const [stages, setStages] = useState<RepertoireKind[]>([]);
-  const [deity, setDeity] = useState("");
-  const [raga, setRaga] = useState("");
-  const [tempo, setTempo] = useState("");
-  const [shruti, setShruti] = useState<ShrutiFilter>("any");
-  const [sung, setSung] = useState<SungFilter>("any");
+  const [deity, setDeity] = useState<ValueFilter>(ANY_VALUES);
+  const [raga, setRaga] = useState<ValueFilter>(ANY_VALUES);
+  const [tempo, setTempo] = useState<ValueFilter>(ANY_VALUES);
+  const [shruti, setShruti] = useState<ShrutiState[]>([]);
+  const [sung, setSung] = useState<SungState[]>([]);
   const [unlinkedOnly, setUnlinkedOnly] = useState(false);
   const [sort, setSort] = useState<SortKey>("recent");
   const [openFilters, setOpenFilters] = useState(false);
@@ -201,6 +205,15 @@ export function LearningListView({
     setUnlinkedOnly(EMPTY_FILTER.unlinkedOnly);
     // Sort is deliberately left alone — see isFiltered.
   };
+
+  /** How many filters are narrowing the list, for the Filters button. */
+  const activeFilters =
+    (deity.values.length > 0 ? 1 : 0) +
+    (raga.values.length > 0 ? 1 : 0) +
+    (tempo.values.length > 0 ? 1 : 0) +
+    (shruti.length > 0 ? 1 : 0) +
+    (sung.length > 0 ? 1 : 0) +
+    (unlinkedOnly ? 1 : 0);
 
   const toggleStage = (kind: RepertoireKind) =>
     setStages((prev) => (prev.includes(kind) ? prev.filter((k) => k !== kind) : [...prev, kind]));
@@ -274,77 +287,89 @@ export function LearningListView({
             aria-expanded={openFilters}
             className="ml-auto h-8 rounded-full border border-rule-surface bg-field px-3 text-xs text-on-surface-muted hover:border-brass/50 hover:text-on-surface"
           >
-            Filters {openFilters ? "▴" : "▾"}
+            Filters
+            {activeFilters > 0 ? (
+              <span className="ms-1 rounded-full bg-brass/25 px-1.5 font-mono text-[10px] font-semibold text-on-surface">
+                {activeFilters}
+              </span>
+            ) : null}{" "}
+            {openFilters ? "▴" : "▾"}
           </button>
         </div>
 
         {openFilters ? (
-          <div className="grid min-w-0 gap-2 border-t border-rule-surface pt-2.5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid min-w-0 gap-3 border-t border-rule-surface pt-2.5 sm:grid-cols-2 lg:grid-cols-3">
             {deities.length > 0 ? (
-              <Filter
+              <MultiFilter
                 label="Deity"
-                value={deity}
-                onChange={setDeity}
                 options={deities}
-                anyLabel="Any deity"
+                selected={deity.values}
+                mode={deity.mode}
+                onChange={(values) => setDeity({ ...deity, values })}
+                onModeChange={(mode) => setDeity({ ...deity, mode })}
               />
             ) : null}
             {ragas.length > 0 ? (
-              <Filter
+              <MultiFilter
                 label="Raga"
-                value={raga}
-                onChange={setRaga}
                 options={ragas}
-                anyLabel="Any raga"
+                selected={raga.values}
+                mode={raga.mode}
+                onChange={(values) => setRaga({ ...raga, values })}
+                onModeChange={(mode) => setRaga({ ...raga, mode })}
               />
             ) : null}
             {tempos.length > 0 ? (
-              <Filter
+              <MultiFilter
                 label="Tempo"
-                value={tempo}
-                onChange={setTempo}
                 options={tempos}
-                anyLabel="Any tempo"
+                selected={tempo.values}
+                mode={tempo.mode}
+                onChange={(values) => setTempo({ ...tempo, values })}
+                onModeChange={(mode) => setTempo({ ...tempo, mode })}
               />
             ) : null}
 
-            <label className="grid min-w-0 gap-1">
-              <span className="text-[11px] text-on-surface-muted">Your shruti</span>
-              <select
-                value={shruti}
-                onChange={(e) => setShruti(e.target.value as ShrutiFilter)}
-                className="h-11 w-full min-w-0 rounded-[12px] border border-rule-surface bg-field px-2.5 text-sm"
-              >
-                <option value="any">Any shruti</option>
-                <option value="saved">Saved</option>
-                <option value="missing">Not set yet</option>
-                <option value="disagrees">Disagrees with the suggestion</option>
-              </select>
-            </label>
+            {/*
+              No Only/Except on these two. Three named buckets, and "except this
+              one" is simply the other two selected — a control that adds nothing
+              is a control to read. Same reasoning that left fairness's
+              part-of-day alone; see lib/learningListFilter.ts.
+            */}
+            <StateFilter
+              label="Your shruti"
+              selected={shruti}
+              onChange={setShruti}
+              options={[
+                { value: "saved", label: "Saved" },
+                { value: "missing", label: "Not set yet" },
+                { value: "disagrees", label: "Disagrees" },
+              ]}
+            />
 
-            <label className="grid min-w-0 gap-1">
-              <span className="text-[11px] text-on-surface-muted">Last sung</span>
-              <select
-                value={sung}
-                onChange={(e) => setSung(e.target.value as SungFilter)}
-                className="h-11 w-full min-w-0 rounded-[12px] border border-rule-surface bg-field px-2.5 text-sm"
-              >
-                <option value="any">Any time</option>
-                <option value="never">Never sung</option>
-                <option value="recent">In the last {RECENT_DAYS} days</option>
-                <option value="stale">Not in {STALE_DAYS / 30} months</option>
-              </select>
-            </label>
+            <StateFilter
+              label="Last sung"
+              selected={sung}
+              onChange={setSung}
+              options={[
+                { value: "never", label: "Never" },
+                { value: "recent", label: `Last ${RECENT_DAYS} days` },
+                { value: "stale", label: `Not in ${STALE_DAYS / 30} months` },
+              ]}
+            />
 
-            <label className="flex items-center gap-2 self-end pb-1 text-sm">
-              <input
-                type="checkbox"
-                checked={unlinkedOnly}
-                onChange={(e) => setUnlinkedOnly(e.target.checked)}
-                className="h-4 w-4"
-              />
-              <span>Not in the masterlist</span>
-            </label>
+            <div className="grid min-w-0 gap-1.5">
+              <span className="text-[11px] text-on-surface-muted">Catalogue</span>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={unlinkedOnly}
+                  onChange={(e) => setUnlinkedOnly(e.target.checked)}
+                  className="h-4 w-4"
+                />
+                <span>Not in the masterlist</span>
+              </label>
+            </div>
           </div>
         ) : null}
 
@@ -407,35 +432,60 @@ export function LearningListView({
   );
 }
 
-function Filter({
+/**
+ * A multi-select over a small set of named states, with no Only/Except.
+ *
+ * Several read as "or": "not set yet" together with "disagrees" is one question
+ * — which shrutis need attention — and it cannot be asked one option at a time.
+ */
+function StateFilter<T extends string>({
   label,
-  value,
-  onChange,
   options,
-  anyLabel,
+  selected,
+  onChange,
 }: {
   label: string;
-  value: string;
-  onChange: (v: string) => void;
-  options: string[];
-  anyLabel: string;
+  options: ReadonlyArray<{ value: T; label: string }>;
+  selected: readonly T[];
+  onChange: (values: T[]) => void;
 }) {
   return (
-    <label className="grid min-w-0 gap-1">
-      <span className="text-[11px] text-on-surface-muted">{label}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-11 w-full min-w-0 rounded-[12px] border border-rule-surface bg-field px-2.5 text-sm"
-      >
-        <option value="">{anyLabel}</option>
-        {options.map((o) => (
-          <option key={o} value={o}>
-            {o}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div className="grid min-w-0 gap-1.5">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] text-on-surface-muted">{label}</span>
+        {selected.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => onChange([])}
+            className="ms-auto text-[11px] text-brass-ink underline underline-offset-2"
+          >
+            Any
+          </button>
+        ) : null}
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {options.map((o) => {
+          const on = selected.includes(o.value);
+          return (
+            <button
+              key={o.value}
+              type="button"
+              onClick={() => onChange(toggleValue(selected, o.value))}
+              aria-pressed={on}
+              className={[
+                "rounded-full border px-2.5 py-0.5 text-xs",
+                on
+                  ? "border-brass/60 bg-brass/15 text-on-surface"
+                  : "border-rule-surface bg-field text-on-surface-muted hover:border-brass/50 hover:text-on-surface",
+              ].join(" ")}
+            >
+              {on ? "\u2713 " : ""}
+              {o.label}
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 

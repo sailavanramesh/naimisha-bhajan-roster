@@ -40,18 +40,62 @@ describe("pulling the halves out of a row", () => {
  * replaced by the catalogue's default.
  */
 describe("resolveItemTracks", () => {
-  it("plays the item's own recording when it has one", () => {
-    const r = resolveItemTracks(track("item"), { ...track("song"), ...karaoke("song") });
+  it("plays the item's own recording when the song has no pair to offer", () => {
+    const r = resolveItemTracks(track("item"), track("song"));
     expect(r.play?.file).toBe("item.mp3");
     expect(r.source).toBe("item");
+    expect(r.canToggle).toBe(false);
+    expect(r.insteadOf).toBeNull();
   });
 
   it("does NOT pair the item's recording with the song's karaoke", () => {
     // They are two different recordings; a toggle between them would land in the
-    // wrong bar. Better no toggle than a misleading one.
+    // wrong bar. Either the pair plays whole or it does not play at all.
     const r = resolveItemTracks(track("item"), { ...track("song"), ...karaoke("song") });
-    expect(r.karaoke).toBeNull();
-    expect(r.canToggle).toBe(false);
+    expect(r.play?.file).not.toBe("item.mp3");
+    expect(r.karaoke?.file).toBe("song-k.mp3");
+  });
+
+  /*
+   * A COMPLETE PAIR BEATS A LONE RECORDING — the 2026-09-01 exception.
+   *
+   * ProgramItem has no karaoke column, so an item override could never toggle,
+   * and the toggle was missing on every item anybody had overridden even where
+   * the song page plainly had both halves.
+   */
+  it("prefers the song's complete pair over the item's lone recording", () => {
+    const r = resolveItemTracks(track("item"), { ...track("song"), ...karaoke("song") });
+    expect(r.play?.file).toBe("song.mp3");
+    expect(r.karaoke?.file).toBe("song-k.mp3");
+    expect(r.source).toBe("song");
+    expect(r.canToggle).toBe(true);
+  });
+
+  it("says WHICH recording it set aside, rather than swapping it quietly", () => {
+    const r = resolveItemTracks(track("item"), { ...track("song"), ...karaoke("song") });
+    expect(r.insteadOf?.file).toBe("item.mp3");
+    expect(r.insteadOf?.name).toBe("item sung.mp3");
+  });
+
+  it("leaves the item alone when it can already toggle on its own halves", () => {
+    // Nothing is set aside for something that cannot do more than it can.
+    const r = resolveItemTracks(
+      { ...track("item"), ...karaoke("item") },
+      { ...track("song"), ...karaoke("song") },
+    );
+    expect(r.play?.file).toBe("item.mp3");
+    expect(r.karaoke?.file).toBe("item-k.mp3");
+    expect(r.source).toBe("item");
+    expect(r.insteadOf).toBeNull();
+  });
+
+  it("leaves the item alone when the song has only half a pair", () => {
+    // Half a pair is not a reason to set aside a deliberate choice for a night.
+    const lone = resolveItemTracks(track("item"), track("song"));
+    expect(lone.play?.file).toBe("item.mp3");
+    const orphanKaraoke = resolveItemTracks(track("item"), karaoke("song"));
+    expect(orphanKaraoke.play?.file).toBe("item.mp3");
+    expect(orphanKaraoke.canToggle).toBe(false);
   });
 
   it("falls back to the song's pair when the item has nothing", () => {
@@ -77,7 +121,13 @@ describe("resolveItemTracks", () => {
 
   it("reports nothing when there is nothing anywhere", () => {
     const r = resolveItemTracks(null, null);
-    expect(r).toEqual({ play: null, karaoke: null, source: "none", canToggle: false });
+    expect(r).toEqual({
+      play: null,
+      karaoke: null,
+      source: "none",
+      canToggle: false,
+      insteadOf: null,
+    });
   });
 
   it("ignores a song karaoke with no original to pair it with", () => {

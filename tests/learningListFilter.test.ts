@@ -5,10 +5,13 @@ import {
   daysSince,
   disagrees,
   isFiltered,
+  matchesValues,
+  toggleValue,
   EMPTY_FILTER,
   RECENT_DAYS,
   STALE_DAYS,
   type ListFilter,
+  type ValueFilter,
 } from "@/lib/learningListFilter";
 import type { ListRow } from "@/lib/learningList";
 
@@ -49,6 +52,10 @@ function row(over: Partial<ListRow> = {}): ListRow {
 
 const F = (over: Partial<ListFilter> = {}): ListFilter => ({ ...EMPTY_FILTER, ...over });
 
+/** "only these" / "everything except these", the way the chips read. */
+const only = (...values: string[]): ValueFilter => ({ values, mode: "include" });
+const except = (...values: string[]): ValueFilter => ({ values, mode: "exclude" });
+
 /** N days before NOW, as a calendar date. */
 function daysAgo(n: number): string {
   return new Date(NOW - n * 86_400_000).toISOString().slice(0, 10);
@@ -70,12 +77,18 @@ describe("isFiltered", () => {
   it("notices each of the filters", () => {
     expect(isFiltered(F({ query: "sai" }))).toBe(true);
     expect(isFiltered(F({ stages: [RepertoireKind.learning] }))).toBe(true);
-    expect(isFiltered(F({ deity: "Krishna" }))).toBe(true);
-    expect(isFiltered(F({ raga: "Kalyani / Yaman" }))).toBe(true);
-    expect(isFiltered(F({ tempo: "Medium" }))).toBe(true);
-    expect(isFiltered(F({ shruti: "missing" }))).toBe(true);
-    expect(isFiltered(F({ sung: "never" }))).toBe(true);
+    expect(isFiltered(F({ deity: only("Krishna") }))).toBe(true);
+    expect(isFiltered(F({ raga: only("Kalyani / Yaman") }))).toBe(true);
+    expect(isFiltered(F({ tempo: only("Medium") }))).toBe(true);
+    expect(isFiltered(F({ shruti: ["missing"] }))).toBe(true);
+    expect(isFiltered(F({ sung: ["never"] }))).toBe(true);
     expect(isFiltered(F({ unlinkedOnly: true }))).toBe(true);
+  });
+
+  it("ignores a mode with no values beside it", () => {
+    // "Exclude nothing" is what "include everything" already means. A filter
+    // that looks set and is not is worse than no filter.
+    expect(isFiltered(F({ deity: { values: [], mode: "exclude" } }))).toBe(false);
   });
 });
 
@@ -143,14 +156,78 @@ describe("deity, raga and tempo — missing is not excluded by default", () => {
   });
 
   it("excludes a blank row only when that field is being filtered on", () => {
-    expect(applyListFilter(rows, F({ raga: "Bhairavi" }), NOW).map((r) => r.title)).toEqual(["Has"]);
-    expect(applyListFilter(rows, F({ tempo: "Medium" }), NOW).map((r) => r.title)).toEqual(["Has"]);
-    expect(applyListFilter(rows, F({ deity: "Sai" }), NOW).map((r) => r.title)).toEqual(["Has"]);
+    expect(applyListFilter(rows, F({ raga: only("Bhairavi") }), NOW).map((r) => r.title)).toEqual([
+      "Has",
+    ]);
+    expect(applyListFilter(rows, F({ tempo: only("Medium") }), NOW).map((r) => r.title)).toEqual([
+      "Has",
+    ]);
+    expect(applyListFilter(rows, F({ deity: only("Sai") }), NOW).map((r) => r.title)).toEqual([
+      "Has",
+    ]);
   });
 
   it("matches any one of a bhajan's deities, not just the first", () => {
-    expect(applyListFilter(rows, F({ deity: "Krishna" }), NOW)).toHaveLength(1);
-    expect(applyListFilter(rows, F({ deity: "Sai" }), NOW)).toHaveLength(1);
+    expect(applyListFilter(rows, F({ deity: only("Krishna") }), NOW)).toHaveLength(1);
+    expect(applyListFilter(rows, F({ deity: only("Sai") }), NOW)).toHaveLength(1);
+  });
+});
+
+/**
+ * Multi-select, and the two modes. The asymmetry is the point: a row with the
+ * field BLANK passes an exclusion and fails an inclusion, because "does not have
+ * Bhairavi" is true of a bhajan with no raga and "has Bhairavi" is not.
+ */
+describe("only / except", () => {
+  const rows = [
+    row({ title: "Krishna", deities: ["Krishna"], raga: "Bhairavi", tempo: "Fast" }),
+    row({ title: "Rama", deities: ["Rama"], raga: "Kalyani / Yaman", tempo: "Medium" }),
+    row({ title: "Ganesha", deities: ["Ganesha"], raga: "Hamsadhwani", tempo: "Medium" }),
+    row({ title: "Blank" }),
+  ];
+
+  it("keeps any of several chosen values", () => {
+    const out = applyListFilter(rows, F({ deity: only("Krishna", "Rama"), sort: "title" }), NOW);
+    expect(out.map((r) => r.title)).toEqual(["Krishna", "Rama"]);
+  });
+
+  it("reads the same chips the other way round", () => {
+    const out = applyListFilter(rows, F({ deity: except("Krishna", "Rama"), sort: "title" }), NOW);
+    // Ganesha, and the blank row — which has no Krishna and no Rama.
+    expect(out.map((r) => r.title)).toEqual(["Blank", "Ganesha"]);
+  });
+
+  it("KEEPS rows with the field blank under an exclusion", () => {
+    // 565 of the masterlist's bhajans have no raga at all. "Everything except
+    // Bhairavi" that dropped all of them would be a filter nobody could trust.
+    const out = applyListFilter(rows, F({ raga: except("Bhairavi"), sort: "title" }), NOW);
+    expect(out.map((r) => r.title)).toContain("Blank");
+    expect(out.map((r) => r.title)).not.toContain("Krishna");
+  });
+
+  it("drops rows with the field blank under an inclusion", () => {
+    const out = applyListFilter(rows, F({ raga: only("Bhairavi") }), NOW);
+    expect(out.map((r) => r.title)).toEqual(["Krishna"]);
+  });
+
+  it("matches a bhajan carrying several deities against either mode", () => {
+    const multi = [row({ title: "Both", deities: ["Krishna", "Sai"] })];
+    expect(applyListFilter(multi, F({ deity: only("Sai") }), NOW)).toHaveLength(1);
+    // Excluding EITHER of its deities excludes it — it is a Krishna bhajan.
+    expect(applyListFilter(multi, F({ deity: except("Krishna") }), NOW)).toHaveLength(0);
+  });
+
+  it("is the identity when nothing is chosen, whichever mode is set", () => {
+    expect(applyListFilter(rows, F({ deity: { values: [], mode: "exclude" } }), NOW)).toHaveLength(4);
+    expect(matchesValues(["Krishna"], { values: [], mode: "exclude" })).toBe(true);
+  });
+});
+
+describe("toggleValue", () => {
+  it("adds, removes, and keeps the order chips are drawn in", () => {
+    expect(toggleValue(["a"], "b")).toEqual(["a", "b"]);
+    expect(toggleValue(["a", "b", "c"], "b")).toEqual(["a", "c"]);
+    expect(toggleValue([], "a")).toEqual(["a"]);
   });
 });
 
@@ -172,7 +249,7 @@ describe("shruti", () => {
   const rows = [saved, missing, moved, neither];
 
   it("finds the saved ones", () => {
-    expect(applyListFilter(rows, F({ shruti: "saved", sort: "title" }), NOW).map((r) => r.title)).toEqual([
+    expect(applyListFilter(rows, F({ shruti: ["saved"], sort: "title" }), NOW).map((r) => r.title)).toEqual([
       "Moved",
       "Saved",
     ]);
@@ -180,12 +257,12 @@ describe("shruti", () => {
 
   it("finds the ones not set yet", () => {
     expect(
-      applyListFilter(rows, F({ shruti: "missing", sort: "title" }), NOW).map((r) => r.title),
+      applyListFilter(rows, F({ shruti: ["missing"], sort: "title" }), NOW).map((r) => r.title),
     ).toEqual(["Missing", "Neither"]);
   });
 
   it("finds only a saved shruti that disagrees with the suggestion", () => {
-    expect(applyListFilter(rows, F({ shruti: "disagrees" }), NOW).map((r) => r.title)).toEqual([
+    expect(applyListFilter(rows, F({ shruti: ["disagrees"] }), NOW).map((r) => r.title)).toEqual([
       "Moved",
     ]);
   });
@@ -212,11 +289,11 @@ describe("last sung", () => {
   });
 
   it("finds what has never been sung", () => {
-    expect(applyListFilter(rows, F({ sung: "never" }), NOW).map((r) => r.title)).toEqual(["Never"]);
+    expect(applyListFilter(rows, F({ sung: ["never"] }), NOW).map((r) => r.title)).toEqual(["Never"]);
   });
 
   it("includes the boundary day in 'recently'", () => {
-    const out = applyListFilter(rows, F({ sung: "recent", sort: "title" }), NOW);
+    const out = applyListFilter(rows, F({ sung: ["recent"], sort: "title" }), NOW);
     expect(out.map((r) => r.title)).toEqual(["Edge", "Fresh"]);
   });
 
@@ -224,10 +301,35 @@ describe("last sung", () => {
     // The one that matters. A bhajan with no date answers neither question, and
     // sorting it as "very old" would put a whole list of things you have not
     // started under "not sung in 6 months".
-    expect(applyListFilter(rows, F({ sung: "recent" }), NOW).map((r) => r.title)).not.toContain(
+    expect(applyListFilter(rows, F({ sung: ["recent"] }), NOW).map((r) => r.title)).not.toContain(
       "Never",
     );
-    expect(applyListFilter(rows, F({ sung: "stale" }), NOW).map((r) => r.title)).toEqual(["Old"]);
+    expect(applyListFilter(rows, F({ sung: ["stale"] }), NOW).map((r) => r.title)).toEqual(["Old"]);
+  });
+});
+
+describe("state filters read as OR", () => {
+  it("finds shrutis that need attention: not set yet OR disagreeing", () => {
+    const rows = [
+      row({ title: "Fine", preferredPitch: "2 Pancham / D", hintPitch: "2 Pancham / D" }),
+      row({ title: "Unset", preferredPitch: null }),
+      row({ title: "Moved", preferredPitch: "2 Pancham / D", hintPitch: "3 Pancham / D#" }),
+    ];
+    const out = applyListFilter(rows, F({ shruti: ["missing", "disagrees"], sort: "title" }), NOW);
+    expect(out.map((r) => r.title)).toEqual(["Moved", "Unset"]);
+  });
+
+  it("finds what is going cold: never sung OR not in six months", () => {
+    const rows = [
+      row({ title: "Never", lastSungISO: null }),
+      row({ title: "Fresh", lastSungISO: daysAgo(5) }),
+      row({ title: "Old", lastSungISO: daysAgo(STALE_DAYS + 30) }),
+      // The gap between the two buckets — belongs to neither, and must not be
+      // swept into either.
+      row({ title: "Middle", lastSungISO: daysAgo(RECENT_DAYS + 20) }),
+    ];
+    const out = applyListFilter(rows, F({ sung: ["never", "stale"], sort: "title" }), NOW);
+    expect(out.map((r) => r.title)).toEqual(["Never", "Old"]);
   });
 });
 
@@ -294,13 +396,13 @@ describe("filters combine", () => {
     ];
     const out = applyListFilter(
       rows,
-      F({ stages: [RepertoireKind.wantToLearn], deity: "Krishna", sung: "never" }),
+      F({ stages: [RepertoireKind.wantToLearn], deity: only("Krishna"), sung: ["never"] }),
       NOW,
     );
     expect(out.map((r) => r.title)).toEqual(["Wanted Krishna, never sung"]);
   });
 
   it("returns nothing rather than everything when nothing matches", () => {
-    expect(applyListFilter([row()], F({ deity: "Hanuman" }), NOW)).toEqual([]);
+    expect(applyListFilter([row()], F({ deity: only("Hanuman") }), NOW)).toEqual([]);
   });
 });

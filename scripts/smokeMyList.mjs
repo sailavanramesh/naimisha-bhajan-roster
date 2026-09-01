@@ -76,6 +76,39 @@ for (const [name, width, height] of [
   console.log(`${name}: horizontal overflow ${overflow}px`);
   if (overflow > 0) errors.push(`[${name}] page scrolls sideways by ${overflow}px`);
 
+  // Multi-select, and the two modes. Only(a) + Only(b) must widen, and Except
+  // must be the complement over rows that HAVE a deity — the blank ones stay.
+  const total = await page.locator("#list li").count();
+  // Named individually: a selected chip gains a tick, so an index into a
+  // text-matched list moves under you after the first click.
+  const krishna = page.locator("button").filter({ hasText: /^\u2713?\s*Krishna$/ }).first();
+  const rama = page.locator("button").filter({ hasText: /^\u2713?\s*Rama$/ }).first();
+  const deityChips = { nth: (i) => (i === 0 ? krishna : rama), count: async () => ((await krishna.count()) && (await rama.count()) ? 2 : 0) };
+  if ((await deityChips.count()) >= 2) {
+    await deityChips.nth(0).click();
+    await page.waitForTimeout(200);
+    const one = await page.locator("#list li").count();
+    await deityChips.nth(1).click();
+    await page.waitForTimeout(200);
+    const two = await page.locator("#list li").count();
+    console.log(`${name}: one deity ${one} rows, two deities ${two} rows`);
+    if (two < one) errors.push(`[${name}] adding a second deity NARROWED the list (${one} -> ${two})`);
+
+    await page.getByRole("button", { name: "Except" }).first().click();
+    await page.waitForTimeout(200);
+    const excluded = await page.locator("#list li").count();
+    console.log(`${name}: except those two -> ${excluded} rows (of ${total})`);
+    if (excluded + two !== total) {
+      errors.push(`[${name}] Only(${two}) + Except(${excluded}) != ${total}`);
+    }
+    await page.getByRole("button", { name: "Only" }).first().click();
+    await deityChips.nth(0).click();
+    await deityChips.nth(1).click();
+    await page.waitForTimeout(200);
+  } else {
+    console.log(`${name}: no Krishna/Rama chips to exercise the modes with`);
+  }
+
   // A stage chip narrows it.
   await page.getByRole("button", { name: /^Learning/ }).first().click();
   await page.waitForTimeout(250);

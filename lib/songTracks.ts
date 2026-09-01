@@ -19,6 +19,25 @@
  * catalogue default. Where the item has nothing, the song's pair is used, which
  * is what makes uploading once enough.
  *
+ * ONE EXCEPTION, added 2026-09-01: a COMPLETE PAIR BEATS A LONE RECORDING.
+ *
+ * `ProgramItem` has no karaoke column — only `Song` does — so an item's own
+ * upload can never have a vocals-off half, and the toggle was simply absent on
+ * every item anybody had overridden. Sailavan, seeing it on one item of three:
+ * "the vocals on option is showing up for 1 of the songs but not the others,
+ * even though they all have the vocals on option on the song page." The two
+ * without it carried single files uploaded before the catalogue had pairs at
+ * all.
+ *
+ * So when the item's own recording has no karaoke half AND the song has both,
+ * the song's pair plays. His call, knowing it changes what the desk plays on the
+ * night for those items. An item override that HAS a karaoke half still wins
+ * outright, and so does one where the song has no pair to offer — nothing is
+ * set aside for something that cannot do more than it can.
+ *
+ * `insteadOf` carries the recording that was set aside, so the screen can say
+ * plainly which file it is not playing rather than quietly swapping it.
+ *
  * One function, so the running order, the desk and the song page cannot drift
  * into three different answers.
  */
@@ -47,6 +66,11 @@ export type ResolvedTracks = {
   source: TrackSource;
   /** True when both halves are present, so a vocals toggle is possible. */
   canToggle: boolean;
+  /**
+   * The item's own recording, when a complete song pair was preferred over it.
+   * Null in every other case. The UI says which file is being set aside.
+   */
+  insteadOf: StoredTrack | null;
 };
 
 type Row = {
@@ -102,17 +126,39 @@ export function resolveItemTracks(
   song: Row | null | undefined,
 ): ResolvedTracks {
   const own = originalOf(item);
+  const songOriginal = originalOf(song);
+  const songKaraoke = karaokeOf(song);
+  const songHasPair = Boolean(songOriginal && songKaraoke);
+
   if (own) {
-    // The item's own recording. Its karaoke half, if any, is the item's too.
-    const karaoke = karaokeOf(item);
-    return { play: own, karaoke, source: "item", canToggle: Boolean(karaoke) };
+    const ownKaraoke = karaokeOf(item);
+    // An item that can already toggle needs nothing from the catalogue.
+    if (ownKaraoke) {
+      return { play: own, karaoke: ownKaraoke, source: "item", canToggle: true, insteadOf: null };
+    }
+    // A lone recording gives way to a complete pair, and only to a complete
+    // pair — see the note at the top.
+    if (songHasPair) {
+      return {
+        play: songOriginal,
+        karaoke: songKaraoke,
+        source: "song",
+        canToggle: true,
+        insteadOf: own,
+      };
+    }
+    return { play: own, karaoke: null, source: "item", canToggle: false, insteadOf: null };
   }
 
-  const fromSong = originalOf(song);
-  if (fromSong) {
-    const karaoke = karaokeOf(song);
-    return { play: fromSong, karaoke, source: "song", canToggle: Boolean(karaoke) };
+  if (songOriginal) {
+    return {
+      play: songOriginal,
+      karaoke: songKaraoke,
+      source: "song",
+      canToggle: Boolean(songKaraoke),
+      insteadOf: null,
+    };
   }
 
-  return { play: null, karaoke: null, source: "none", canToggle: false };
+  return { play: null, karaoke: null, source: "none", canToggle: false, insteadOf: null };
 }
