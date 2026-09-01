@@ -44,6 +44,10 @@ function humanSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+/** How far the skip buttons move. Ten, not five: the thing being done is hearing
+ *  a LINE again, and a line of a bhajan is rarely under ten seconds. */
+const SKIP_SECONDS = 10;
+
 /** Shared with PracticePlayer's compact form, so the two transports read the
  *  same way in the running order. */
 export function mmss(seconds: number): string {
@@ -79,19 +83,44 @@ export function InlineTrack({ file, name }: { file: string; name: string | null 
     if (!el) return;
     const onTime = () => setAt(el.currentTime);
     const onMeta = () => setLength(Number.isFinite(el.duration) ? el.duration : 0);
+    // Back to the start for real, not just on the display — a scrubber already
+    // showing 0 cannot be dragged to 0, so the next drag would do nothing.
     const onEnd = () => {
       setPlaying(false);
+      el.currentTime = 0;
       setAt(0);
     };
+    const onPlay = () => setPlaying(true);
+    const onPause = () => setPlaying(false);
+
+    /*
+     * READ IT NOW, not only when the event next fires.
+     *
+     * `preload="metadata"` starts loading as the element renders, so with a warm
+     * cache `loadedmetadata` has already fired by the time this effect attaches
+     * and the listener never hears it. `length` then stays 0 and the scrubber is
+     * `disabled` — a bar you can push at that does nothing. Same fault, same fix
+     * as PracticePlayer's compact form; see the longer note there.
+     */
+    onMeta();
+    onTime();
+    setPlaying(!el.paused);
+
     el.addEventListener("timeupdate", onTime);
     el.addEventListener("loadedmetadata", onMeta);
+    el.addEventListener("durationchange", onMeta);
     el.addEventListener("ended", onEnd);
-    el.addEventListener("pause", () => setPlaying(false));
-    el.addEventListener("play", () => setPlaying(true));
+    el.addEventListener("pause", onPause);
+    el.addEventListener("play", onPlay);
     return () => {
       el.removeEventListener("timeupdate", onTime);
       el.removeEventListener("loadedmetadata", onMeta);
+      el.removeEventListener("durationchange", onMeta);
       el.removeEventListener("ended", onEnd);
+      // These two were never removed, so every remount left a listener behind
+      // holding the old setState. A running order re-renders often.
+      el.removeEventListener("pause", onPause);
+      el.removeEventListener("play", onPlay);
     };
   }, []);
 
@@ -102,15 +131,38 @@ export function InlineTrack({ file, name }: { file: string; name: string | null 
     else el.pause();
   }
 
+  /** Back or forward by a few seconds — the thing you do to hear a line again. */
+  function nudgeBy(seconds: number) {
+    const el = audio.current;
+    if (!el) return;
+    const max = Number.isFinite(el.duration) ? el.duration : el.currentTime + seconds;
+    const t = Math.min(Math.max(el.currentTime + seconds, 0), max);
+    el.currentTime = t;
+    setAt(t);
+  }
+
   return (
     /* Full width when it has been dropped onto its own line — which is what a
        phone in portrait does with it, see app/program/[id]/ProgramEditor.tsx —
        and back to its compact self beside the title from `sm` up. */
-    <span className="flex w-full items-center gap-1.5 align-middle sm:inline-flex sm:w-auto sm:shrink-0">
+    /* `flex-wrap` and `min-w-0` for the same reason as PracticePlayer's compact
+       form: with the skip buttons on it, one unbreakable line of controls set
+       the minimum width of the whole running order. */
+    <span className="flex w-full min-w-0 flex-wrap items-center gap-1.5 align-middle sm:inline-flex sm:w-auto sm:shrink-0">
       {/* preload=metadata so the bar knows how long the track is before anybody
           presses play, without pulling the audio down on page load — a running
           order can carry a dozen of these. */}
       <audio ref={audio} src={`${TRACK_SRC}/${file}`} preload="metadata" className="hidden" />
+
+      <button
+        type="button"
+        onClick={() => nudgeBy(-SKIP_SECONDS)}
+        aria-label={`Back ${SKIP_SECONDS} seconds`}
+        title={`Back ${SKIP_SECONDS} seconds`}
+        className="inline-flex h-6 shrink-0 items-center rounded-full border border-rule-surface px-1.5 font-mono text-[10px] tabular-nums text-on-surface-muted transition hover:bg-panel-hover"
+      >
+        −{SKIP_SECONDS}
+      </button>
 
       <button
         type="button"
@@ -131,6 +183,16 @@ export function InlineTrack({ file, name }: { file: string; name: string | null 
         )}
       </button>
 
+      <button
+        type="button"
+        onClick={() => nudgeBy(SKIP_SECONDS)}
+        aria-label={`Forward ${SKIP_SECONDS} seconds`}
+        title={`Forward ${SKIP_SECONDS} seconds`}
+        className="inline-flex h-6 shrink-0 items-center rounded-full border border-rule-surface px-1.5 font-mono text-[10px] tabular-nums text-on-surface-muted transition hover:bg-panel-hover"
+      >
+        +{SKIP_SECONDS}
+      </button>
+
       <input
         type="range"
         min={0}
@@ -146,7 +208,7 @@ export function InlineTrack({ file, name }: { file: string; name: string | null 
           el.currentTime = t;
           setAt(t);
         }}
-        className="h-1 min-w-0 flex-1 cursor-pointer accent-brass disabled:cursor-not-allowed sm:w-28 sm:flex-none"
+        className="h-1 min-w-[7rem] flex-1 cursor-pointer accent-brass disabled:cursor-not-allowed sm:w-28 sm:min-w-0 sm:flex-none"
       />
 
       <span className="font-mono text-[10px] tabular-nums text-on-surface-muted">
