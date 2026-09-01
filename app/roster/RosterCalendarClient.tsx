@@ -6,7 +6,13 @@ import { useRouter } from "next/navigation";
 import { SessionRows } from "@/components/SessionRows";
 import { Button, Input } from "@/components/ui";
 import { fetchMonthInfo, createSessionForDate } from "./calendarActions";
-import { sortByStart, sessionLabel, hasSeveral, USUAL_START } from "@/lib/sessionsOfDay";
+import {
+  sortByStart,
+  sessionLabel,
+  hasSeveral,
+  defaultSessionOf,
+  USUAL_START,
+} from "@/lib/sessionsOfDay";
 import { deviceTodayISO } from "@/lib/dates";
 import { countTap, type Tap } from "@/lib/doubleTap";
 import {
@@ -201,14 +207,40 @@ export default function RosterCalendarClient(props: {
     if (!open) return;
 
     const existing = sortByStart(dayInfo[dateISO]?.sessions ?? []);
-    // One session: go straight there, as a double tap on a day now does.
-    if (existing.length === 1) {
-      router.push(`/roster/${existing[0].id}`);
+    /*
+     * ANY number of sessions opens one. A day holding several used to open
+     * nothing.
+     *
+     * The reasoning was that several sessions is a choice to make, so the panel
+     * below should make it visible rather than the app guessing. Sailavan,
+     * 2026-09-01: "when double clicking a day with multiple sessions it doesn't
+     * go into that day... it should work for days with multiple sessions too."
+     *
+     * What that reasoning missed is that the guess costs nothing here. The
+     * session page carries a "N sessions today" strip listing every session on
+     * its date, so landing on one is a single tap from any of the others —
+     * whereas doing nothing left a gesture that works on most days and silently
+     * fails on the busy ones, which reads as the app being broken.
+     *
+     * WHICH one is not "the first": `defaultSessionOf` already answers exactly
+     * this question for the whole app — closest to 7pm, ties to the earlier,
+     * programs not eligible — and its own note names tapping a day as a caller.
+     * The first of the day would hand a 9am festival session every tap meant
+     * for the evening one.
+     *
+     * A day holding nothing but programs has no bhajan session to default to,
+     * and `defaultSessionOf` says so by returning null. The gesture still means
+     * "go into that day", so it opens the first program rather than nothing.
+     */
+    if (existing.length > 0) {
+      const target = defaultSessionOf(existing);
+      if (target) {
+        router.push(`/roster/${target.id}`);
+        return;
+      }
+      router.push(`/program/${existing[0].id}`);
       return;
     }
-    // Several: there is a choice to make, so make it visible instead of
-    // guessing. The panel below now lists them.
-    if (existing.length > 1) return;
 
     if (!canEdit) {
       // Was a silent no-op, which reads as the app being broken. Now that the
