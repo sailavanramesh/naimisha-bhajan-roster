@@ -115,6 +115,9 @@ const MAX_NUDGE = 0.04;
  */
 const LENGTH_MISMATCH = 0.75;
 
+/** How far the skip buttons move. See the note beside them. */
+const SKIP_SECONDS = 10;
+
 export function PracticePlayer({
   original,
   karaoke,
@@ -303,25 +306,74 @@ export function PracticePlayer({
     if (!el) return;
     const onTime = () => setAt(el.currentTime);
     const onMeta = () => setLength(Number.isFinite(el.duration) ? el.duration : 0);
+
+    /*
+     * READ IT NOW, not only when the event next fires.
+     *
+     * `preload="metadata"` starts loading as the element renders, so with a warm
+     * cache `loadedmetadata` has already fired by the time this effect attaches
+     * and the listener never hears it. `length` then stays 0, the scrubber is
+     * `disabled`, and dragging it does nothing at all — which is exactly what
+     * Sailavan hit: "scrubbing forward or backward doesn't move the song forward
+     * or back, it just continues to play from where it was."
+     *
+     * A missed event is not the same as no data. The element knows its duration;
+     * ask it.
+     */
+    onMeta();
+    onTime();
     const onPlay = () => setPlaying(true);
     const onPause = () => setPlaying(false);
+    /*
+     * At the end, put the RECORDING back to the start, not just the number under
+     * the scrubber.
+     *
+     * Showing 0:00 while the element still sits at its duration is a display
+     * that disagrees with the thing it describes: the scrubber is already at 0,
+     * so dragging it to 0 fires no change and appears to do nothing. Seeking for
+     * real also brings the karaoke half back with it, through the same mirror.
+     */
     const onEnd = () => {
       setPlaying(false);
-      setAt(0);
+      seekTo(0);
     };
     el.addEventListener("timeupdate", onTime);
     el.addEventListener("loadedmetadata", onMeta);
+    // Some browsers settle on a real duration only after `durationchange`.
+    el.addEventListener("durationchange", onMeta);
     el.addEventListener("play", onPlay);
     el.addEventListener("pause", onPause);
     el.addEventListener("ended", onEnd);
     return () => {
       el.removeEventListener("timeupdate", onTime);
       el.removeEventListener("loadedmetadata", onMeta);
+      el.removeEventListener("durationchange", onMeta);
       el.removeEventListener("play", onPlay);
       el.removeEventListener("pause", onPause);
       el.removeEventListener("ended", onEnd);
     };
   }, []);
+
+  /**
+   * Move the pair to a point in the recording.
+   *
+   * The LEAD is moved and nothing else. Its `seeked` handler is the one place a
+   * person's seek is mirrored onto the shadow, and `ourSeek` is deliberately NOT
+   * set here: this IS a person's seek. Setting it — which the first version of
+   * the compact scrubber did — suppressed the mirror and left the two halves in
+   * different places, so the vocals switch landed somewhere else in the music.
+   */
+  const seekTo = (seconds: number) => {
+    const el = lead.current;
+    if (!el) return;
+    const max = Number.isFinite(el.duration) ? el.duration : seconds;
+    const t = Math.min(Math.max(seconds, 0), max);
+    el.currentTime = t;
+    setAt(t);
+  };
+
+  /** Back or forward by a few seconds — the thing you do to hear a line again. */
+  const nudgeBy = (seconds: number) => seekTo((lead.current?.currentTime ?? 0) + seconds);
 
   /* Play or pause the LEAD only. The shadow follows it through `mirror`, which
      is the same path the native controls take — nothing here is a second way
@@ -397,14 +449,41 @@ export function PracticePlayer({
       /* Full width on its own line, compact beside the title from `sm` up — the
          same shape InlineTrack takes in the running order, because it stands in
          the same place. */
+      /*
+        `flex-wrap` and `min-w-0`, or the row sets the width of the page.
+        Five controls plus a time on one unbreakable line came to about 215px of
+        min-content, which pushed the running order 60px past a 375px phone. The
+        switch drops to a second line there instead; from `sm` up it all fits on
+        one.
+      */
       <span
         className={cn(
-          "flex w-full items-center gap-1.5 align-middle sm:inline-flex sm:w-auto sm:shrink-0",
+          "flex w-full min-w-0 flex-wrap items-center gap-1.5 align-middle sm:inline-flex sm:w-auto sm:shrink-0",
           className,
         )}
       >
         <audio ref={lead} preload="metadata" className="hidden" src={`/api/tracks/${original.file}`} />
         {shadowEl}
+
+        {/*
+          BACK AND FORWARD TEN SECONDS.
+
+          Asked for directly: "should add a forward 5-10 s and backwards feature
+          there". Ten rather than five because the thing being done is hearing a
+          LINE again, not a word, and a line of a bhajan is rarely under ten
+          seconds. They move the lead, so the karaoke half follows through the
+          same `seeked` mirror the scrubber uses — you can drop the voice, miss
+          it, and go back without the two halves parting company.
+        */}
+        <button
+          type="button"
+          onClick={() => nudgeBy(-SKIP_SECONDS)}
+          aria-label={`Back ${SKIP_SECONDS} seconds`}
+          title={`Back ${SKIP_SECONDS} seconds`}
+          className="inline-flex h-6 shrink-0 items-center rounded-full border border-rule-surface px-1.5 font-mono text-[10px] tabular-nums text-on-surface-muted transition hover:bg-panel-hover"
+        >
+          −{SKIP_SECONDS}
+        </button>
 
         <button
           type="button"
@@ -425,6 +504,16 @@ export function PracticePlayer({
           )}
         </button>
 
+        <button
+          type="button"
+          onClick={() => nudgeBy(SKIP_SECONDS)}
+          aria-label={`Forward ${SKIP_SECONDS} seconds`}
+          title={`Forward ${SKIP_SECONDS} seconds`}
+          className="inline-flex h-6 shrink-0 items-center rounded-full border border-rule-surface px-1.5 font-mono text-[10px] tabular-nums text-on-surface-muted transition hover:bg-panel-hover"
+        >
+          +{SKIP_SECONDS}
+        </button>
+
         <input
           type="range"
           min={0}
@@ -436,13 +525,9 @@ export function PracticePlayer({
           onChange={(e) => {
             const el = lead.current;
             if (!el) return;
-            const t = Number(e.target.value);
-            // Our own move, not a person's — see the `seeked` handler.
-            ourSeek.current = true;
-            el.currentTime = t;
-            setAt(t);
+            seekTo(Number(e.target.value));
           }}
-          className="h-1 min-w-0 flex-1 cursor-pointer accent-brass disabled:cursor-not-allowed sm:w-20 sm:flex-none"
+          className="h-1 min-w-[7rem] flex-1 cursor-pointer accent-brass disabled:cursor-not-allowed sm:w-20 sm:min-w-0 sm:flex-none"
         />
 
         <span className="font-mono text-[10px] tabular-nums text-on-surface-muted">
