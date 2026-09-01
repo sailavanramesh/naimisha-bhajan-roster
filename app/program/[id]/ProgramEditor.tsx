@@ -340,10 +340,24 @@ function ItemCard({
             {/* The recording, playable without opening the item — the running
                 order is read on the night, and opening each song to reach its
                 track is a hop nobody wants mid-programme. Its own line on a
-                phone, beside the title from `sm` up. */}
+                phone, beside the title from `sm` up.
+
+                WITH the vocals switch when the recording has a karaoke half.
+                Sailavan: "shouldn't have to open the whole song out to play that
+                option thing" — the preview could always play, but nothing on it
+                said there was a second half, so the only way to find the switch
+                was to open the item and scroll. */}
             {draft.plays.play ? (
               <span className="basis-full sm:basis-auto">
-                <InlineTrack file={draft.plays.play.file} name={draft.plays.play.name} />
+                {draft.plays.canToggle && draft.plays.karaoke ? (
+                  <PracticePlayer
+                    compact
+                    original={{ file: draft.plays.play.file, name: draft.plays.play.name }}
+                    karaoke={{ file: draft.plays.karaoke.file, name: draft.plays.karaoke.name }}
+                  />
+                ) : (
+                  <InlineTrack file={draft.plays.play.file} name={draft.plays.play.name} />
+                )}
               </span>
             ) : null}
 
@@ -527,9 +541,21 @@ function ItemCard({
                         karaoke={{ file: draft.plays.karaoke.file, name: draft.plays.karaoke.name }}
                       />
                       <span className="text-[11px] text-on-surface-muted">
-                        {draft.plays.source === "song"
-                          ? "From the song catalogue. Adding a track here instead would override it for this programme."
-                          : "Uploaded on this item."}
+                        {draft.plays.insteadOf ? (
+                          <>
+                            The song catalogue&rsquo;s pair, played instead of this
+                            programme&rsquo;s own{" "}
+                            <strong className="font-medium">
+                              {draft.plays.insteadOf.name ?? "recording"}
+                            </strong>
+                            , which has no vocals-off half. Remove the track below to use the
+                            pair everywhere.
+                          </>
+                        ) : draft.plays.source === "song" ? (
+                          "From the song catalogue. Adding a track here instead would override it for this programme."
+                        ) : (
+                          "Uploaded on this item."
+                        )}
                       </span>
                     </>
                   ) : draft.plays.play && draft.plays.source === "song" ? (

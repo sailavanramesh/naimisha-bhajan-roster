@@ -60,6 +60,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/components/ui";
+import { mmss } from "@/components/TrackControl";
 
 export type PracticeTrack = { file: string; name: string | null };
 
@@ -118,15 +119,41 @@ export function PracticePlayer({
   original,
   karaoke,
   className,
+  compact = false,
 }: {
   original: PracticeTrack;
   karaoke: PracticeTrack;
   className?: string;
+  /**
+   * The one-line form, for the running order.
+   *
+   * Sailavan, 2026-09-01: "make it more obvious in the preview that the song can
+   * be played there with vocals on or something, shouldn't have to open the
+   * whole song out to play that option thing." The preview row already had a
+   * play button; what it lacked was any sign that the recording had a second
+   * half at all, so the only way to find the switch was to open the item.
+   *
+   * Same component, and deliberately so: every hard part here is the two
+   * elements staying in lockstep, and a second implementation of that for a
+   * smaller set of buttons would be a second set of the same bugs. Only the
+   * controls change — native `controls` on the lead becomes a play button, a
+   * scrubber and the switch.
+   */
+  compact?: boolean;
 }) {
   const lead = useRef<HTMLAudioElement | null>(null);
   const shadow = useRef<HTMLAudioElement | null>(null);
   const [vocals, setVocals] = useState(true);
   const [mismatch, setMismatch] = useState<number | null>(null);
+
+  /*
+   * The lead's transport, mirrored into React so the compact form can draw its
+   * own buttons. Tracked whether or not `compact` is set — it is three cheap
+   * listeners, and making it conditional would put a hook behind an `if`.
+   */
+  const [playing, setPlaying] = useState(false);
+  const [at, setAt] = useState(0);
+  const [length, setLength] = useState(0);
 
   /** Set while we move a playhead ourselves, so `seeked` is not treated as a person's. */
   const ourSeek = useRef(false);
@@ -270,6 +297,42 @@ export function PracticePlayer({
     };
   }, []);
 
+  /* The lead's own transport, for the compact controls to draw and drive. */
+  useEffect(() => {
+    const el = lead.current;
+    if (!el) return;
+    const onTime = () => setAt(el.currentTime);
+    const onMeta = () => setLength(Number.isFinite(el.duration) ? el.duration : 0);
+    const onPlay = () => setPlaying(true);
+    const onPause = () => setPlaying(false);
+    const onEnd = () => {
+      setPlaying(false);
+      setAt(0);
+    };
+    el.addEventListener("timeupdate", onTime);
+    el.addEventListener("loadedmetadata", onMeta);
+    el.addEventListener("play", onPlay);
+    el.addEventListener("pause", onPause);
+    el.addEventListener("ended", onEnd);
+    return () => {
+      el.removeEventListener("timeupdate", onTime);
+      el.removeEventListener("loadedmetadata", onMeta);
+      el.removeEventListener("play", onPlay);
+      el.removeEventListener("pause", onPause);
+      el.removeEventListener("ended", onEnd);
+    };
+  }, []);
+
+  /* Play or pause the LEAD only. The shadow follows it through `mirror`, which
+     is the same path the native controls take — nothing here is a second way
+     of starting the pair. */
+  const playPause = () => {
+    const el = lead.current;
+    if (!el) return;
+    if (el.paused) void el.play();
+    else el.pause();
+  };
+
   const toggle = () => {
     const a = lead.current;
     const b = shadow.current;
@@ -311,6 +374,113 @@ export function PracticePlayer({
     }
   };
 
+  /* The shadow, shared by both forms. Declared once so the two branches below
+     cannot drift into two different elements. */
+  const shadowEl = (
+    /*
+      `metadata`, NOT `auto`: it used to race to download the whole file the
+      moment the page opened, which on a 10 MB pair competed with the audible
+      stream. It has been playing silently in lockstep, so it is already buffered
+      where a toggle needs it.
+    */
+    <audio
+      ref={shadow}
+      preload="metadata"
+      muted
+      className="hidden"
+      src={`/api/tracks/${karaoke.file}`}
+    />
+  );
+
+  if (compact) {
+    return (
+      /* Full width on its own line, compact beside the title from `sm` up — the
+         same shape InlineTrack takes in the running order, because it stands in
+         the same place. */
+      <span
+        className={cn(
+          "flex w-full items-center gap-1.5 align-middle sm:inline-flex sm:w-auto sm:shrink-0",
+          className,
+        )}
+      >
+        <audio ref={lead} preload="metadata" className="hidden" src={`/api/tracks/${original.file}`} />
+        {shadowEl}
+
+        <button
+          type="button"
+          onClick={playPause}
+          aria-label={playing ? `Pause ${original.name ?? "the track"}` : `Play ${original.name ?? "the track"}`}
+          title={original.name ?? "track"}
+          className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-rule-surface text-on-surface-muted transition hover:bg-panel-hover"
+        >
+          {playing ? (
+            <svg viewBox="0 0 16 16" className="h-3 w-3" aria-hidden="true" fill="currentColor">
+              <rect x="4" y="3.5" width="2.6" height="9" rx="0.6" />
+              <rect x="9.4" y="3.5" width="2.6" height="9" rx="0.6" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 16 16" className="h-3 w-3" aria-hidden="true" fill="currentColor">
+              <path d="M5 3.6l7 4.4-7 4.4z" />
+            </svg>
+          )}
+        </button>
+
+        <input
+          type="range"
+          min={0}
+          max={length || 0}
+          step={0.1}
+          value={Math.min(at, length || 0)}
+          disabled={!length}
+          aria-label="Position in the track"
+          onChange={(e) => {
+            const el = lead.current;
+            if (!el) return;
+            const t = Number(e.target.value);
+            // Our own move, not a person's — see the `seeked` handler.
+            ourSeek.current = true;
+            el.currentTime = t;
+            setAt(t);
+          }}
+          className="h-1 min-w-0 flex-1 cursor-pointer accent-brass disabled:cursor-not-allowed sm:w-20 sm:flex-none"
+        />
+
+        <span className="font-mono text-[10px] tabular-nums text-on-surface-muted">
+          {mmss(at)}
+          {length ? `/${mmss(length)}` : ""}
+        </span>
+
+        {/*
+          THE WHOLE POINT OF THE COMPACT FORM: the switch, in the running order.
+
+          Labelled in words rather than left as a bare emoji — an unexplained mic
+          beside a play button is not something anybody taps to find out. It is
+          also `aria-pressed`, so it reads as a switch rather than a second play
+          button.
+        */}
+        <button
+          type="button"
+          onClick={toggle}
+          aria-pressed={vocals}
+          title={
+            vocals
+              ? "Hearing the sung recording. Tap to drop the voice."
+              : "Hearing the karaoke. Tap to bring the voice back."
+          }
+          className={cn(
+            "inline-flex h-6 shrink-0 items-center gap-1 rounded-full border px-2 text-[10px] transition-colors",
+            vocals
+              ? "border-brass/50 bg-brass/20 font-semibold text-on-surface"
+              : "border-rule-surface text-on-surface-muted hover:bg-panel-hover",
+          )}
+        >
+          <span aria-hidden>{vocals ? "🎤" : "🎹"}</span>
+          {vocals ? "Vocals" : "Karaoke"}
+        </button>
+      </span>
+    );
+  }
+
   return (
     <div className={cn("grid gap-1.5", className)}>
       {/* The lead. Always playing; muted when you asked for the karaoke. */}
@@ -324,19 +494,7 @@ export function PracticePlayer({
         Your browser cannot play audio.
       </audio>
 
-      {/*
-        The shadow. `metadata`, NOT `auto`: it used to race to download the whole
-        file the moment the page opened, which on a 10 MB pair competed with the
-        audible stream. It has been playing silently in lockstep, so it is
-        already buffered where a toggle needs it.
-      */}
-      <audio
-        ref={shadow}
-        preload="metadata"
-        muted
-        className="hidden"
-        src={`/api/tracks/${karaoke.file}`}
-      />
+      {shadowEl}
 
       <div className="flex flex-wrap items-center gap-2">
         <button

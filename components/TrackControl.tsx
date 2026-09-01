@@ -44,7 +44,9 @@ function humanSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function mmss(seconds: number): string {
+/** Shared with PracticePlayer's compact form, so the two transports read the
+ *  same way in the running order. */
+export function mmss(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60);
