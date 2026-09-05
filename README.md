@@ -7,6 +7,7 @@ sang what, when and at what shruti.
 - **What it is and how it works** → [`CLAUDE.md`](CLAUDE.md)
 - **What it should do** → [`docs/SPEC.md`](docs/SPEC.md)
 - **What has been built, what is next, and why** → [`PROGRESS.md`](PROGRESS.md)
+- **Setting it up on another Mac** → [`docs/SETUP.md`](docs/SETUP.md)
 
 ---
 
@@ -27,8 +28,12 @@ runs under the centre's Azure nonprofit sponsorship subscription, at roughly
 ## Seeing it on your own machine
 
 This is the quickest way to look at it and try things. Nothing you do here
-touches the live website — but it **does** use the real database, so anything
-you save is real.
+touches the live website.
+
+Which database it uses depends on the machine — on Sailavan's main Mac these
+commands reach the **real** database, so anything you save is real; on a machine
+set up by `docs/SETUP.md` they reach the dev copy. Run `npm run env:which` if
+you are not sure.
 
 ```bash
 npm install

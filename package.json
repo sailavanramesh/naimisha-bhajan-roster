@@ -22,7 +22,9 @@
     "check:tanpura-tuning": "python3 scripts/verifyTanpuraTuning.py",
     "smoke:shruti": "node scripts/smokeShrutiPlayer.mjs",
     "db:guide-order": "node scripts/alignGuideOrder.mjs",
-    "db:fake-availability": "node scripts/seedFakeAvailability.mjs"
+    "db:fake-availability": "node scripts/seedFakeAvailability.mjs",
+    "env:setup": "bash scripts/setup-env.sh",
+    "env:which": "node scripts/env-which.mjs"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",
