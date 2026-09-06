@@ -11,6 +11,8 @@
 #
 #   * the source and target are derived, not typed — the target is the source
 #     with the database name swapped, so they cannot be transposed by accident
+#   * the source is checked to be the production database whatever machine it
+#     came from — .env here, the app service on a bootstrapped one
 #   * it refuses outright if the target is not named *_dev
 #   * it drops and recreates the dev SCHEMA, never the production one
 #
@@ -22,25 +24,61 @@ set -euo pipefail
 APPLY="${1:-}"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-# Read the production URL from .env without printing it.
-PROD_URL="$(grep -E '^DATABASE_URL=' "$ROOT/.env" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
-if [ -z "$PROD_URL" ]; then
-  echo "No DATABASE_URL in .env — nothing to copy from." >&2
+# WHERE THE SOURCE COMES FROM
+#
+# The two machines disagree about .env (docs/SETUP.md has the table). On the
+# original Mac .env *is* production. On anything built by setup-env.sh, .env is
+# dev and the production string is not on disk at all — so it is read back from
+# the production app service for the length of this run, and never written down.
+ENV_URL=""
+if [ -f "$ROOT/.env" ]; then
+  ENV_URL="$(grep -E '^DATABASE_URL=' "$ROOT/.env" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
+fi
+
+# The database a URL names: after the last "/", before any "?".
+db_name() { local base="${1%%\?*}"; echo "${base##*/}"; }
+
+case "$(db_name "$ENV_URL")" in
+  naimisha)
+    PROD_URL="$ENV_URL"
+    ;;
+  *)
+    if [ -n "$ENV_URL" ]; then
+      echo "This machine's .env points at \"$(db_name "$ENV_URL")\", not production."
+    else
+      echo "This machine's .env has no DATABASE_URL."
+    fi
+    echo "Reading the production connection string from the app service instead;"
+    echo "it lives in this shell only and is never written to disk."
+    echo
+    PROD_URL="$(bash "$ROOT/scripts/setup-env.sh" --print-prod-db)"
+    ;;
+esac
+
+if [ "$(db_name "$PROD_URL")" != "naimisha" ]; then
+  echo "Refusing: the source is not the production database." >&2
   exit 1
 fi
 
-DEV_URL="${PROD_URL/\/naimisha?//naimisha_dev?}"
+# The target is derived by renaming the database in the source, so the two
+# cannot be transposed. Written as an explicit split rather than a pattern
+# substitution: "?" is a glob character, and the obvious
+# ${PROD_URL/\/naimisha?/...} also matched "/naimisha_", which turned a dev URL
+# into "naimisha_devdev" on any machine whose .env was not production.
+BASE="${PROD_URL%%\?*}"      # everything before the query string
+QUERY="${PROD_URL#"$BASE"}"  # "?sslmode=require", or nothing
+DEV_URL="${BASE}_dev${QUERY}"
 
-# The guard that matters. If the swap did not happen, the two are identical
+# The guard that matters. If the rename did not happen, the two are identical
 # and this would dump production onto itself.
 if [ "$DEV_URL" = "$PROD_URL" ]; then
   echo "Refusing: the dev URL is identical to production. Check the database name." >&2
   exit 1
 fi
-case "$DEV_URL" in
-  *"/naimisha_dev?"*) ;;
-  *) echo "Refusing: the target is not a *_dev database." >&2; exit 1 ;;
-esac
+if [ "$(db_name "$DEV_URL")" != "naimisha_dev" ]; then
+  echo "Refusing: the target is not a *_dev database." >&2
+  exit 1
+fi
 
 echo "  from  production  (naimisha)"
 echo "  to    development (naimisha_dev)"
