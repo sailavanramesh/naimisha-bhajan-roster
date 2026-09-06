@@ -515,6 +515,8 @@ input[type="date"][data-empty="true"] {
 
      10-20   sticky table cells and panel headers, which need only to sit
              above the ordinary content beside them
+     40      the back-to-top button, which must clear a sticky header it is
+             scrolling past but must never cover the navigation
      60      the mobile navigation drawer and its trigger
      100     the live view, which covers the app including the navigation
      120     the words sheet, which covers the live view

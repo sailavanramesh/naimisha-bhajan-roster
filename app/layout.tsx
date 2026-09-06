@@ -1,5 +1,6 @@
 import "./globals.css";
 import { Nav } from "@/components/Nav";
+import { BackToTop } from "@/components/BackToTop";
 import { YantraFull } from "@/components/Yantra";
 import Link from "next/link";
 import { headers } from "next/headers";
@@ -228,13 +229,25 @@ export default async function RootLayout({ children }: { children: React.ReactNo
                 </div>
               </header>
 
-              <main id="main" className="flex-1">
+              {/*
+                  `relative` and `tabIndex` are both for components/BackToTop:
+                  its sentinel is positioned against this box, and the jump
+                  moves focus here so the keyboard travels with the page.
+                */}
+              <main id="main" tabIndex={-1} className="relative flex-1 outline-none">
                 {/*
                   Closed testing: everything is behind sign-in. Enforced in the
                   layout so it covers every page at once — a per-page check
                   would eventually miss one.
                 */}
                 {walled ? <SignInWall /> : children}
+
+                {/*
+                  Inside <main>, because that is what its sentinel measures
+                  against. On the sign-in wall, or any page under a screen and
+                  a half, it simply never appears.
+                */}
+                <BackToTop />
               </main>
 
               {/*
