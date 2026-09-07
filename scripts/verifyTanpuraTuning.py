@@ -47,7 +47,10 @@ def sa_freq(pc):
     return best
 
 print(f"{'file':<24}{'Sa Hz':<9}{'Ma/Sa':<9}{'Pa/Sa':<9}{'verdict'}")
-for p in sorted(glob.glob('/Users/sailavanramesh/code/naimisha-bhajan-roster/public/audio/tanpura/*.wav')):
+# Resolve relative to this file, not to a home directory: the repo has moved
+# once already and must also run from a second laptop.
+AUDIO = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'public', 'audio', 'tanpura', '*.wav')
+for p in sorted(glob.glob(AUDIO)):
     base=os.path.basename(p)[:-4]; series,note=base.split('-',1)
     x,r=read(p)
     fsa=sa_freq(PC[note])

@@ -79,7 +79,16 @@ npm run db:seed          # tsx scripts/seedFromXlsx.ts, reads data/roster.xlsx
 npm run dev
 npm run build            # prisma generate && next build
 npm run lint
+
+npm run env:which        # which database .env / .env.local actually point at
+npm run env:setup        # rebuild .env from the dev app service (new machine)
+bash scripts/allow-my-ip.sh   # let this network reach the database
 ```
+
+The repo lives at `~/Documents/Code/naimisha-bhajan-roster`, alongside the rest
+of the code library (it was under `~/code` until 2026-09-06). Setting it up on a
+second machine is `docs/SETUP.md` — nothing has to be copied across by hand,
+because every secret is read back from its Azure app settings.
 
 Azure Postgres requires `?sslmode=require` on the connection string. There is no
 separate pooled/direct URL as there is with some providers — set `DIRECT_URL` to
