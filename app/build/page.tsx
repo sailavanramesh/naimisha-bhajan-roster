@@ -14,6 +14,8 @@ import {
 } from "@/lib/sessionBuilder";
 import { saveDraftSession } from "./actions";
 import { nextThursday } from "@/lib/dates";
+import { sungBeforeFor } from "@/lib/recentlySungQueries";
+import { RecentlySungMark } from "@/components/RecentlySungMark";
 import { DeitySymbols } from "@/components/DeitySymbol";
 
 import { getRole, can } from "@/lib/auth";
@@ -233,10 +235,20 @@ export default async function BuildPage({
     Object.fromEntries(FILTER_KEYS.map((k) => [k, undefined])) as Record<string, undefined>,
   );
 
-  // The only query that genuinely has to wait: it asks about the bhajans the
-  // generator just chose.
+  /*
+   * The only queries that genuinely have to wait: they ask about the bhajans
+   * the generator just chose. Together, because round trips are what the
+   * burstable database's throttling multiplies (CLAUDE.md).
+   *
+   * `sungBefore` is measured against the date being BUILT FOR, not today —
+   * which for this page is the whole point, since `date` is usually next
+   * Thursday. No session exists yet to exclude.
+   */
   const chosenIds = result.slots.map((s) => s.candidate.id);
-  const singersByBhajan = await getSingersForBhajans(chosenIds);
+  const [singersByBhajan, sungBefore] = await Promise.all([
+    getSingersForBhajans(chosenIds),
+    sungBeforeFor(chosenIds, date, null),
+  ]);
 
   return (
     <div className="grid gap-4">
@@ -472,11 +484,26 @@ export default async function BuildPage({
                         {slot.locked ? (
                           <span className="rounded-full border px-2 py-0.5 text-[10px]">locked</span>
                         ) : null}
-                        {slot.recentlySung ? (
-                          <span className="rounded-full border border-amber-400 bg-amber-50 px-2 py-0.5 text-[10px]">
-                            sung recently
-                          </span>
-                        ) : null}
+                        {/*
+                          THE SAME MARKER AS THE ROSTER GRID, at last.
+
+                          This chip was `border-amber-400 bg-amber-50` — raw
+                          Tailwind palette, in an app whose colours all come
+                          from tokens in globals.css — and it said "sung
+                          recently" with no date, no count, and no way through
+                          to anything. The grid's version had all three, so the
+                          same question had two answers depending which page you
+                          were on. Now there is one component for both, and it
+                          agrees by construction.
+
+                          `slot.recentlySung` still decides the SCORING (via
+                          freshnessDays, which is 90 — the same three months),
+                          and is left alone. This is only what the reader sees.
+                        */}
+                        <RecentlySungMark
+                          bhajanId={slot.candidate.id}
+                          sung={sungBefore[slot.candidate.id]}
+                        />
                       </div>
                       <Link
                         href={`/bhajans/${slot.candidate.id}`}

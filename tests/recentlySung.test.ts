@@ -5,8 +5,16 @@ import {
   isRecentlySung,
   recentCutoffISO,
   recentlySungLabel,
+  recentlySungParts,
   recentlySungTitle,
+  wasSungRecently,
+  type SungBefore,
 } from "@/lib/recentlySung";
+
+/** A row as the query builds one, with the noise the words do not read. */
+function sung(lastISO: string, recentCount: number): SungBefore {
+  return { lastISO, recentCount, occurrences: [], more: 0 };
+}
 
 describe("recentCutoffISO", () => {
   it("goes back three months by default", () => {
@@ -65,18 +73,46 @@ describe("isRecentlySung", () => {
 
 describe("the words", () => {
   it("says when, and how many when there were several", () => {
-    expect(recentlySungLabel({ lastISO: "2026-08-23", count: 1 })).toBe("sung recently · 23 Aug");
-    expect(recentlySungLabel({ lastISO: "2026-08-23", count: 3 })).toBe(
-      "sung recently · 23 Aug · 3×",
+    expect(recentlySungLabel(sung("2026-08-23", 1))).toBe("sung recently · 23 Aug");
+    expect(recentlySungLabel(sung("2026-08-23", 3))).toBe("sung recently · 23 Aug · 3×");
+  });
+
+  it("hands the marker its parts separately, so it can weight the lead", () => {
+    expect(recentlySungParts(sung("2026-08-23", 1))).toEqual({
+      lead: "sung recently",
+      when: "23 Aug",
+      times: null,
+    });
+    expect(recentlySungParts(sung("2026-08-23", 3)).times).toBe("3×");
+  });
+
+  /*
+   * The quiet state. Without it, four months ago looked exactly like never,
+   * because the marker simply vanished at the edge of the window.
+   */
+  it("drops the lead and keeps the year when it was longer ago than the window", () => {
+    expect(wasSungRecently(sung("2026-01-12", 0))).toBe(false);
+    expect(recentlySungParts(sung("2026-01-12", 0))).toEqual({
+      lead: null,
+      when: "last sung 12 Jan 2026",
+      times: null,
+    });
+    expect(recentlySungLabel(sung("2026-01-12", 0))).toBe("last sung 12 Jan 2026");
+  });
+
+  it("says so in the long version too", () => {
+    expect(recentlySungTitle(sung("2026-01-12", 0))).toContain(
+      `Not sung in the last ${RECENT_MONTHS} months`,
     );
+    expect(recentlySungTitle(sung("2026-01-12", 0))).toContain("12 January 2026");
   });
 
   it("spells the window out in the long version", () => {
-    expect(recentlySungTitle({ lastISO: "2026-08-23", count: 1 })).toContain(
+    expect(recentlySungTitle(sung("2026-08-23", 1))).toContain(
       `once in the last ${RECENT_MONTHS} months`,
     );
-    expect(recentlySungTitle({ lastISO: "2026-08-23", count: 2 })).toContain("2 times");
-    expect(recentlySungTitle({ lastISO: "2026-08-23", count: 2 })).toContain("23 August 2026");
+    expect(recentlySungTitle(sung("2026-08-23", 2))).toContain("2 times");
+    expect(recentlySungTitle(sung("2026-08-23", 2))).toContain("23 August 2026");
   });
 
   /*

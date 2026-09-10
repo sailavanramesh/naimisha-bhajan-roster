@@ -11,6 +11,8 @@ import { rosterAvailability } from "@/lib/availabilityQueries";
 import { sortByStart, sessionLabel, hasSeveral } from "@/lib/sessionsOfDay";
 import { NoAccess } from "@/components/RequireRole";
 import { NOT_ARCHIVED } from "@/lib/archive";
+import { sungBeforeFor } from "@/lib/recentlySungQueries";
+import { RecentlySungMark } from "@/components/RecentlySungMark";
 
 export const dynamic = "force-dynamic";
 
@@ -99,9 +101,25 @@ export default async function AssignPage({
   ]);
   if (!session) return <div>Not found</div>;
 
-  const singers = await getSingerContexts(session.date);
-
   const dateKey = session.date.toISOString().slice(0, 10);
+
+  /*
+   * Both depend on the session's date and nothing else, so they go together —
+   * round trips are what the burstable database's throttling multiplies
+   * (CLAUDE.md).
+   *
+   * `sungBefore` is measured against THIS session's date and excludes it, the
+   * same as the roster grid: the marker has to mean the same thing on both
+   * pages or it means nothing on either.
+   */
+  const [singers, sungBefore] = await Promise.all([
+    getSingerContexts(session.date),
+    sungBeforeFor(
+      slots.map((x) => x.bhajanId).filter((x): x is string => Boolean(x)),
+      dateKey,
+      sessionId,
+    ),
+  ]);
   const pins = parsePins(one(sp, "pin"));
   const weights = weightsFrom(sp);
 
@@ -338,6 +356,22 @@ export default async function AssignPage({
                           <div className="mt-1 text-sm text-on-surface-muted">
                             {a.slot.bhajanTitle ?? "no bhajan chosen"}
                           </div>
+                          {/*
+                            The same marker as the roster grid and /build.
+
+                            It matters here for a reason the grid's does not
+                            cover: this page is about WHO sings, and a bhajan
+                            the group sang six weeks ago is a different
+                            proposition to a fresh one — worth seeing before
+                            settling on a name, not after.
+                          */}
+                          {a.slot.bhajanId ? (
+                            <RecentlySungMark
+                              bhajanId={a.slot.bhajanId}
+                              sung={sungBefore[a.slot.bhajanId]}
+                              className="mt-1.5"
+                            />
+                          ) : null}
                           <div className="mt-1 text-xs" style={{ color: "rgb(var(--muted))" }}>
                             {/* "Pinned by you" is untrue of a slot that was
                                 already rostered — it was pinned by the fact

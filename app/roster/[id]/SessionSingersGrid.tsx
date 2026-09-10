@@ -26,11 +26,9 @@ import { stepWithinSeries } from "@/lib/pitch";
 import { tablaWithOverride } from "@/lib/tabla";
 import { ragaScale } from "@/lib/ragaScales";
 import { ROSTER_COLUMNS, rosterTableMinWidth } from "@/lib/rosterGrid";
-import {
-  recentlySungLabel,
-  recentlySungTitle,
-  type RecentSung,
-} from "@/lib/recentlySung";
+import { anchoredBox, currentViewport } from "@/lib/anchoredBox";
+import { type SungBefore } from "@/lib/recentlySung";
+import { RecentlySungMark } from "@/components/RecentlySungMark";
 
 type SingerLite = { id: string; name: string; gender: string | null };
 
@@ -105,36 +103,11 @@ type BhSearchState = { q: string; items: { id: string; title: string }[]; open: 
  * flips above the field when there is more room there, and never renders
  * shorter than a couple of options.
  */
-function dropdownBox(rect: DOMRect): {
-  left: number;
-  top: number;
-  width: number;
-  maxHeight: number;
-} {
-  const vv = typeof window !== "undefined" ? window.visualViewport : null;
-  const viewTop = vv?.offsetTop ?? 0;
-  const viewLeft = vv?.offsetLeft ?? 0;
-  const viewHeight = vv?.height ?? window.innerHeight;
-  const viewWidth = vv?.width ?? window.innerWidth;
-
-  const GAP = 6;
-  const MARGIN = 8;
-  const MIN = 120;
-  const MAX = 320;
-
-  const roomBelow = viewTop + viewHeight - rect.bottom - GAP - MARGIN;
-  const roomAbove = rect.top - viewTop - GAP - MARGIN;
-  const flip = roomBelow < MIN && roomAbove > roomBelow;
-
-  const maxHeight = Math.max(MIN, Math.min(MAX, flip ? roomAbove : roomBelow));
-  const width = Math.min(rect.width, viewWidth - MARGIN * 2);
-
-  return {
-    left: Math.max(viewLeft + MARGIN, Math.min(rect.left, viewLeft + viewWidth - MARGIN - width)),
-    top: flip ? rect.top - GAP - maxHeight : rect.bottom + GAP,
-    width,
-    maxHeight,
-  };
+function dropdownBox(rect: DOMRect) {
+  // The rules and the awkward cases now live in lib/anchoredBox.ts, where they
+  // are pure and tested rather than only reproducible on a phone — and where
+  // the recently-sung popover can use the same ones.
+  return anchoredBox(rect, currentViewport());
 }
 
 /** Cache key for a singer-and-bhajan pair. */
@@ -185,7 +158,7 @@ export function SessionSingersGrid(props: {
    * before it, keyed by bhajan id. Seeded by the server; topped up here for any
    * bhajan that arrives after the page has been drawn. See lib/recentlySung.ts.
    */
-  recentSung: Record<string, RecentSung>;
+  recentSung: Record<string, SungBefore>;
   /** This session's own date, which is what "recently" is measured back from. */
   sessionISO: string;
 }) {
@@ -750,7 +723,7 @@ export function SessionSingersGrid(props: {
    * back with nothing. Without it, a bhajan not sung recently — the common
    * case — would be re-fetched on every render that touched the rows.
    */
-  const [recentSung, setRecentSung] = useState<Record<string, RecentSung>>(props.recentSung);
+  const [recentSung, setRecentSung] = useState<Record<string, SungBefore>>(props.recentSung);
   const askedRecent = useRef<Set<string>>(new Set(Object.keys(props.recentSung)));
 
   useEffect(() => {
@@ -779,7 +752,7 @@ export function SessionSingersGrid(props: {
       try {
         const res = await fetch(`/api/bhajans/recent-sung?${params.toString()}`);
         if (!res.ok || !live) return;
-        const data = (await res.json()) as { recent?: Record<string, RecentSung> };
+        const data = (await res.json()) as { recent?: Record<string, SungBefore> };
         if (!live || !data.recent) return;
         setRecentSung((prev) => ({ ...prev, ...data.recent }));
       } catch {
@@ -1713,22 +1686,20 @@ export function SessionSingersGrid(props: {
                       presence is the whole signal and the row stays quiet in
                       the ordinary case.
                     */}
-                    {r.bhajanId && recentSung[r.bhajanId] ? (
-                      <Link
-                        href={`/bhajans/${r.bhajanId}#sung`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={recentlySungTitle(recentSung[r.bhajanId])}
-                        className="mt-1 flex w-fit items-center gap-1 rounded-full border border-warn/40 bg-warn/[0.08] px-2 py-0.5 text-[11px] text-on-surface-muted underline-offset-2 hover:bg-warn/[0.14] hover:text-on-surface"
-                      >
-                        <span aria-hidden>♪</span>
-                        <span className="whitespace-normal break-words text-left">
-                          {recentlySungLabel(recentSung[r.bhajanId])}
-                        </span>
-                        <span className="sr-only">
-                          — {recentlySungTitle(recentSung[r.bhajanId])} (opens in a new tab)
-                        </span>
-                      </Link>
+                    {/*
+                      WE SANG THIS BEFORE.
+
+                      The whole marker — both states, the panel of dates, the
+                      link on to the bhajan — is components/RecentlySungMark.tsx,
+                      shared with /build and the assign page so the three cannot
+                      drift into three different answers to one question.
+                    */}
+                    {r.bhajanId ? (
+                      <RecentlySungMark
+                        bhajanId={r.bhajanId}
+                        sung={recentSung[r.bhajanId]}
+                        className="mt-1"
+                      />
                     ) : null}
 
                     {/* Open the song itself — lyrics, meaning, pitches, who

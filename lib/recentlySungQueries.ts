@@ -9,10 +9,17 @@ import { prisma } from "@/lib/db";
 import { LIVE_SESSION } from "./archive";
 import { historyCutoff, toISO } from "./dates";
 import { hasBeenSung, melbourneNowLocal } from "./sungCutoff";
-import { RECENT_MONTHS, recentCutoffISO, type RecentSung } from "./recentlySung";
+import {
+  MAX_OCCURRENCES,
+  RECENT_MONTHS,
+  recentCutoffISO,
+  type SungBefore,
+  type SungOccurrence,
+} from "./recentlySung";
 
 /**
- * How recently each of these bhajans was sung, before a given session.
+ * When each of these bhajans was last sung before a given session, and the
+ * evenings themselves.
  *
  * ## What counts as sung
  *
@@ -29,6 +36,20 @@ import { RECENT_MONTHS, recentCutoffISO, type RecentSung } from "./recentlySung"
  * nothing — but the question here is only whether the group sang the thing, and
  * plenty of real rows never had a shruti written down.
  *
+ * ## No lower bound on the query
+ *
+ * It used to stop at the three-month cutoff. It no longer does, because the
+ * marker now has a quiet second state for "sung, but longer ago than that" —
+ * see `SungBefore`. The window is applied afterwards, to `recentCount`, so the
+ * cutoff is one number in one pure function rather than a date in a WHERE
+ * clause and a rule in a component.
+ *
+ * The cost of dropping it is small and worth naming: the whole roster is 709
+ * sung rows across 3,613 bhajans, so "every time these dozen bhajans were sung"
+ * is tens of rows, not thousands. If the history ever grows by an order of
+ * magnitude this wants a lateral join for the top few per bhajan; it does not
+ * want a lower bound back, which would take the quiet state with it.
+ *
  * ## The window, and the session's own rows
  *
  * It ends at the SESSION's date, not today's — see lib/recentlySung.ts for why.
@@ -43,19 +64,18 @@ import { RECENT_MONTHS, recentCutoffISO, type RecentSung } from "./recentlySung"
  * database's throttling multiplies (CLAUDE.md), so this is never called per
  * bhajan in a loop.
  */
-export async function recentlySungFor(
+export async function sungBeforeFor(
   bhajanIds: string[],
   asOfISO: string,
   excludeSessionId: string | null,
   months = RECENT_MONTHS,
-): Promise<Record<string, RecentSung>> {
+): Promise<Record<string, SungBefore>> {
   const ids = [...new Set(bhajanIds.filter(Boolean))];
   if (ids.length === 0) return {};
 
   const cutoffISO = recentCutoffISO(asOfISO, months);
   if (!cutoffISO) return {};
 
-  const from = new Date(`${cutoffISO}T00:00:00.000Z`);
   const asOf = new Date(`${asOfISO}T00:00:00.000Z`);
   if (Number.isNaN(asOf.getTime())) return {};
 
@@ -65,13 +85,10 @@ export async function recentlySungFor(
    * the cutoff; for one long past it is the session.
    *
    * This is the COARSE half, in SQL, exactly as pitchQueries.ts does it — the
-   * two-hour rule needs each session's own start time and is applied below,
-   * over rows already narrowed to a three-month window rather than the whole
-   * roster.
+   * two-hour rule needs each session's own start time and is applied below.
    */
   const coarseCutoff = historyCutoff();
   const to = asOf < coarseCutoff ? asOf : coarseCutoff;
-  if (to < from) return {};
 
   const slots = await prisma.sessionSlot.findMany({
     where: {
@@ -79,31 +96,55 @@ export async function recentlySungFor(
       session: {
         ...LIVE_SESSION,
         format: "bhajans",
-        date: { gte: from, lte: to },
+        date: { lte: to },
         ...(excludeSessionId ? { id: { not: excludeSessionId } } : {}),
       },
     },
     select: {
       bhajanId: true,
-      session: { select: { date: true, startsAt: true } },
+      confirmedPitch: true,
+      singer: { select: { name: true } },
+      session: { select: { id: true, date: true, startsAt: true } },
     },
     orderBy: { session: { date: "desc" } },
   });
 
   const nowLocal = melbourneNowLocal();
-  const out: Record<string, RecentSung> = {};
+  const byBhajan = new Map<string, SungOccurrence[]>();
 
   for (const s of slots) {
     if (!s.bhajanId) continue;
     const dateISO = toISO(s.session.date);
     if (!hasBeenSung(dateISO, s.session.startsAt, nowLocal)) continue;
 
-    const seen = out[s.bhajanId];
-    if (!seen) out[s.bhajanId] = { lastISO: dateISO, count: 1 };
-    else {
-      seen.count += 1;
-      if (dateISO > seen.lastISO) seen.lastISO = dateISO;
-    }
+    const list = byBhajan.get(s.bhajanId) ?? [];
+    list.push({
+      dateISO,
+      sessionId: s.session.id,
+      singerName: s.singer?.name ?? null,
+      confirmedPitch: s.confirmedPitch,
+    });
+    byBhajan.set(s.bhajanId, list);
+  }
+
+  const out: Record<string, SungBefore> = {};
+  for (const [bhajanId, all] of byBhajan) {
+    if (all.length === 0) continue;
+
+    /*
+     * `orderBy` puts the newest first, but two slots on the SAME evening arrive
+     * in whatever order the rows came back, and a Sunday can hold the same
+     * bhajan twice. Sorting by date descending here keeps `lastISO` and the
+     * listed occurrences honest without depending on that.
+     */
+    all.sort((a, b) => (a.dateISO < b.dateISO ? 1 : a.dateISO > b.dateISO ? -1 : 0));
+
+    out[bhajanId] = {
+      lastISO: all[0].dateISO,
+      recentCount: all.filter((o) => o.dateISO >= cutoffISO).length,
+      occurrences: all.slice(0, MAX_OCCURRENCES),
+      more: Math.max(0, all.length - MAX_OCCURRENCES),
+    };
   }
 
   return out;

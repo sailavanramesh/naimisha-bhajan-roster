@@ -26,7 +26,7 @@ import { resolveSessionView, jobBanner, jobsOf } from "@/lib/sessionView";
 import { missingParts, shouldNotifyForSession } from "@/lib/notify";
 import type { NotifyPerson } from "./NotifyPanel";
 import { NOT_ARCHIVED } from "@/lib/archive";
-import { recentlySungFor } from "@/lib/recentlySungQueries";
+import { sungBeforeFor } from "@/lib/recentlySungQueries";
 import { SessionFormat } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -534,7 +534,7 @@ export default async function RosterSessionPage({
   }));
 
   /*
-   * "We sang this recently" for the bhajans already on the session.
+   * "We sang this before" for the bhajans already on the session.
    *
    * Seeded from the server so the marker is on the page at first paint rather
    * than appearing a moment later; the grid tops it up over the API for any
@@ -545,7 +545,7 @@ export default async function RosterSessionPage({
    */
   const [suggestions, recentSung] = await Promise.all([
     getPitchSuggestions(),
-    recentlySungFor(
+    sungBeforeFor(
       initialRows.map((r) => r.bhajanId).filter((x): x is string => Boolean(x)),
       sessionISO,
       sid,
