@@ -5,6 +5,7 @@ import { matches, excerpt } from "@/lib/highlight";
 import { USUAL_START } from "@/lib/sessionsOfDay";
 import { SessionTime } from "@/components/SessionTime";
 import { getRole, can, getSignedInSinger } from "@/lib/auth";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { startSessionOnDate } from "./viewActions";
 import { DefaultViewToggle } from "./DefaultViewToggle";
@@ -61,6 +62,42 @@ function monthKey(d: Date) {
 }
 
 
+/**
+ * How much of the list is drawn at once.
+ *
+ * It was `take: 200` — the whole thing in one page — and that page was 1.28MB
+ * of HTML. Measured against production on 2026-09-10, against a /signin
+ * baseline of 0.25s:
+ *
+ *   200 cards  1.4s   218KB gzipped   1.28MB raw
+ *    60 cards  0.49s   57KB
+ *    35 cards  0.38s   34KB
+ *    14 cards  0.30s   13KB
+ *
+ * TTFB stayed at 0.25s throughout, so NONE of it was the query — it was
+ * rendering two hundred cards and then shipping them twice, once as HTML and
+ * once as the RSC payload beside it. Of the raw 1.28MB, 679KB is that payload
+ * and 277KB is Tailwind class strings repeated down 629 slot rows. Gzip hides
+ * the repetition on the wire; the phone still has to parse and hydrate all of
+ * it, which is the shape of "it doesn't load".
+ *
+ * 200 was quietly the wrong answer as well: 243 sessions have anything on them,
+ * so the oldest 43 could not be reached and nothing said so.
+ *
+ * Thirty is about ten weeks at this group's rate. The search and the dates
+ * still run over EVERY session in the database — this bounds what is drawn,
+ * never what is found.
+ */
+const LIST_PAGE = 30;
+/** The most one page will draw, however high `n` is set in the URL. */
+const LIST_MAX = 400;
+
+function parseCount(s?: string | null): number {
+  const n = Number.parseInt(s ?? "", 10);
+  if (!Number.isFinite(n)) return LIST_PAGE;
+  return Math.max(LIST_PAGE, Math.min(LIST_MAX, n));
+}
+
 function addDaysUTC(d: Date, n: number) {
   const out = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0));
   out.setUTCDate(out.getUTCDate() + n);
@@ -78,6 +115,8 @@ export default async function RosterPage({
     to?: string;
     m?: string;
     d?: string;
+    /** How many sessions the list draws. See LIST_PAGE. */
+    n?: string;
   }>;
 }) {
   const sp = await searchParams;
@@ -131,21 +170,34 @@ export default async function RosterPage({
    * The kinds of session, for the marks in the calendar cells.
    *
    * Every kind, not only this month's — the calendar walks to other months
-   * without asking the server for these again. The pictures are deliberately
-   * NOT selected: they run 17–68KB each and come from
-   * /api/session-kinds/[id]/image, where the browser can cache them. `v` is
+   * without asking the server for these again. The pictures come from
+   * /api/session-kinds/[id]/image, where the browser can cache them; `v` is
    * the kind's updatedAt, which changes the URL when a picture changes.
+   *
+   * RAW, because the only thing wanted from `image` is WHETHER THERE IS ONE.
+   * This said `select: { image: true }` and read it as a boolean — so every
+   * visit to /roster, in EITHER view, pulled 543KB of data URLs out of Postgres
+   * to answer a fourteen-bit question. They never reached the browser, which is
+   * why the payload fix of 2026-08-31 did not find this. It is exactly the trap
+   * CLAUDE.md records against `Bhajan.lyrics`: never select a Text column to
+   * ask whether it is empty.
+   *
+   * `<> ''` as well as `IS NOT NULL` because the code this replaces tested
+   * truthiness, and an empty string is a kind with no picture.
    */
-  const kindRows = await prisma.sessionCategory.findMany({
-    orderBy: [{ order: "asc" }, { name: "asc" }],
-    select: { id: true, name: true, image: true, updatedAt: true },
-  });
+  const kindRows = await prisma.$queryRaw<
+    { id: string; name: string; updatedAt: Date; hasImage: boolean }[]
+  >`
+    SELECT "id", "name", "updatedAt", ("image" IS NOT NULL AND "image" <> '') AS "hasImage"
+      FROM "SessionCategory"
+     ORDER BY "order" ASC, "name" ASC
+  `;
   // `v: null` means no picture, so the cell shows initials instead. A kind
   // with no picture still travels: its name is what the initials come from.
   const kinds = kindRows.map((k) => ({
     id: k.id,
     name: k.name,
-    v: k.image ? k.updatedAt.getTime() : null,
+    v: k.hasImage ? k.updatedAt.getTime() : null,
   }));
   // The list view names its kind and shows its picture from the same rows, so
   // it never has to carry a data URL of its own. See the list query below.
@@ -240,61 +292,84 @@ export default async function RosterPage({
         }[];
       }>
     | null = null;
+  /** How many the list is drawing, and how many there are to draw. */
+  let listShown = LIST_PAGE;
+  let listTotal = 0;
 
   if (view === "list") {
     const from = parseISODate(sp.from) ?? null;
     const to = parseISODate(sp.to) ?? null;
 
-    listSessions = await prisma.session.findMany({
-      where: {
-        ...NOT_ARCHIVED,
-        /*
-         * Same rule as the calendar: a session record can outlive its
-         * contents, and one with nothing on it is not a session. The calendar
-         * already stops drawing those and the arrows already skip them; the
-         * list was still printing them as "nothing rostered", which is exactly
-         * the noise that rule exists to remove.
-         *
-         * A session being BUILT — singers on, bhajans not yet chosen — still
-         * has slots, so it still appears.
-         */
-        slots: { some: {} },
-        ...(q
-          ? {
-              /*
-                Case-insensitive, and it searches the RESOLVED bhajan title.
-                
-                It did neither. `contains` is case-sensitive in Postgres, so
-                "rama" found 7 sessions where "Rama" found 50; and it looked
-                only at SessionSlot.bhajanTitle, the free-text fallback, not at
-                the masterlist title most rows actually carry. Between them,
-                a search for "rama" returned 7 of the 55 sessions containing it.
-              */
-              OR: [
-                { notes: { contains: q, mode: "insensitive" } },
-                { slots: { some: { singer: { name: { contains: q, mode: "insensitive" } } } } },
-                { slots: { some: { bhajanTitle: { contains: q, mode: "insensitive" } } } },
-                { slots: { some: { bhajan: { title: { contains: q, mode: "insensitive" } } } } },
-                // The kind of session, and what it was about. Typing
-                // "festival" should find every festival, which is the fastest
-                // way to answer "what did we do last Guru Purnima".
-                { category: { name: { contains: q, mode: "insensitive" } } },
-                { topic: { contains: q, mode: "insensitive" } },
-                { location: { contains: q, mode: "insensitive" } },
-              ],
-            }
-          : {}),
-        ...(from || to
-          ? {
-              date: {
-                ...(from ? { gte: from } : {}),
-                ...(to ? { lt: addDaysUTC(to, 1) } : {}),
-              },
-            }
-          : {}),
-      },
+    listShown = parseCount(sp.n);
+
+    /*
+     * Named, because the count below has to ask the same question.
+     *
+     * `Prisma.SessionWhereInput` rather than letting it infer: pulled out of
+     * the call, `mode: "insensitive"` widens to `string` and stops being a
+     * QueryMode.
+     */
+    const where: Prisma.SessionWhereInput = {
+      ...NOT_ARCHIVED,
+      /*
+       * Same rule as the calendar: a session record can outlive its
+       * contents, and one with nothing on it is not a session. The calendar
+       * already stops drawing those and the arrows already skip them; the
+       * list was still printing them as "nothing rostered", which is exactly
+       * the noise that rule exists to remove.
+       *
+       * A session being BUILT — singers on, bhajans not yet chosen — still
+       * has slots, so it still appears.
+       */
+      slots: { some: {} },
+      ...(q
+        ? {
+            /*
+              Case-insensitive, and it searches the RESOLVED bhajan title.
+              
+              It did neither. `contains` is case-sensitive in Postgres, so
+              "rama" found 7 sessions where "Rama" found 50; and it looked
+              only at SessionSlot.bhajanTitle, the free-text fallback, not at
+              the masterlist title most rows actually carry. Between them,
+              a search for "rama" returned 7 of the 55 sessions containing it.
+            */
+            OR: [
+              { notes: { contains: q, mode: "insensitive" } },
+              { slots: { some: { singer: { name: { contains: q, mode: "insensitive" } } } } },
+              { slots: { some: { bhajanTitle: { contains: q, mode: "insensitive" } } } },
+              { slots: { some: { bhajan: { title: { contains: q, mode: "insensitive" } } } } },
+              // The kind of session, and what it was about. Typing
+              // "festival" should find every festival, which is the fastest
+              // way to answer "what did we do last Guru Purnima".
+              { category: { name: { contains: q, mode: "insensitive" } } },
+              { topic: { contains: q, mode: "insensitive" } },
+              { location: { contains: q, mode: "insensitive" } },
+            ],
+          }
+        : {}),
+      ...(from || to
+        ? {
+            date: {
+              ...(from ? { gte: from } : {}),
+              ...(to ? { lt: addDaysUTC(to, 1) } : {}),
+            },
+          }
+        : {}),
+    };
+
+    /*
+     * Both in one wave. On Burstable Postgres the number of round trips is
+     * what the throttling multiplies (CLAUDE.md), and this is one page load.
+     *
+     * The count is the part `take: 200` could never say. Without it the foot
+     * of the list can offer more but not say how much more — which is how 43
+     * sessions sat past the end of the list for months with nothing to show
+     * they were there.
+     */
+    const listQuery = prisma.session.findMany({
+      where,
       orderBy: { date: "desc" },
-      take: 200,
+      take: listShown,
       /*
        * SELECT, not include, and the kind's PICTURE IS NOT IN IT.
        *
@@ -332,6 +407,32 @@ export default async function RosterPage({
         },
       },
     });
+
+    const [rows, total] = await Promise.all([listQuery, prisma.session.count({ where })]);
+    listSessions = rows;
+    listTotal = total;
+  }
+
+  const listDrawn = listSessions?.length ?? 0;
+  const listRemaining = Math.max(0, listTotal - listDrawn);
+
+  /**
+   * The same list, drawing `n` of it, with the search and the dates intact.
+   *
+   * A LINK, not a button: this is a server-rendered page, so "more" is only a
+   * different address. It survives being shared, it works before any
+   * JavaScript arrives, and Back returns to the shorter page rather than
+   * re-running anything. `#more` lands the reader at the foot of what they
+   * were already reading instead of the top of a longer page.
+   */
+  function listHref(n: number) {
+    const params = new URLSearchParams({ view: "list" });
+    if (q) params.set("q", q);
+    if (sp.from) params.set("from", sp.from);
+    if (sp.to) params.set("to", sp.to);
+    if (tile === "band") params.set("tile", "band");
+    params.set("n", String(n));
+    return `/roster?${params.toString()}#more`;
   }
 
   return (
@@ -620,6 +721,44 @@ export default async function RosterPage({
                   );
                 })}
               </div>
+
+              {/*
+                How much of the list this is, and how to see more of it.
+
+                It used to end without a word, at whatever `take: 200` had
+                stopped at — so a search that found nothing looked identical to
+                a page that had not finished loading, and the sessions past the
+                two hundredth simply did not exist as far as anyone could tell.
+              */}
+              <p
+                id="more"
+                className="flex flex-wrap items-baseline gap-x-3 gap-y-1 px-1 text-[12px] text-on-surface-muted"
+              >
+                {listTotal === 0 ? (
+                  <span>No sessions match. Try fewer words, or clear the dates.</span>
+                ) : (
+                  <span>
+                    Showing {listDrawn} of {listTotal}{" "}
+                    {listTotal === 1 ? "session" : "sessions"}.
+                  </span>
+                )}
+                {listRemaining > 0 ? (
+                  <Link
+                    href={listHref(listShown + LIST_PAGE)}
+                    className="text-brass-ink underline underline-offset-2"
+                  >
+                    Show {Math.min(LIST_PAGE, listRemaining)} more
+                  </Link>
+                ) : null}
+                {listRemaining > LIST_PAGE ? (
+                  <Link
+                    href={listHref(LIST_MAX)}
+                    className="underline underline-offset-2 hover:text-on-surface"
+                  >
+                    {listTotal <= LIST_MAX ? `Show all ${listTotal}` : `Show ${LIST_MAX}`}
+                  </Link>
+                ) : null}
+              </p>
             </>
           )}
         </CardContent>
