@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { setTablaOverride } from "./tablaActions";
-import { ASHRAM_TABLAS } from "@/lib/tabla";
+import { setTablaOverride, setTablaRagaRule } from "./tablaActions";
+import { ASHRAM_TABLAS, DEGREE_PREFERENCE, type DegreeKey, type TablaStep } from "@/lib/tabla";
+import { NOTE_NAMES } from "@/lib/pitch";
 
 export type PanelSlot = {
   position: number;
@@ -17,7 +18,23 @@ export type PanelSlot = {
   confidence: "certain" | "assumed" | "none";
   overridden: boolean;
   alternatives: string[];
+  /** Every degree the rule considered, and what became of each. */
+  steps: TablaStep[];
+  /** The raga's notes as semitones above Sa, or null when not recorded. */
+  ragaSemitones: number[] | null;
+  /** Which layer answered: the standard order, a raga rule, or a hand-set note. */
+  decidedBy: "rule" | "raga" | "hand";
+  /** The raga rule in force for this raga, if any. */
+  ragaRuleDegree: DegreeKey | null;
 };
+
+/** Sa, R, G… for the degrees the raga actually has. Read left to right. */
+const SEMITONE_NAMES = ["Sa", "r", "R", "g", "G", "m", "M", "P", "d", "D", "n", "N"];
+
+function describeScale(semitones: number[] | null): string {
+  if (!semitones) return "notes not recorded";
+  return [...semitones].sort((a, b) => a - b).map((n) => SEMITONE_NAMES[n] ?? n).join(" ");
+}
 
 export type PanelCall = { note: string; forBhajans: string[]; anyAssumed: boolean };
 
@@ -48,22 +65,27 @@ export function TablaPanel({
   const [busy, setBusy] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [openRow, setOpenRow] = useState<number | null>(null);
+  /*
+   * The working is a SEPARATE disclosure from the change control.
+   *
+   * Sailavan, 2026-09-10, asked for "that amount of the working being visible"
+   * AND for "me being able to visually select the one i'd prefer" — two things,
+   * and reading the rule is much the commoner of them. Folding them into one
+   * panel would mean opening an editor to answer a question.
+   */
+  const [openWhy, setOpenWhy] = useState<number | null>(null);
 
   const unresolved = slots.filter((s) => !s.note && s.confirmedPitch);
   const anyAssumed = slots.some((s) => s.confidence === "assumed");
 
-  const save = (slot: PanelSlot, note: string, scope: "raga" | "any") => {
-    if (slot.sa === null) return;
+  const run = (
+    slot: PanelSlot,
+    fn: () => Promise<{ ok: true } | { ok: false; error: string }>,
+  ) => {
     setBusy(slot.position);
     startTransition(async () => {
       try {
-        const res = await setTablaOverride({
-          sessionId,
-          raga: slot.raga,
-          sa: slot.sa!,
-          note,
-          scope,
-        });
+        const res = await fn();
         if (!res.ok) setError(res.error);
         else {
           setError(null);
@@ -74,6 +96,27 @@ export function TablaPanel({
         setBusy(null);
       }
     });
+  };
+
+  /** A drum, pinned to one pitch. `scope: "any"` means every raga at that Sa. */
+  const saveNote = (slot: PanelSlot, note: string, scope: "raga" | "any") => {
+    if (slot.sa === null) return;
+    run(slot, () =>
+      setTablaOverride({ sessionId, raga: slot.raga, sa: slot.sa!, note, scope }),
+    );
+  };
+
+  /**
+   * A degree, for this raga, at every pitch.
+   *
+   * The one an override cannot express: a stored note only ever answers one Sa,
+   * whereas "for Desh, prefer the fifth" answers all twelve. Picking a DRUM
+   * here would be the wrong question, so the buttons below offer degrees and
+   * name the drum each would give at this pitch.
+   */
+  const saveRagaRule = (slot: PanelSlot, degree: string) => {
+    if (!slot.raga) return;
+    run(slot, () => setTablaRagaRule({ sessionId, raga: slot.raga!, degree }));
   };
 
   return (
@@ -206,19 +249,88 @@ export function TablaPanel({
                 {s.overridden ? "set by hand" : s.confidence === "assumed" ? "assumed" : s.why}
               </span>
 
-              {canEdit && s.sa !== null ? (
-                <button
-                  type="button"
-                  onClick={() => setOpenRow(openRow === s.position ? null : s.position)}
-                  className="shrink-0 text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface sm:col-start-5 sm:justify-self-end sm:self-center"
-                >
-                  {openRow === s.position ? "close" : "change"}
-                </button>
-              ) : (
-                <span className="hidden sm:block" />
-              )}
+              <span className="flex shrink-0 items-center gap-2 sm:col-start-5 sm:justify-self-end sm:self-center">
+                {/*
+                  "why" is open to EVERYBODY, unlike "change".
+                  
+                  A tabla player who cannot edit the roster is exactly the
+                  person who most wants to know why they are being sent for a
+                  C — and they are the one carrying it.
+                */}
+                {s.steps.length > 0 ? (
+                  <button
+                    type="button"
+                    onClick={() => setOpenWhy(openWhy === s.position ? null : s.position)}
+                    aria-expanded={openWhy === s.position}
+                    className="text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+                  >
+                    {openWhy === s.position ? "hide" : "why"}
+                  </button>
+                ) : null}
+                {canEdit && s.sa !== null ? (
+                  <button
+                    type="button"
+                    onClick={() => setOpenRow(openRow === s.position ? null : s.position)}
+                    aria-expanded={openRow === s.position}
+                    className="text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+                  >
+                    {openRow === s.position ? "close" : "change"}
+                  </button>
+                ) : null}
+              </span>
               </div>
             </div>
+
+            {/*
+              THE WORKING.
+
+              Sailavan, 2026-09-10: "I like that amount of the working being
+              visible... so its not manually being changed everytime and the
+              rule can cover more scenarios." The point is not transparency for
+              its own sake — it is that seeing WHERE the rule went wrong tells
+              you which level to correct it at. A row that reads "Ma · C · in
+              the raga · a better degree won" is a preference; one that reads
+              "P · D · not in this raga" is the scale table being wrong.
+
+              Every degree, including the ones tried after the winner, so the
+              list is the rule rather than an excerpt of it.
+            */}
+            {openWhy === s.position ? (
+              <div className="grid gap-1.5 border-t border-rule-surface pt-1.5">
+                <p className="text-[11px] text-on-surface-muted">
+                  {s.raga ? <strong>{s.raga}</strong> : "No raga recorded"}
+                  {" · "}
+                  {describeScale(s.ragaSemitones)}
+                  {s.sa !== null ? ` · Sa is ${NOTE_NAMES[s.sa]}` : ""}
+                </p>
+
+                <p className="text-[11px] text-on-surface-muted">
+                  {s.decidedBy === "hand"
+                    ? "Set by hand for this raga and pitch — the rule below is what it replaced."
+                    : s.decidedBy === "raga"
+                      ? `A rule for this raga puts ${DEGREE_PREFERENCE.find((d) => d.key === s.ragaRuleDegree)?.description ?? "a degree"} first.`
+                      : "The standard order: Sa, then the fifth, then the fourth, then a third, a sixth, a flat seventh."}
+                </p>
+
+                <ul className="grid gap-0.5 text-[11px]">
+                  {s.steps.map((st, i) => (
+                    <li
+                      key={`${st.degree}-${st.semitone}-${i}`}
+                      className={[
+                        "grid grid-cols-[2.25rem_2.5rem_minmax(0,1fr)] items-baseline gap-x-2 rounded-[6px] px-1.5 py-0.5",
+                        st.chosen ? "bg-brass/[0.12] font-semibold" : "odd:bg-panel",
+                      ].join(" ")}
+                    >
+                      <span className="font-mono">{st.label}</span>
+                      <span className="font-mono">{st.note}</span>
+                      <span className="min-w-0 text-on-surface-muted">
+                        {st.chosen ? "chosen" : st.passed}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
             {!s.note && s.alternatives.length > 0 ? (
               <p className="text-xs text-on-surface-muted">
@@ -228,10 +340,82 @@ export function TablaPanel({
             ) : null}
 
             {openRow === s.position && canEdit ? (
-              <div className="grid gap-1.5 border-t border-rule-surface pt-1.5">
+              <div className="grid gap-2.5 border-t border-rule-surface pt-1.5">
+                {/*
+                  TWO SCOPES, because they answer different questions.
+
+                  Sailavan, 2026-09-10: an override should be "not just
+                  remembering it for that pitch and that raag, but almost for
+                  that raag". The upper block is the raga-wide one and comes
+                  first for that reason — it is the one that stops a question
+                  recurring, and the per-pitch drum below is the escape hatch
+                  for a genuine one-off.
+
+                  The raga-wide block offers DEGREES, not drums, and that is
+                  forced rather than chosen: a drum cannot generalise across
+                  pitches. The fifth of G is D and the fifth of F is C, so a
+                  stored "D" would be wrong for the same raga a week later.
+                  Each button names the drum its degree gives AT THIS PITCH, so
+                  the abstract choice still has a concrete answer beside it.
+                */}
+                {s.raga ? (
+                  <div className="grid gap-1">
+                    <p className="text-[11px] text-on-surface-muted">
+                      For <strong>{s.raga}</strong>, at every pitch — prefer:
+                    </p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {DEGREE_PREFERENCE.map((d) => {
+                        const step = s.steps.find((st) => st.degree === d.key);
+                        const on = s.ragaRuleDegree === d.key;
+                        // Not in the raga, or not a drum the centre owns: the
+                        // rule would quietly do nothing, so say so rather than
+                        // offering a button that looks like it works.
+                        const dead = step ? step.inRaga === false || !step.owned : false;
+                        return (
+                          <button
+                            key={d.key}
+                            type="button"
+                            disabled={busy === s.position || dead}
+                            title={
+                              dead
+                                ? `${d.description} is not available here — ${step?.passed ?? ""}`
+                                : `Prefer ${d.description} for ${s.raga}, at every pitch`
+                            }
+                            onClick={() => saveRagaRule(s, on ? "" : d.key)}
+                            className={[
+                              "h-7 rounded-[8px] border px-2 text-xs",
+                              on
+                                ? "border-brass bg-brass/15 font-semibold"
+                                : "border-rule-surface bg-field hover:border-brass/50",
+                              dead ? "opacity-40" : "",
+                            ].join(" ")}
+                          >
+                            {d.description}
+                            {step ? (
+                              <span className="ms-1 font-mono text-on-surface-muted">
+                                {step.note}
+                              </span>
+                            ) : null}
+                          </button>
+                        );
+                      })}
+                      {s.ragaRuleDegree ? (
+                        <button
+                          type="button"
+                          disabled={busy === s.position}
+                          onClick={() => saveRagaRule(s, "")}
+                          className="h-7 rounded-[8px] border border-rule-surface bg-field px-2 text-xs text-on-surface-muted hover:border-brass/50"
+                        >
+                          drop this raga rule
+                        </button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
+
                 <p className="text-[11px] text-on-surface-muted">
-                  Applies to <strong>{s.raga || "any raga"}</strong> at this pitch, now and in
-                  future.
+                  Or pin a drum for <strong>{s.raga || "any raga"}</strong> at{" "}
+                  <strong>this pitch only</strong>:
                 </p>
                 <div className="flex flex-wrap items-center gap-1.5">
                   {ASHRAM_TABLAS.map((t) => (
@@ -239,7 +423,7 @@ export function TablaPanel({
                       key={t}
                       type="button"
                       disabled={busy === s.position}
-                      onClick={() => save(s, t, s.raga ? "raga" : "any")}
+                      onClick={() => saveNote(s, t, s.raga ? "raga" : "any")}
                       className={[
                         "h-7 rounded-[8px] border px-2 font-mono text-sm",
                         s.note === t ? "border-brass bg-brass/15 font-semibold" : "border-rule-surface bg-field hover:border-brass/50",
@@ -251,7 +435,7 @@ export function TablaPanel({
                   <button
                     type="button"
                     disabled={busy === s.position}
-                    onClick={() => save(s, "none", s.raga ? "raga" : "any")}
+                    onClick={() => saveNote(s, "none", s.raga ? "raga" : "any")}
                     className="h-7 rounded-[8px] border border-rule-surface bg-field px-2 text-xs hover:border-brass/50"
                   >
                     none fits
@@ -260,7 +444,7 @@ export function TablaPanel({
                     <button
                       type="button"
                       disabled={busy === s.position}
-                      onClick={() => save(s, "", s.raga ? "raga" : "any")}
+                      onClick={() => saveNote(s, "", s.raga ? "raga" : "any")}
                       className="h-7 rounded-[8px] border border-rule-surface bg-field px-2 text-xs text-on-surface-muted hover:border-brass/50"
                     >
                       use the rule again

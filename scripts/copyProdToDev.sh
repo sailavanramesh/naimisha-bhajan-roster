@@ -38,6 +38,37 @@ fi
 # The database a URL names: after the last "/", before any "?".
 db_name() { local base="${1%%\?*}"; echo "${base##*/}"; }
 
+# A connection string libpq will accept.
+#
+# Prisma's URL carries pool settings that libpq has never heard of, and it
+# STOPS rather than ignoring them:
+#
+#   pg_dump: error: invalid URI query parameter: "connection_limit"
+#
+# On the original Mac this never came up, because .env there IS production and
+# holds a bare URL. It only appears on the setup-env.sh path, where the string
+# is read back from the app service — which is where the pool settings live.
+#
+# Dropped by name, so anything libpq does understand (sslmode above all, and
+# this server requires it) still gets through.
+libpq_url() {
+  local url="$1"
+  local base="${url%%\?*}"
+  local query="${url#"$base"}"
+  query="${query#\?}"
+  if [ -z "$query" ]; then echo "$base"; return; fi
+
+  local keep="" pair
+  local IFS='&'
+  for pair in $query; do
+    case "${pair%%=*}" in
+      connection_limit|pool_timeout|pgbouncer|schema|socket_timeout|statement_cache_size) ;;
+      *) keep="${keep:+$keep&}$pair" ;;
+    esac
+  done
+  echo "${base}${keep:+?$keep}"
+}
+
 case "$(db_name "$ENV_URL")" in
   naimisha)
     PROD_URL="$ENV_URL"
@@ -119,7 +150,7 @@ DUMP="$(mktemp -t naimisha-prod-XXXXXX.sql)"
 trap 'rm -f "$DUMP"' EXIT
 
 echo "Dumping production…"
-pg_dump --no-owner --no-privileges --clean --if-exists "$PROD_URL" > "$DUMP"
+pg_dump --no-owner --no-privileges --clean --if-exists "$(libpq_url "$PROD_URL")" > "$DUMP"
 echo "  $(wc -l < "$DUMP") lines"
 
 # Homebrew ships pg_dump 17; the server is PostgreSQL 16. A newer dumper
@@ -133,7 +164,7 @@ echo "  $(wc -l < "$DUMP") lines"
 sed -i.bak '/^SET transaction_timeout = /d' "$DUMP" && rm -f "$DUMP.bak"
 
 echo "Restoring into dev…"
-psql "$DEV_URL" -v ON_ERROR_STOP=1 -q -f "$DUMP"
+psql "$(libpq_url "$DEV_URL")" -v ON_ERROR_STOP=1 -q -f "$DUMP"
 
 echo
 echo "Done. Dev now matches production as of $(date '+%Y-%m-%d %H:%M')."

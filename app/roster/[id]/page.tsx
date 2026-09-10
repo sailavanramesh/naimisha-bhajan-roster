@@ -637,6 +637,10 @@ export default async function RosterSessionPage({
           confidence: sl.choice.confidence,
           overridden: sl.overridden,
           alternatives: sl.choice.alternativesIfNone,
+          steps: sl.choice.steps,
+          ragaSemitones: sl.ragaSemitones ? [...sl.ragaSemitones] : null,
+          decidedBy: sl.decidedBy,
+          ragaRuleDegree: sl.ragaRule?.degree ?? null,
         }))}
         />
       ) : null}

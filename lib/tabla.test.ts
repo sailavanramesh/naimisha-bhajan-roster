@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { recommendTablaForLabel, tablasForSession, DEGREE_PREFERENCE } from './tabla';
+import { recommendTablaForLabel, tablasForSession, DEGREE_PREFERENCE, isDegreeKey } from './tabla';
 import { ragaScale } from './ragaScales';
 import { NOTE_NAMES } from './pitch';
 
@@ -9,9 +9,25 @@ const ASHRAM = ASHRAM_NOTES.map((n) => NOTE_NAMES.indexOf(n as never));
 const scale = (name: string) => ragaScale(name);
 
 describe('degree preference', () => {
-  it('prefers the fourth over the third — the raga Desh case', () => {
+  /*
+   * REVERSED 2026-09-10. Sailavan: "it should be the Pa over Ma in ragas where
+   * Pa exists in the Raga. If only Ma in the Raga, then Ma." The second half
+   * needs no rule of its own — the raga check does it — so this is the whole
+   * change. See the top of tabla.ts for the numbers.
+   */
+  it('prefers the fifth over the fourth', () => {
     const order = DEGREE_PREFERENCE.map((d) => d.key);
+    expect(order.indexOf('pa')).toBeLessThan(order.indexOf('ma'));
+  });
+
+  it('still prefers both of them over the third — the raga Desh case', () => {
+    const order = DEGREE_PREFERENCE.map((d) => d.key);
+    expect(order.indexOf('pa')).toBeLessThan(order.indexOf('ga'));
     expect(order.indexOf('ma')).toBeLessThan(order.indexOf('ga'));
+  });
+
+  it('keeps Sa first of all', () => {
+    expect(DEGREE_PREFERENCE[0].key).toBe('sa');
   });
 
   it('never offers the second, the seventh or the tritone', () => {
@@ -26,17 +42,54 @@ describe('recommendTabla — the common cases', () => {
     expect(r).toMatchObject({ note: 'D', degree: 'sa', confidence: 'certain' });
   });
 
-  it('uses the FOURTH when Sa is not owned, even where the fifth is also owned', () => {
-    // Sa = G. The ashram owns both the fourth (C) and the fifth (D), and the
-    // fourth wins: Sailavan, 2026-08-20, "prioritise the Sa, then Ma, then it
-    // depends on the raga". Shankarabharanam has a natural Ma, so C is real.
+  it('uses the FIFTH when Sa is not owned, even where the fourth is also owned', () => {
+    // Sa = G. The ashram owns both the fifth (D) and the fourth (C), and the
+    // fifth wins as of 2026-09-10. Shankarabharanam has both, so both are real
+    // candidates and the order alone decides — which is what makes this the
+    // test that would catch the order being flipped back by accident.
     const r = recommendTablaForLabel('5 Pancham / G', scale('Shankarabharanam'), ASHRAM);
+    expect(r).toMatchObject({ note: 'D', degree: 'pa' });
+  });
+
+  /*
+   * THE TWO ROWS THAT PROMPTED THE REVERSAL, pinned as themselves.
+   *
+   * Both at Sa G on one session, both given the fourth (C) where Sailavan
+   * wanted the fifth (D). Desh is the honest case: its shudh Ma is a real,
+   * strong note, so the old rule was reasoning correctly from correct data.
+   */
+  it('gives the fifth for Yaman Kalyan at Sa G', () => {
+    const r = recommendTablaForLabel('5 Pancham / G', scale('Yaman Kalyan'), ASHRAM);
+    expect(r).toMatchObject({ note: 'D', degree: 'pa' });
+  });
+
+  it('gives the fifth for Desh at Sa G', () => {
+    const r = recommendTablaForLabel('5 Pancham / G', scale('Desh'), ASHRAM);
+    expect(r).toMatchObject({ note: 'D', degree: 'pa' });
+  });
+
+  /*
+   * And the two spellings of one raga now agree. They did not: `yaman kalyan`
+   * lists BOTH fourths in lib/ragaScales.ts — true of the raga, where shudh Ma
+   * is an ornamental touch in descent — so under Ma-first it took a note
+   * nobody would tune a drum to, while plain `yaman` took the fifth.
+   */
+  it('agrees between Yaman and Yaman Kalyan', () => {
+    const a = recommendTablaForLabel('5 Pancham / G', scale('Yaman'), ASHRAM);
+    const b = recommendTablaForLabel('5 Pancham / G', scale('Yaman Kalyan'), ASHRAM);
+    expect(a.note).toBe(b.note);
+  });
+
+  it('falls to the fourth when the raga has no fifth to offer', () => {
+    // Malkauns is Sa ga ma dha ni — no Pa at all. "If only Ma in the Raga,
+    // then Ma", without a rule saying so: the scale check does it.
+    expect(scale('Hindolam / Malkauns')).not.toContain(7);
+    const r = recommendTablaForLabel('5 Pancham / G', scale('Hindolam / Malkauns'), ASHRAM);
     expect(r).toMatchObject({ note: 'C', degree: 'ma' });
   });
 
-  it('falls to the fifth when the raga has no fourth to offer', () => {
-    // Sa = G in Hamsadhwani, which is Sa Ri Ga Pa Ni — no Ma at all. So the
-    // fourth is not available to prefer and the fifth, D, is the answer.
+  it('takes the fifth where the raga has no fourth', () => {
+    // Sa = G in Hamsadhwani, which is Sa Ri Ga Pa Ni — no Ma at all.
     const r = recommendTablaForLabel('5 Pancham / G', scale('Hamsadhwani'), ASHRAM);
     expect(r).toMatchObject({ note: 'D', degree: 'pa' });
   });
@@ -147,11 +200,12 @@ describe('tablasForSession', () => {
       { title: 'C', choice: recommendTablaForLabel('1 Pancham / C', scale('Bilawal'), ASHRAM) },
     ];
     const { calls, unresolved } = tablasForSession(slots);
-    // B is Sa G, whose fourth is C — so it now shares the C drum with bhajan C
-    // rather than the D drum with bhajan A.
+    // B is Sa G, whose FIFTH is D — so from 2026-09-10 it shares the D drum
+    // with bhajan A (Sa D) rather than the C drum with bhajan C. Under the old
+    // Ma-first order it took C, and this test read the other way round.
     expect(calls.map((c) => c.note)).toEqual(['C', 'D']);
-    expect(calls.find((c) => c.note === 'C')!.forBhajans).toEqual(['B', 'C']);
-    expect(calls.find((c) => c.note === 'D')!.forBhajans).toEqual(['A']);
+    expect(calls.find((c) => c.note === 'C')!.forBhajans).toEqual(['C']);
+    expect(calls.find((c) => c.note === 'D')!.forBhajans).toEqual(['A', 'B']);
     expect(unresolved).toHaveLength(0);
   });
 
@@ -228,10 +282,16 @@ describe('the shruti ladder column — every Sa, one raga', () => {
     const differ = PANCHAM.filter(
       (label) => recommendTablaForLabel(label, null, ASHRAM).note !== oldRule(label),
     );
-    // The two rules agree on only 2 of the 12 Sa. Agreement needs the fifth
-    // to be BOTH the drum the new rule reaches for — so Sa and Ma are not
-    // owned — and a drum the centre actually has.
-    expect(differ.length).toBe(10);
+    /*
+     * They agree on 4 of the 12 Sa, up from 2 before the order was reversed on
+     * 2026-09-10 — which is the point of the reversal, not a coincidence.
+     * Agreement now needs only that the fifth is a drum the centre owns and
+     * that Sa is not; it no longer also needs the fourth to be missing.
+     *
+     * The rules remain different in kind, which is why this test stays: the
+     * old one named the fifth whether or not the building held that drum.
+     */
+    expect(differ.length).toBe(8);
   });
 
   it('says "none" rather than inventing one, and only where nothing fits', () => {
@@ -242,5 +302,107 @@ describe('the shruti ladder column — every Sa, one raga', () => {
       const usable = [0, 5, 7].some((s) => ASHRAM.includes((sa + s) % 12));
       expect(recommendTablaForLabel(label, null, ASHRAM).note === null, label).toBe(!usable);
     }
+  });
+});
+
+describe('a raga rule — a preference that holds at every pitch', () => {
+  /*
+   * The mechanism Sailavan asked for: "not just remembering it for that pitch
+   * and that raag, but almost for that raag". It stores a DEGREE, because a
+   * note cannot generalise across pitches — the fifth of G is D and the fifth
+   * of F is C.
+   */
+  it('pulls its degree to the front, at every Sa', () => {
+    const withRule = (label: string) =>
+      recommendTablaForLabel(label, scale('Shankarabharanam'), ASHRAM, 'ma');
+
+    // Sa G: the standard order gives the fifth (D); the rule asks for the fourth.
+    expect(recommendTablaForLabel('5 Pancham / G', scale('Shankarabharanam'), ASHRAM).degree).toBe('pa');
+    expect(withRule('5 Pancham / G')).toMatchObject({ note: 'C', degree: 'ma' });
+
+    // And the SAME rule at another Sa resolves to another drum, which is the
+    // whole reason it stores a degree.
+    expect(withRule('7 Pancham / B')).toMatchObject({ note: 'E', degree: 'ma' });
+  });
+
+  it('cannot conjure a note the raga does not contain', () => {
+    // Malkauns has no Pa. A rule asking for one is simply ignored, and the
+    // scale check still decides — a preference must never overrule the music.
+    expect(scale('Hindolam / Malkauns')).not.toContain(7);
+    const r = recommendTablaForLabel('5 Pancham / G', scale('Hindolam / Malkauns'), ASHRAM, 'pa');
+    expect(r.degree).not.toBe('pa');
+    expect(r).toMatchObject({ note: 'C', degree: 'ma' });
+  });
+
+  it('does nothing when its degree is already first', () => {
+    const a = recommendTablaForLabel('5 Pancham / G', scale('Desh'), ASHRAM);
+    const b = recommendTablaForLabel('5 Pancham / G', scale('Desh'), ASHRAM, 'pa');
+    expect(b.note).toBe(a.note);
+    expect(b.degree).toBe(a.degree);
+  });
+
+  it('ignores a degree it does not recognise', () => {
+    expect(isDegreeKey('pa')).toBe(true);
+    expect(isDegreeKey('ni')).toBe(true);
+    expect(isDegreeKey('tivra-ma')).toBe(false);
+    expect(isDegreeKey('')).toBe(false);
+  });
+});
+
+describe('the working', () => {
+  /*
+   * The steps are what make the answer arguable rather than asserted — Sailavan
+   * asked to see "that amount of the working". They must therefore be COMPLETE:
+   * the walk carries on past the winner, so the panel can show what was tried
+   * after it as well as what was skipped before it.
+   */
+  it('records every degree considered, not just the winner', () => {
+    const r = recommendTablaForLabel('5 Pancham / G', scale('Shankarabharanam'), ASHRAM);
+    const chosen = r.steps.filter((s) => s.chosen);
+    expect(chosen).toHaveLength(1);
+    expect(chosen[0].degree).toBe('pa');
+    // One step per FORM: six degrees, two of which have two forms.
+    expect(r.steps.length).toBe(8);
+  });
+
+  it('says why each one was passed over', () => {
+    const r = recommendTablaForLabel('5 Pancham / G', scale('Shankarabharanam'), ASHRAM);
+    const sa = r.steps.find((s) => s.degree === 'sa')!;
+    // Sa G: the centre owns no G, which is why the fifth got a look at all.
+    expect(sa.owned).toBe(false);
+    expect(sa.passed).toBe('the ashram has no G');
+
+    const ma = r.steps.find((s) => s.degree === 'ma')!;
+    expect(ma.owned).toBe(true);
+    expect(ma.inRaga).toBe(true);
+    expect(ma.passed).toBe('a better degree won');
+  });
+
+  it('marks a degree the raga does not have', () => {
+    const r = recommendTablaForLabel('5 Pancham / G', scale('Hindolam / Malkauns'), ASHRAM);
+    const pa = r.steps.find((s) => s.degree === 'pa')!;
+    expect(pa.inRaga).toBe(false);
+    expect(pa.passed).toBe('not in this raga');
+  });
+
+  it('says the raga is unknown rather than pretending to know', () => {
+    const r = recommendTablaForLabel('5 Pancham / G', null, ASHRAM);
+    expect(r.confidence).toBe('assumed');
+    for (const s of r.steps) expect(s.inRaga).toBeNull();
+    const ga = r.steps.find((s) => s.degree === 'ga')!;
+    expect(ga.passed).toBe('not one of the three assumed');
+  });
+
+  it('names both forms of a two-form degree distinctly', () => {
+    const r = recommendTablaForLabel('5 Pancham / G', scale('Shankarabharanam'), ASHRAM);
+    const thirds = r.steps.filter((s) => s.degree === 'ga').map((s) => s.label);
+    expect(thirds).toEqual(['Ga', 'Ga\u266d']);
+  });
+
+  it('still records the working when nothing fits', () => {
+    const r = recommendTablaForLabel('2.5 Pancham / D#', scale('Hamsadhwani'), ASHRAM);
+    expect(r.note).toBeNull();
+    expect(r.steps.length).toBeGreaterThan(0);
+    expect(r.steps.every((s) => !s.chosen)).toBe(true);
   });
 });
