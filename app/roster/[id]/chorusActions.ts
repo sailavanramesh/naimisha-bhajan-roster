@@ -44,6 +44,11 @@ import { revalidatePath } from "next/cache";
 
 const Slot = z.object({ slotId: z.string().min(1) });
 const SlotSinger = Slot.extend({ singerId: z.string().min(1) });
+/*
+ * A CAP, because this comes from the browser. Twenty is far more than the desk
+ * has mics for and far less than a request that wants thinking about.
+ */
+const SlotSingers = Slot.extend({ singerIds: z.array(z.string().min(1)).min(1).max(20) });
 
 export type ChorusResult = { ok: true; mics: ChorusMic[] } | { ok: false; error: string };
 
@@ -76,37 +81,61 @@ async function micsOf(slotId: string): Promise<ChorusMic[]> {
   }));
 }
 
-/** Put somebody on a chorus mic for this bhajan. Live desk state — see above. */
-export async function addChorusSinger(input: {
+/**
+ * Put one or MORE people on chorus mics for this bhajan. Live desk state.
+ *
+ * Plural because of how the desk actually works. Sailavan, 2026-09-10: "when
+ * adding chorus mics, there should be a way for it to be multi select so don't
+ * have to add each person 1 by 1. then once they're all selected, the cushion
+ * allocation can be done." Three people pick up chorus mics together at the
+ * start of an evening, so choosing them was three separate round trips and
+ * three separate "Saved ✓" — one act reported as three.
+ *
+ * The cushions are deliberately NOT set here. Who is on a mic and which cushion
+ * they took are two different questions asked at two different moments — the
+ * second one once everybody is holding something — so this leaves every cushion
+ * null and the cell's dots answer it after.
+ *
+ * IDEMPOTENT, which matters more here than it did for one name: a second tap on
+ * "Add" because the first looked like it had not taken must not be an error
+ * anybody has to understand. Names already on the mic are filtered out before
+ * positions are handed out, so nobody is renumbered by being added twice, and
+ * `skipDuplicates` covers the same thing happening from another device between
+ * the read and the write.
+ */
+export async function addChorusSingers(input: {
   slotId: string;
-  singerId: string;
+  singerIds: string[];
 }): Promise<ChorusResult> {
   await requireCapability("setMicCushion");
 
-  const parsed = SlotSinger.safeParse(input);
+  const parsed = SlotSingers.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Could not set that." };
-  const { slotId, singerId } = parsed.data;
+  const { slotId, singerIds } = parsed.data;
 
   const sessionId = await sessionOf(slotId);
   if (!sessionId) return { ok: false, error: "That row is gone." };
 
   /*
-   * Last in the list, and idempotent. Two taps on the same name — the second
-   * one because the first looked like it had not taken — must not be an error
-   * the user has to understand; the unique key on (slot, singer) makes the
-   * second a no-op that still returns the list.
+   * One read for both things needed: who is already on (so they are not
+   * renumbered) and the highest position (so the new ones go on the end, in the
+   * order they were ticked).
    */
-  const last = await prisma.sessionSlotChorus.findFirst({
+  const existing = await prisma.sessionSlotChorus.findMany({
     where: { slotId },
-    select: { position: true },
-    orderBy: { position: "desc" },
+    select: { singerId: true, position: true },
   });
+  const taken = new Set(existing.map((e) => e.singerId));
+  const base = existing.reduce((m, e) => Math.max(m, e.position), 0);
 
-  await prisma.sessionSlotChorus.upsert({
-    where: { slotId_singerId: { slotId, singerId } },
-    create: { slotId, singerId, position: (last?.position ?? 0) + 1 },
-    update: {},
-  });
+  const toAdd = [...new Set(singerIds)].filter((id) => !taken.has(id));
+
+  if (toAdd.length > 0) {
+    await prisma.sessionSlotChorus.createMany({
+      data: toAdd.map((singerId, i) => ({ slotId, singerId, position: base + i + 1 })),
+      skipDuplicates: true,
+    });
+  }
 
   revalidatePath(`/roster/${sessionId}`);
   return { ok: true, mics: await micsOf(slotId) };
