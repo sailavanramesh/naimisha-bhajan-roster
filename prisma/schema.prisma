@@ -488,9 +488,9 @@ model Session {
   /// see lib/archive.ts, which is where the filter is named once.
   ///
   /// Null is the ordinary state. A timestamp means it is out of sight.
-  archivedAt      DateTime?
+  archivedAt DateTime?
   /// Who archived it — a name, for the archive screen. Never for authorisation.
-  archivedBy      String?
+  archivedBy String?
 
   deskId String?
 
@@ -1476,6 +1476,39 @@ model TablaOverride {
 
   @@unique([raga, sa])
   @@index([sa])
+}
+
+/// A raga's own preference about WHICH DEGREE a tabla is tuned to.
+///
+/// Separate from TablaOverride, and the difference is the whole point.
+/// TablaOverride stores a NOTE against (raga, Sa), so it can only ever remember
+/// one pitch: D is right for Desh at Sa G and C is right for Desh at Sa F, and
+/// a note cannot say both. Sailavan, 2026-09-10: an override should be "not
+/// just remembering it for that pitch and that raag, but almost for that raag".
+///
+/// A rule that holds for a raga at EVERY pitch therefore has to remember a
+/// degree — "for Desh, prefer the fifth" — which then resolves to a different
+/// drum at each Sa. That is what this is.
+///
+/// It only ever REORDERS the degrees (see `orderedDegrees` in lib/tabla.ts), so
+/// a preference can never conjure a note the raga does not contain: the scale
+/// check still applies. A rule asking for a Pa in Malkauns does nothing.
+model TablaRagaRule {
+  id String @id @default(cuid())
+
+  /// Lower-cased, "~" stripped, matching lib/ragaScales.ts and `overrideKey`.
+  raga String @unique
+
+  /// A DegreeKey from lib/tabla.ts: sa | pa | ma | ga | dha | ni.
+  degree String
+
+  /// Why, in the coordinator's words. Shown beside the answer.
+  reason String?
+
+  setByName String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 /// A browser's push endpoint, belonging to a person.
