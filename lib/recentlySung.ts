@@ -29,13 +29,44 @@ import { parseISO, toISO } from "./dates";
 /** How long "recently" lasts. Sailavan's number, 2026-09-10. */
 export const RECENT_MONTHS = 3;
 
-/** What the history says about one bhajan, inside the window. */
-export type RecentSung = {
-  /** The latest date it was sung, as a calendar date. */
-  lastISO: string;
-  /** How many times inside the window, that one included. Always ≥ 1. */
-  count: number;
+/** How many occurrences the marker will list before it stops and counts. */
+export const MAX_OCCURRENCES = 5;
+
+/** One evening this bhajan was sung. */
+export type SungOccurrence = {
+  dateISO: string;
+  /** The evening itself, so the date can be a way back into it. */
+  sessionId: string;
+  singerName: string | null;
+  confirmedPitch: string | null;
 };
+
+/**
+ * What the history says about one bhajan, before a given session.
+ *
+ * Note `recentCount` can be ZERO. That is the second state Sailavan asked for
+ * on 2026-09-10: something sung four months ago used to look identical to
+ * something nobody has ever sung, because the marker simply vanished at the
+ * edge of the window and said nothing. A row with `recentCount: 0` still knows
+ * when it last happened, and the marker shows that quietly — so the ABSENCE of
+ * a marker now means "never sung here", which is a fact worth being able to
+ * read off the page.
+ */
+export type SungBefore = {
+  /** The latest date it was sung, ever, before the session. Always present. */
+  lastISO: string;
+  /** How many times inside the recent window. Zero when `lastISO` predates it. */
+  recentCount: number;
+  /** The most recent occurrences, newest first, at most MAX_OCCURRENCES. */
+  occurrences: SungOccurrence[];
+  /** How many more there are beyond the ones listed. */
+  more: number;
+};
+
+/** Was it sung inside the window — the loud state rather than the quiet one? */
+export function wasSungRecently(s: SungBefore): boolean {
+  return s.recentCount > 0;
+}
 
 /**
  * The earliest date that still counts as recent.
@@ -106,15 +137,25 @@ export function formatSessionDate(
  * group ends up arguing about which page is right. The year is dropped: the
  * window is three months, so it is never in doubt, and the cell is narrow.
  */
-export function recentlySungParts(r: RecentSung): {
-  lead: string;
+export function recentlySungParts(s: SungBefore): {
+  lead: string | null;
   when: string;
   times: string | null;
 } {
+  if (!wasSungRecently(s)) {
+    /*
+     * The quiet state. No lead, because there is no warning to give — it is
+     * simply the last time, said once, so that a row with nothing at all means
+     * "never sung here". The YEAR is kept: past three months it can easily be
+     * last year, and "last sung 12 Jan" would be ambiguous in a way the recent
+     * date never is.
+     */
+    return { lead: null, when: `last sung ${formatSessionDate(s.lastISO)}`, times: null };
+  }
   return {
     lead: "sung recently",
-    when: formatSessionDate(r.lastISO, { year: false }),
-    times: r.count > 1 ? `${r.count}×` : null,
+    when: formatSessionDate(s.lastISO, { year: false }),
+    times: s.recentCount > 1 ? `${s.recentCount}×` : null,
   };
 }
 
@@ -123,8 +164,8 @@ export function recentlySungParts(r: RecentSung): {
  *
  * Built FROM the parts rather than beside them, so the two can never drift.
  */
-export function recentlySungLabel(r: RecentSung): string {
-  const { lead, when, times } = recentlySungParts(r);
+export function recentlySungLabel(s: SungBefore): string {
+  const { lead, when, times } = recentlySungParts(s);
   return [lead, when, times].filter(Boolean).join(" · ");
 }
 
@@ -133,13 +174,18 @@ export function recentlySungLabel(r: RecentSung): string {
  * reader — where there is room to say what "recently" means and that the marker
  * is a way through to the history rather than only a warning.
  */
-export function recentlySungTitle(r: RecentSung, months = RECENT_MONTHS): string {
+export function recentlySungTitle(s: SungBefore, months = RECENT_MONTHS): string {
   // Spelled out: there is room here, and "Aug" abbreviated is read aloud
   // as three letters by some screen readers.
-  const when = formatSessionDate(r.lastISO, { long: true });
+  const when = formatSessionDate(s.lastISO, { long: true });
+
+  if (!wasSungRecently(s)) {
+    return `Not sung in the last ${months} months. Last sung on ${when}. Shows the dates it has been sung.`;
+  }
+
   const how =
-    r.count === 1
+    s.recentCount === 1
       ? `Sung once in the last ${months} months, on ${when}.`
-      : `Sung ${r.count} times in the last ${months} months, most recently on ${when}.`;
-  return `${how} Opens the dates it has been sung.`;
+      : `Sung ${s.recentCount} times in the last ${months} months, most recently on ${when}.`;
+  return `${how} Shows the dates it has been sung.`;
 }

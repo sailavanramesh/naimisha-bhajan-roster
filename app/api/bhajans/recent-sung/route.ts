@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { recentlySungFor } from "@/lib/recentlySungQueries";
+import { sungBeforeFor } from "@/lib/recentlySungQueries";
 
 /**
- * Has this bhajan been sung lately?
+ * When was this bhajan last sung, and on which evenings?
  *
  * The session page already answers this for the rows it renders. This is for
  * the rows that appear AFTER it renders — somebody picking a bhajan out of the
@@ -13,8 +13,10 @@ import { recentlySungFor } from "@/lib/recentlySungQueries";
  * GET /api/bhajans/recent-sung?ids=a,b,c&asOf=2026-09-17&exclude=<sessionId>
  *   → { recent: { "<bhajanId>": { lastISO, count } } }
  *
- * Bhajans with nothing inside the window are simply absent, so an empty object
- * is the normal answer and means "none of these".
+ * Bhajans NEVER sung here are simply absent, so an empty object is a normal
+ * answer and means "none of these have been sung". One sung longer ago than the
+ * window is present with `recentCount: 0` — the marker's quiet state, which is
+ * what makes an absent entry mean something.
  *
  * Deliberately ungated. It says how often the group sang a devotional song,
  * which is on the public bhajan page already, and gating it would put the
@@ -40,5 +42,5 @@ export async function GET(req: Request) {
   }
 
   const exclude = (searchParams.get("exclude") ?? "").trim() || null;
-  return NextResponse.json({ recent: await recentlySungFor(ids, asOf, exclude) });
+  return NextResponse.json({ recent: await sungBeforeFor(ids, asOf, exclude) });
 }
