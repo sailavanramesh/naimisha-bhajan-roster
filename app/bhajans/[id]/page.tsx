@@ -165,6 +165,7 @@ export default async function BhajanPage({
     reference: r.historicalRecommendedPitch ?? r.masterlistReference,
     delta: semitoneDelta(r.confirmedPitch, r.historicalRecommendedPitch ?? r.masterlistReference),
     date: r.date,
+    sessionId: r.sessionId,
   }));
 
   /*
@@ -558,8 +559,30 @@ export default async function BhajanPage({
                     {sungBy.map((r, i) => (
                       <tr key={`${r.singerName}-${i}`} className="border-b border-rule-surface last:border-b-0">
                         <td className="px-3 py-2">{r.singerName}</td>
+                        {/*
+                          The date is the way back to the evening.
+
+                          Sailavan, 2026-09-10: "could that history section of a
+                          bhajan potentially link to the session its
+                          referencing?" It could, and "Scheduled to be sung"
+                          right above has done so all along — so this half of
+                          the pair was the odd one out, listing dates that led
+                          nowhere. Same treatment as up there: the date is the
+                          link, nothing else in the row is.
+
+                          Not a new tab, unlike the marker on the roster grid.
+                          There is nothing unsaved on this page to protect, and
+                          somebody reading a history is following a trail rather
+                          than checking one fact and coming back.
+                        */}
                         <td className="px-3 py-2 font-mono tabular-nums text-xs text-on-surface-muted">
-                          {r.date.toISOString().slice(0, 10)}
+                          <Link
+                            href={`/roster/${r.sessionId}`}
+                            className="underline decoration-dotted underline-offset-2 hover:text-on-surface hover:decoration-solid"
+                            title="Open that session"
+                          >
+                            {r.date.toISOString().slice(0, 10)}
+                          </Link>
                         </td>
                         <td className="px-3 py-2 font-mono tabular-nums">
                           <span className="inline-flex items-center gap-1.5">

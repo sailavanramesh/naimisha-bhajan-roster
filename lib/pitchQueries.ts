@@ -130,15 +130,14 @@ type RawSlot = {
  * still a plan somebody might change. One `now` for the whole set, so a page
  * cannot render a row as sung and unsung in the same breath.
  */
+function isSung(nowLocal: string) {
+  return (s: RawSlot) =>
+    s.singer !== null &&
+    hasBeenSung(s.session.date.toISOString().slice(0, 10), s.session.startsAt, nowLocal);
+}
+
 function toSungRows(slots: RawSlot[]): SungRow[] {
-  const nowLocal = melbourneNowLocal();
-  return slots
-    .filter(
-      (s) =>
-        s.singer !== null &&
-        hasBeenSung(s.session.date.toISOString().slice(0, 10), s.session.startsAt, nowLocal),
-    )
-    .map(toSungRow);
+  return slots.filter(isSung(melbourneNowLocal())).map(toSungRow);
 }
 
 function toSungRow(slot: RawSlot): SungRow {
@@ -182,13 +181,40 @@ export async function getSungRowsForSinger(singerId: string): Promise<SungRow[]>
   return toSungRows(slots);
 }
 
-export async function getSungRowsForBhajan(bhajanId: string): Promise<SungRow[]> {
+/**
+ * A sung row that still knows which evening it was.
+ *
+ * `SungRow` deliberately does not: it is the input to the pure profile
+ * functions in lib/singerProfile.ts, which care about pitch and date and
+ * nothing else, and hanging a UI concern on it would spread through every
+ * caller. Only the bhajan page needs the id, so only its query carries it.
+ */
+export type SungRowWithSession = SungRow & { sessionId: string };
+
+/**
+ * Every time this bhajan has been sung, newest first, WITH the session.
+ *
+ * The session id is what lets the history link back to the evening it is
+ * describing. Sailavan, 2026-09-10: "could that history section of a bhajan
+ * potentially link to the session its referencing?" — and the answer was
+ * embarrassing, because "Scheduled to be sung" directly above it has linked to
+ * its session all along. One half of the same pair of sections was a dead end.
+ */
+export async function getSungRowsForBhajan(bhajanId: string): Promise<SungRowWithSession[]> {
   const slots = await prisma.sessionSlot.findMany({
     where: { bhajanId, confirmedPitch: { not: null }, session: SUNG_SESSION() },
-    select: SUNG_SLOT_SELECT,
+    select: {
+      ...SUNG_SLOT_SELECT,
+      session: { select: { id: true, date: true, startsAt: true } },
+    },
     orderBy: { session: { date: 'desc' } },
   });
-  return toSungRows(slots);
+
+  // The same filter as toSungRows, keeping each slot beside its row so the id
+  // survives the mapping. One `now` for the whole set, as there.
+  return slots
+    .filter(isSung(melbourneNowLocal()))
+    .map((s) => ({ ...toSungRow(s), sessionId: s.session.id }));
 }
 
 /** One singer's profile, built from their whole history. */

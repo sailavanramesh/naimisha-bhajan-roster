@@ -5,6 +5,7 @@ import {
   isRecentlySung,
   recentCutoffISO,
   recentlySungLabel,
+  recentlySungParts,
   recentlySungTitle,
 } from "@/lib/recentlySung";
 
@@ -69,6 +70,15 @@ describe("the words", () => {
     expect(recentlySungLabel({ lastISO: "2026-08-23", count: 3 })).toBe(
       "sung recently · 23 Aug · 3×",
     );
+  });
+
+  it("hands the marker its parts separately, so it can weight the lead", () => {
+    expect(recentlySungParts({ lastISO: "2026-08-23", count: 1 })).toEqual({
+      lead: "sung recently",
+      when: "23 Aug",
+      times: null,
+    });
+    expect(recentlySungParts({ lastISO: "2026-08-23", count: 3 }).times).toBe("3×");
   });
 
   it("spells the window out in the long version", () => {

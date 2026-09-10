@@ -93,17 +93,39 @@ export function formatSessionDate(
 }
 
 /**
- * The words on the marker itself.
+ * The words on the marker, in pieces.
  *
- * Deliberately the same shape as the cards on a singer's list — "last sung
- * 23 Aug 2026 · 2×" — because it is the same fact, and two spellings of one
- * fact is how a group ends up arguing about which page is right. The year is
- * dropped here: the window is three months, so it is never in doubt, and the
- * cell is narrow.
+ * In pieces because the marker needs two weights: the LEAD carries the warning
+ * and is the part that has to be noticed, the date and the count are detail.
+ * Sailavan, 2026-09-10, on the first version — "it blends in a bit too nicely
+ * now, but it shouldn't become an eyesore just bcos it blends in". Weight and
+ * colour on three words does that; making the whole chip louder does not.
+ *
+ * Deliberately the same shape as the cards on a singer's list — a date and a
+ * "× n" — because it is the same fact, and two spellings of one fact is how a
+ * group ends up arguing about which page is right. The year is dropped: the
+ * window is three months, so it is never in doubt, and the cell is narrow.
+ */
+export function recentlySungParts(r: RecentSung): {
+  lead: string;
+  when: string;
+  times: string | null;
+} {
+  return {
+    lead: "sung recently",
+    when: formatSessionDate(r.lastISO, { year: false }),
+    times: r.count > 1 ? `${r.count}×` : null,
+  };
+}
+
+/**
+ * The same thing as one string, for anywhere that cannot style the parts.
+ *
+ * Built FROM the parts rather than beside them, so the two can never drift.
  */
 export function recentlySungLabel(r: RecentSung): string {
-  const times = r.count > 1 ? ` · ${r.count}×` : "";
-  return `sung recently · ${formatSessionDate(r.lastISO, { year: false })}${times}`;
+  const { lead, when, times } = recentlySungParts(r);
+  return [lead, when, times].filter(Boolean).join(" · ");
 }
 
 /**

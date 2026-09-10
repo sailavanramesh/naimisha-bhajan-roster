@@ -82,6 +82,21 @@ if (before === 0) {
     "#sung is the list of dates",
   );
 
+  // And the trail carries on: each date goes back to the evening it describes,
+  // which is the half that was a dead end until 2026-09-10.
+  const backLinks = target.locator('a[href^="/roster/"]');
+  const backCount = await backLinks.count();
+  check(backCount > 0, `the dates link back to their sessions (${backCount})`);
+  if (backCount > 0) {
+    const to = await backLinks.first().getAttribute("href");
+    await page.goto(`${base}${to}`, { waitUntil: "networkidle" });
+    check(
+      (await page.locator("text=Roster entries").count()) > 0,
+      `a date opens a real session (${to})`,
+    );
+    await page.goto(`${base}${href}`, { waitUntil: "networkidle" });
+  }
+
   await page.screenshot({ path: `${out}/recently-sung-target.png` });
   await page.goBack({ waitUntil: "networkidle" });
 }

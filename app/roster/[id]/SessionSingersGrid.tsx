@@ -27,7 +27,7 @@ import { tablaWithOverride } from "@/lib/tabla";
 import { ragaScale } from "@/lib/ragaScales";
 import { ROSTER_COLUMNS, rosterTableMinWidth } from "@/lib/rosterGrid";
 import {
-  recentlySungLabel,
+  recentlySungParts,
   recentlySungTitle,
   type RecentSung,
 } from "@/lib/recentlySung";
@@ -1714,21 +1714,63 @@ export function SessionSingersGrid(props: {
                       the ordinary case.
                     */}
                     {r.bhajanId && recentSung[r.bhajanId] ? (
-                      <Link
-                        href={`/bhajans/${r.bhajanId}#sung`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title={recentlySungTitle(recentSung[r.bhajanId])}
-                        className="mt-1 flex w-fit items-center gap-1 rounded-full border border-warn/40 bg-warn/[0.08] px-2 py-0.5 text-[11px] text-on-surface-muted underline-offset-2 hover:bg-warn/[0.14] hover:text-on-surface"
-                      >
-                        <span aria-hidden>♪</span>
-                        <span className="whitespace-normal break-words text-left">
-                          {recentlySungLabel(recentSung[r.bhajanId])}
-                        </span>
-                        <span className="sr-only">
-                          — {recentlySungTitle(recentSung[r.bhajanId])} (opens in a new tab)
-                        </span>
-                      </Link>
+                      (() => {
+                        const parts = recentlySungParts(recentSung[r.bhajanId]);
+                        return (
+                          <Link
+                            href={`/bhajans/${r.bhajanId}#sung`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title={recentlySungTitle(recentSung[r.bhajanId])}
+                            /*
+                              LOUDER THAN THE FIRST VERSION, IN THREE CHEAP WAYS.
+                              
+                              Sailavan: "it blends in a bit too nicely now, but
+                              it shouldn't become an eyesore just bcos it blends
+                              in." So none of the three is size — a bigger chip
+                              would outrank the bhajan's own title, which is the
+                              thing the eye should land on first.
+                              
+                                1. The LEAD is `warn` and semibold. One warm
+                                   ochre phrase against a column of greys is
+                                   what actually catches an eye; the date stays
+                                   muted, so the chip has a shape rather than
+                                   being uniformly shouty.
+                                2. A firmer edge and a touch more fill — 0.55
+                                   and 0.12 against 0.40 and 0.08. Enough to
+                                   read as an object at arm's length in a hall.
+                                3. An arrow. Half of "it doesn't stand out" was
+                                   that it did not look like it went anywhere:
+                                   it sits above "Lyrics & details ↗" and was
+                                   the only clickable thing in the cell with no
+                                   affordance at all.
+                              
+                              `warn` and not `kumkum` — globals.css reserves
+                              kumkum for pitch deviation and says so twice.
+                            */
+                            className="group/sung mt-1 flex w-fit items-center gap-1.5 rounded-full border border-warn/55 bg-warn/[0.12] px-2 py-1 text-[11px] transition-colors hover:border-warn/80 hover:bg-warn/[0.2]"
+                          >
+                            <span aria-hidden className="text-warn">♪</span>
+                            <span className="whitespace-normal break-words text-left">
+                              <span className="font-semibold text-warn">{parts.lead}</span>
+                              <span className="text-on-surface-muted">
+                                {" · "}
+                                {parts.when}
+                                {parts.times ? ` · ${parts.times}` : ""}
+                              </span>
+                            </span>
+                            <span
+                              aria-hidden
+                              className="text-warn/70 group-hover/sung:text-warn"
+                            >
+                              ↗
+                            </span>
+                            <span className="sr-only">
+                              — {recentlySungTitle(recentSung[r.bhajanId])} (opens in a new tab)
+                            </span>
+                          </Link>
+                        );
+                      })()
                     ) : null}
 
                     {/* Open the song itself — lyrics, meaning, pitches, who
