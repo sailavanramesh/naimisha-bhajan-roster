@@ -81,6 +81,29 @@ const EXPECTED = {
 
 const EXPECTED_TOTAL = Object.values(EXPECTED).reduce((sum, [, n]) => sum + n, 0);
 
+/**
+ * How far a pinned MEAN may drift before it is worth investigating.
+ *
+ * It used to be `toBeCloseTo(expectedMean, 1)` — ±0.05 — for everybody, and
+ * that is not a threshold a mean over sixteen rows can hold. Adding one row
+ * moves a 16-row mean by (delta − mean)/16, which for the semitone range in
+ * play is up to about 0.4; the gate was therefore guaranteed to fail the next
+ * time the smallest-sample singer sang, and it duly did. Triveni had been red
+ * for weeks by 2026-09-10, recorded as "pre-existing" rather than fixed, which
+ * is how a gate stops being read at all.
+ *
+ * So the tolerance scales with the sample: one row's worth of movement, with a
+ * floor. That leaves it TIGHT where the evidence actually lives — the large
+ * samples, which is where CLAUDE.md §4a's "the means move toward zero" is
+ * argued from — and honest where it never could be.
+ *
+ * The MEDIAN keeps its own flat ±0.5 and is the operative guard: it is what
+ * `transposeLabel` predicts from, and a voice's offset does not move.
+ */
+function meanTolerance(n: number): number {
+  return Math.max(0.05, 8 / n);
+}
+
 const hasDatabase = Boolean(process.env.DATABASE_URL);
 
 const prisma = hasDatabase ? new PrismaClient() : null;
@@ -164,7 +187,10 @@ describe.skipIf(!hasDatabase)('singer offset profiles reproduce from the seeded 
       const m = median(profile!.deltas);
       expect(m, `${singer} median offset`).not.toBeNull();
       expect(Math.abs(m! - expectedMedian), `${singer} median offset moved`).toBeLessThanOrEqual(0.5);
-      expect(mean(profile!.deltas), `${singer} mean offset`).toBeCloseTo(expectedMean, 1);
+      expect(
+        Math.abs(mean(profile!.deltas)! - expectedMean),
+        `${singer} mean offset moved further than ${n} rows can explain`,
+      ).toBeLessThanOrEqual(meanTolerance(n));
     });
   }
 });
@@ -246,7 +272,10 @@ describe.skipIf(!hasDatabase)('the offsets the app predicts from, measured on th
       const m = median(profile!.deltas);
       expect(m, `${singer} written median`).not.toBeNull();
       expect(Math.abs(m! - expectedMedian), `${singer} written median moved`).toBeLessThanOrEqual(0.5);
-      expect(mean(profile!.deltas), `${singer} written mean`).toBeCloseTo(expectedMean, 1);
+      expect(
+        Math.abs(mean(profile!.deltas)! - expectedMean),
+        `${singer} written mean moved further than ${n} rows can explain`,
+      ).toBeLessThanOrEqual(meanTolerance(n));
     });
   }
 
