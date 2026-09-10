@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import { type Cushion, type ChorusMic, type MicColourValue } from "@/lib/micCushion";
+import { AnchoredPopover, useAnchor } from "@/components/AnchoredPopover";
 import {
-  addChorusSinger,
+  addChorusSingers,
   copyChorusDown,
   removeChorusSinger,
   setChorusCushion,
@@ -94,6 +95,21 @@ export function ChorusCell({
    * removes a mic here, what the copy did is no longer what the screen shows.
    */
   const [copied, setCopied] = useState<string | null>(null);
+  /*
+   * WHO IS TICKED, while the picker is open. Cleared on every close, so a panel
+   * reopened after adding never starts with somebody's stale tick still on.
+   */
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const picker = useAnchor<HTMLButtonElement>();
+  /*
+   * What the last write did, in words — "Added 3 · now pick their cushions".
+   *
+   * The tick alone said "Saved ✓", which for a multiple add is true and
+   * unhelpful: the whole point of choosing several at once is that the CUSHIONS
+   * are still to do, and the dots that do that have just appeared above where
+   * nobody is looking. So the confirmation carries the next step.
+   */
+  const [addedNote, setAddedNote] = useState<string | null>(null);
   const savedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -134,15 +150,25 @@ export function ChorusCell({
     };
   }, []);
 
-  /** Every write ends here: the server's list wins, and the cell says so. */
-  function apply(run: () => Promise<ChorusResult>) {
+  /**
+   * Every write ends here: the server's list wins, and the cell says so.
+   *
+   * `note` replaces the plain tick for a write that has a next step worth
+   * naming. It is passed IN rather than set by the caller beforehand, because
+   * the note has to be cleared by the next write in this cell — a removal
+   * reporting "Added 3 · now pick their cushions" is the same bug the copy-down
+   * sentence had, and it was sitting right here.
+   */
+  function apply(run: () => Promise<ChorusResult>, note?: string) {
     startTransition(async () => {
       setStatus("idle");
+      setAddedNote(note ?? null);
       // Whatever the copy said is about to stop being true of this cell.
       clearCopied();
       const res = await run();
       if (!res.ok) {
         setStatus("failed");
+        setAddedNote(null);
         return;
       }
       setMics(res.mics);
@@ -150,7 +176,10 @@ export function ChorusCell({
       if (savedTimer.current) clearTimeout(savedTimer.current);
       // Long enough to be read by somebody who was looking elsewhere as they
       // tapped, short enough not to sit there claiming the last thing you did.
-      savedTimer.current = setTimeout(() => setStatus("idle"), 4000);
+      savedTimer.current = setTimeout(() => {
+        setStatus("idle");
+        setAddedNote(null);
+      }, 4000);
     });
   }
 
@@ -244,31 +273,129 @@ export function ChorusCell({
 
       {canEdit ? (
         /*
-          Stays a select rather than becoming a multi-select list box. The
-          people already on are shown above with their cushions, which a
-          multi-select cannot do, and adding is one name at a time on a phone
-          held in one hand.
+          A MULTI-SELECT PICKER, not a select.
+
+          This was a `<select>` and the comment here argued for keeping it:
+          the people already on are shown above with their cushions, which a
+          multi-select cannot do, and one name at a time suits a phone held in
+          one hand. The first half is still true and is why the list above
+          stays exactly as it was — but the second half was wrong about what
+          actually happens. Sailavan, 2026-09-10: "there should be a way for it
+          to be multi select so don't have to add each person 1 by 1. then once
+          they're all selected, the cushion allocation can be done."
+
+          Three people pick up chorus mics together at the start of an evening,
+          so the select meant three trips through a dropdown, three writes and
+          three "Saved ✓" for one act. Now it is one panel, one write, and the
+          cushions are the step after — which is the order the desk works in.
+
+          A PANEL rather than an inline list of checkboxes: this is a column in
+          a wide table, and ten names inline would make one cell taller than
+          the row. Portalled and positioned by components/AnchoredPopover.tsx,
+          so it can be wider than the column it hangs off.
         */
         available.length > 0 ? (
-          <select
-            value=""
-            disabled={pending}
-            aria-label="Add somebody to a chorus mic"
-            className="h-8 w-full rounded-key border border-rule-surface bg-field px-2 text-[12px]"
-            onChange={(e) => {
-              const singerId = e.target.value;
-              if (!singerId) return;
-              e.target.value = "";
-              apply(() => addChorusSinger({ slotId, singerId }));
-            }}
-          >
-            <option value="">{mics.length ? "+ another" : "+ chorus mic"}</option>
-            {available.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
+          <>
+            <button
+              ref={picker.ref}
+              type="button"
+              disabled={pending}
+              aria-expanded={picker.open}
+              aria-haspopup="dialog"
+              className="h-8 w-full rounded-key border border-rule-surface bg-field px-2 text-left text-[12px] hover:bg-panel-hover disabled:opacity-50"
+              onClick={() => {
+                setPicked(new Set());
+                picker.toggle();
+              }}
+            >
+              {mics.length ? "+ another" : "+ chorus mic"}
+            </button>
+
+            <AnchoredPopover
+              open={picker.open}
+              anchor={picker.rect}
+              onClose={(refocus) => {
+                setPicked(new Set());
+                picker.close(refocus);
+              }}
+              label="Choose who is on the chorus mics"
+              box={{ preferredWidth: 240, minHeight: 140, maxHeight: 300 }}
+              className="p-1"
+            >
+              <p className="px-2 pb-1 pt-1 text-[11px] text-on-surface-muted">
+                Tick everyone on a chorus mic. Cushions come after.
+              </p>
+
+              <ul className="grid">
+                {available.map((sg) => {
+                  const on = picked.has(sg.id);
+                  return (
+                    <li key={sg.id}>
+                      {/*
+                        A real checkbox in a label, so the whole row is the tap
+                        target — these are chosen standing at a desk, often on a
+                        phone, and a 12px tick box is not something to aim at.
+                      */}
+                      <label className="flex cursor-pointer items-center gap-2 rounded-[8px] px-2 py-2 text-[12px] hover:bg-panel-hover">
+                        <input
+                          type="checkbox"
+                          checked={on}
+                          className="h-4 w-4 shrink-0 accent-brass-ink"
+                          onChange={() =>
+                            setPicked((prev) => {
+                              const next = new Set(prev);
+                              if (next.has(sg.id)) next.delete(sg.id);
+                              else next.add(sg.id);
+                              return next;
+                            })
+                          }
+                        />
+                        <span className="min-w-0 truncate">{sg.name}</span>
+                      </label>
+                    </li>
+                  );
+                })}
+              </ul>
+
+              {/*
+                Sticky, because the list scrolls: with eleven singers and a
+                panel capped at 300px, a button at the natural foot of the list
+                is a button you have to scroll to find after ticking the last
+                person.
+              */}
+              <div className="sticky bottom-0 mt-1 flex items-center justify-between gap-2 border-t border-rule-surface bg-panel px-2 py-1.5">
+                <button
+                  type="button"
+                  className="text-[11px] text-on-surface-muted underline underline-offset-2 hover:text-on-surface"
+                  onClick={() => {
+                    setPicked(new Set());
+                    picker.close(true);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={picked.size === 0 || pending}
+                  className="rounded-[10px] border border-brass-ink/80 bg-brass-ink px-3 py-1 text-[11px] font-semibold text-ivory disabled:opacity-40"
+                  onClick={() => {
+                    const ids = [...picked];
+                    if (ids.length === 0) return;
+                    setPicked(new Set());
+                    picker.close(false);
+                    apply(
+                      () => addChorusSingers({ slotId, singerIds: ids }),
+                      ids.length === 1
+                        ? "Added 1 · now pick their cushion"
+                        : `Added ${ids.length} · now pick their cushions`,
+                    );
+                  }}
+                >
+                  {picked.size === 0 ? "Add" : `Add ${picked.size}`}
+                </button>
+              </div>
+            </AnchoredPopover>
+          </>
         ) : null
       ) : mics.length === 0 ? (
         <span className="text-[12px]">—</span>
@@ -317,7 +444,7 @@ export function ChorusCell({
         ) : copied ? (
           <span className="text-on-surface-muted">{copied}</span>
         ) : status === "saved" ? (
-          <span className="text-on-surface-muted">Saved ✓</span>
+          <span className="text-on-surface-muted">{addedNote ?? "Saved ✓"}</span>
         ) : status === "failed" ? (
           <span className="text-warn">Did not save.</span>
         ) : null}

@@ -29,10 +29,8 @@
  * carrying nothing has genuinely never been sung here.
  */
 
-import { useEffect, useId, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import Link from "next/link";
-import { anchoredBox, currentViewport } from "@/lib/anchoredBox";
+import { AnchoredPopover, useAnchor } from "@/components/AnchoredPopover";
 import {
   formatSessionDate,
   recentlySungParts,
@@ -51,54 +49,7 @@ export function RecentlySungMark({
   /** Extra classes on the chip — spacing differs between the three callers. */
   className?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const [rect, setRect] = useState<DOMRect | null>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const panelId = useId();
-
-  /*
-   * Close on Escape, on a click elsewhere, and on scroll or resize.
-   *
-   * Closing on scroll rather than following the anchor is deliberate: the
-   * roster grid is a wide table inside its own horizontal scroller, so "follow
-   * the anchor" means tracking two scroll containers and a resize observer to
-   * keep a panel glued to a chip somebody has already read. Closing is both
-   * simpler and what the existing bhajan dropdown does.
-   */
-  useEffect(() => {
-    if (!open) return;
-
-    function onKey(e: KeyboardEvent) {
-      if (e.key !== "Escape") return;
-      setOpen(false);
-      // Focus goes back where it came from, or it lands at the top of the page
-      // and a keyboard user loses their place in a fifteen-row grid.
-      triggerRef.current?.focus();
-    }
-    function onDown(e: MouseEvent | TouchEvent) {
-      const t = e.target as Node | null;
-      if (!t) return;
-      if (triggerRef.current?.contains(t)) return;
-      if ((t as Element).closest?.(`[data-sung-panel="${panelId}"]`)) return;
-      setOpen(false);
-    }
-    const close = () => setOpen(false);
-
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("touchstart", onDown, { passive: true });
-    window.addEventListener("resize", close);
-    // Capture, so a scroll inside the table's own scroller is heard too.
-    window.addEventListener("scroll", close, true);
-
-    return () => {
-      document.removeEventListener("keydown", onKey);
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("touchstart", onDown);
-      window.removeEventListener("resize", close);
-      window.removeEventListener("scroll", close, true);
-    };
-  }, [open, panelId]);
+  const pop = useAnchor<HTMLButtonElement>();
 
   if (!sung) return null;
 
@@ -124,22 +75,14 @@ export function RecentlySungMark({
     ? "border-warn/55 bg-warn/[0.12] hover:border-warn/80 hover:bg-warn/[0.2]"
     : "border-rule-surface bg-panel hover:border-rule-surface hover:bg-panel-hover";
 
-  const box = rect ? anchoredBox(rect, currentViewport(), { preferredWidth: 288, maxHeight: 300 }) : null;
-
   return (
     <>
       <button
-        ref={triggerRef}
+        ref={pop.ref}
         type="button"
-        onClick={() => {
-          const el = triggerRef.current;
-          if (!el) return;
-          setRect(el.getBoundingClientRect());
-          setOpen((v) => !v);
-        }}
-        aria-expanded={open}
+        onClick={pop.toggle}
+        aria-expanded={pop.open}
         aria-haspopup="dialog"
-        aria-controls={open ? panelId : undefined}
         title={title}
         className={`group/sung flex w-fit items-center gap-1.5 rounded-full border px-2 py-1 text-left text-[11px] transition-colors ${chip} ${className ?? ""}`}
       >
@@ -158,70 +101,58 @@ export function RecentlySungMark({
           aria-hidden
           className={recent ? "text-warn/70 group-hover/sung:text-warn" : "text-on-surface-muted"}
         >
-          {open ? "▴" : "▾"}
+          {pop.open ? "▴" : "▾"}
         </span>
         <span className="sr-only">— {title}</span>
       </button>
 
-      {open && box
-        ? createPortal(
-            <div
-              data-sung-panel={panelId}
-              id={panelId}
-              role="dialog"
-              aria-label={title}
-              style={{
-                position: "fixed",
-                left: box.left,
-                top: box.top,
-                width: box.width,
-                maxHeight: box.maxHeight,
-                zIndex: 9999,
-              }}
-              className="overflow-auto rounded-[12px] border border-rule-surface bg-panel p-2 text-[12px] shadow-xl"
+      <AnchoredPopover
+        open={pop.open}
+        anchor={pop.rect}
+        onClose={pop.close}
+        label={title}
+        box={{ preferredWidth: 288, maxHeight: 300 }}
+        className="p-2 text-[12px]"
+      >
+        <p className="px-1 pb-1 text-[11px] font-semibold text-on-surface">
+          {recent ? "Sung recently" : "Last sung"}
+        </p>
+
+        <ul className="grid gap-0.5">
+          {sung.occurrences.map((o, i) => (
+            <li
+              key={`${o.sessionId}-${o.singerName ?? ""}-${i}`}
+              className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-2 rounded-[8px] px-1 py-1 odd:bg-surface/60"
             >
-              <p className="px-1 pb-1 text-[11px] font-semibold text-on-surface">
-                {recent ? "Sung recently" : "Last sung"}
-              </p>
-
-              <ul className="grid gap-0.5">
-                {sung.occurrences.map((o, i) => (
-                  <li
-                    key={`${o.sessionId}-${o.singerName ?? ""}-${i}`}
-                    className="grid grid-cols-[auto_minmax(0,1fr)] items-baseline gap-x-2 rounded-[8px] px-1 py-1 odd:bg-surface/60"
-                  >
-                    {/* The date is the way into that evening — same rule as the
-                        bhajan page's history table. */}
-                    <Link
-                      href={`/roster/${o.sessionId}`}
-                      className="whitespace-nowrap font-mono text-[11px] text-brass-ink underline decoration-dotted underline-offset-2 hover:decoration-solid"
-                    >
-                      {formatSessionDate(o.dateISO, { year: false })}
-                    </Link>
-                    <span className="min-w-0 text-on-surface-muted">
-                      {o.singerName ?? "unassigned"}
-                      {o.confirmedPitch ? ` · ${o.confirmedPitch}` : ""}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-
-              {sung.more > 0 ? (
-                <p className="px-1 pt-1 text-[11px] text-on-surface-muted">
-                  and {sung.more} more before that
-                </p>
-              ) : null}
-
+              {/* The date is the way into that evening — same rule as the
+                  bhajan page's history table. */}
               <Link
-                href={`/bhajans/${bhajanId}#sung`}
-                className="mt-1.5 block rounded-[8px] px-1 py-1 text-[11px] text-brass-ink underline underline-offset-2 hover:bg-panel-hover"
+                href={`/roster/${o.sessionId}`}
+                className="whitespace-nowrap font-mono text-[11px] text-brass-ink underline decoration-dotted underline-offset-2 hover:decoration-solid"
               >
-                Open the bhajan&rsquo;s full history →
+                {formatSessionDate(o.dateISO, { year: false })}
               </Link>
-            </div>,
-            document.body,
-          )
-        : null}
+              <span className="min-w-0 text-on-surface-muted">
+                {o.singerName ?? "unassigned"}
+                {o.confirmedPitch ? ` · ${o.confirmedPitch}` : ""}
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        {sung.more > 0 ? (
+          <p className="px-1 pt-1 text-[11px] text-on-surface-muted">
+            and {sung.more} more before that
+          </p>
+        ) : null}
+
+        <Link
+          href={`/bhajans/${bhajanId}#sung`}
+          className="mt-1.5 block rounded-[8px] px-1 py-1 text-[11px] text-brass-ink underline underline-offset-2 hover:bg-panel-hover"
+        >
+          Open the bhajan&rsquo;s full history →
+        </Link>
+      </AnchoredPopover>
     </>
   );
 }
