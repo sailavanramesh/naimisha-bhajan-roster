@@ -26,6 +26,11 @@ import { stepWithinSeries } from "@/lib/pitch";
 import { tablaWithOverride } from "@/lib/tabla";
 import { ragaScale } from "@/lib/ragaScales";
 import { ROSTER_COLUMNS, rosterTableMinWidth } from "@/lib/rosterGrid";
+import {
+  recentlySungLabel,
+  recentlySungTitle,
+  type RecentSung,
+} from "@/lib/recentlySung";
 
 type SingerLite = { id: string; name: string; gender: string | null };
 
@@ -175,6 +180,14 @@ export function SessionSingersGrid(props: {
     pitches: string[];
     pitchToTabla: Record<string, string>;
   };
+  /**
+   * Which of the bhajans already on this session were sung in the three months
+   * before it, keyed by bhajan id. Seeded by the server; topped up here for any
+   * bhajan that arrives after the page has been drawn. See lib/recentlySung.ts.
+   */
+  recentSung: Record<string, RecentSung>;
+  /** This session's own date, which is what "recently" is measured back from. */
+  sessionISO: string;
 }) {
   const [isPending, startTransition] = useTransition();
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -720,6 +733,69 @@ export function SessionSingersGrid(props: {
       live = false;
     };
   }, [rows, pitchHint]);
+
+  /*
+   * "WE SANG THIS RECENTLY", for every bhajan on the page.
+   *
+   * Seeded from the server for the rows that were there at first paint, then
+   * kept up to date by ONE effect watching which bhajan ids the rows hold —
+   * rather than by hooking each of the ways a row can gain a bhajan. There are
+   * several (picking one from the masterlist, copying last week's set down,
+   * restoring a draft, discarding changes back to the baseline) and they would
+   * each need the same call; worse, the next one added would silently not have
+   * it, and a marker that is missing looks exactly like a bhajan nobody has
+   * sung. Watching the ids is one mechanism that cannot be forgotten.
+   *
+   * `asked` remembers every id already looked up, INCLUDING the ones that came
+   * back with nothing. Without it, a bhajan not sung recently — the common
+   * case — would be re-fetched on every render that touched the rows.
+   */
+  const [recentSung, setRecentSung] = useState<Record<string, RecentSung>>(props.recentSung);
+  const askedRecent = useRef<Set<string>>(new Set(Object.keys(props.recentSung)));
+
+  useEffect(() => {
+    // The server already answered for the rows it rendered, whether or not
+    // they had anything to report.
+    for (const r of props.initialRows) if (r.bhajanId) askedRecent.current.add(r.bhajanId);
+
+    const wanted = [
+      ...new Set(
+        rows
+          .map((r) => r.bhajanId)
+          .filter((id): id is string => Boolean(id) && !askedRecent.current.has(id!)),
+      ),
+    ];
+    if (wanted.length === 0) return;
+
+    for (const id of wanted) askedRecent.current.add(id);
+
+    let live = true;
+    (async () => {
+      const params = new URLSearchParams({
+        ids: wanted.join(","),
+        asOf: props.sessionISO,
+        exclude: props.sessionId,
+      });
+      try {
+        const res = await fetch(`/api/bhajans/recent-sung?${params.toString()}`);
+        if (!res.ok || !live) return;
+        const data = (await res.json()) as { recent?: Record<string, RecentSung> };
+        if (!live || !data.recent) return;
+        setRecentSung((prev) => ({ ...prev, ...data.recent }));
+      } catch {
+        /*
+         * Silent. This is a hint beside a bhajan somebody has already chosen;
+         * an error toast over a roster being built would cost more attention
+         * than the hint is worth, and the ids stay in `asked` so it does not
+         * retry in a loop.
+         */
+      }
+    })();
+
+    return () => {
+      live = false;
+    };
+  }, [rows, props.initialRows, props.sessionISO, props.sessionId]);
 
   const [bhSearch, setBhSearch] = useState<Record<string, BhSearchState>>({});
 
@@ -1614,6 +1690,46 @@ export function SessionSingersGrid(props: {
                         </span>
                       </div>
                     )}
+
+                    {/*
+                      WE SANG THIS RECENTLY.
+
+                      Sailavan, 2026-09-10: when a bhajan is entered, or is
+                      already there, "if its been sung in the last 3 months, a
+                      soft thing to clearly indicate its been sung recently and
+                      a link out to that bhajan and the section where it lists
+                      the dates its been sung".
+
+                      Soft on purpose. It is not an error — repeating a bhajan
+                      is a normal and sometimes deliberate thing to do, and a
+                      red banner would be arguing with a decision that is the
+                      group's to make. So it is the same faint warn tint the
+                      calendar uses for a notice, saying when and how often, and
+                      it is the way THROUGH to the dates rather than a dead end:
+                      #sung is the "Who has sung this" table on the bhajan page.
+
+                      Absent when there is nothing to say. A bhajan nobody has
+                      sung lately gets no marker at all, so the marker's
+                      presence is the whole signal and the row stays quiet in
+                      the ordinary case.
+                    */}
+                    {r.bhajanId && recentSung[r.bhajanId] ? (
+                      <Link
+                        href={`/bhajans/${r.bhajanId}#sung`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={recentlySungTitle(recentSung[r.bhajanId])}
+                        className="mt-1 flex w-fit items-center gap-1 rounded-full border border-warn/40 bg-warn/[0.08] px-2 py-0.5 text-[11px] text-on-surface-muted underline-offset-2 hover:bg-warn/[0.14] hover:text-on-surface"
+                      >
+                        <span aria-hidden>♪</span>
+                        <span className="whitespace-normal break-words text-left">
+                          {recentlySungLabel(recentSung[r.bhajanId])}
+                        </span>
+                        <span className="sr-only">
+                          — {recentlySungTitle(recentSung[r.bhajanId])} (opens in a new tab)
+                        </span>
+                      </Link>
+                    ) : null}
 
                     {/* Open the song itself — lyrics, meaning, pitches, who
                         has sung it. Previously this said "Linked to

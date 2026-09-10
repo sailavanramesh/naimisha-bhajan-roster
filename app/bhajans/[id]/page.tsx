@@ -527,8 +527,17 @@ export default async function BhajanPage({
             </section>
           ) : null}
 
-          {/* Who has sung it */}
-          <section className="grid gap-2">
+          {/*
+            Who has sung it.
+
+            `id="sung"` is a destination, not decoration: the roster grid's
+            "sung recently" marker links straight here, which is the whole point
+            of the marker — it says a repeat may be coming and then shows the
+            dates rather than leaving somebody to hunt for them. `scroll-mt`
+            keeps the heading clear of the sticky header it would otherwise
+            land under.
+          */}
+          <section id="sung" className="grid gap-2 scroll-mt-24">
             <h2 className="text-sm font-semibold">Who has sung this</h2>
             {sungBy.length === 0 ? (
               <p className="text-sm text-on-surface-muted">
