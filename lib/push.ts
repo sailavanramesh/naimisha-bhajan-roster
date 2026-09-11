@@ -77,6 +77,7 @@ function isGone(status: number | undefined, body: string | undefined): boolean {
 export async function pushToSingers(
   singerIds: readonly string[],
   notification: Notification,
+  sessionId?: string,
 ): Promise<{ sent: number; failed: number; pruned: number }> {
   if (!pushConfigured || singerIds.length === 0) {
     return { sent: 0, failed: 0, pruned: 0 };
@@ -87,7 +88,6 @@ export async function pushToSingers(
   });
   if (subs.length === 0) return { sent: 0, failed: 0, pruned: 0 };
 
-  const payload = JSON.stringify(notification);
   let failed = 0;
   const dead: string[] = [];
   /*
@@ -104,6 +104,13 @@ export async function pushToSingers(
 
   await Promise.all(
     subs.map(async (s) => {
+      // Include singerId and sessionId so the service worker can track clicks
+      // back to a specific person + session without guessing.
+      const payload = JSON.stringify({
+        ...notification,
+        singerId: s.singerId,
+        ...(sessionId ? { sessionId } : {}),
+      });
       try {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },

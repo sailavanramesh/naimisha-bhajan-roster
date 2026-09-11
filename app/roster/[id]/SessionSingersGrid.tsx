@@ -270,6 +270,39 @@ export function SessionSingersGrid(props: {
    * otherwise somebody saved it from another device in the meantime and the
    * offer would be noise.
    */
+  /*
+   * Auto-save flag. Set by onPickBhajan and onConfirmedPitchChange after they
+   * call setRows(); the useEffect below fires after React has flushed the new
+   * state into `rows` and calls saveAll(), which reads from the current closure
+   * rather than from a stale capture inside the event handler.
+   *
+   * Pitch gets a short debounce so a singer stepping through pitches one key at
+   * a time does not fire a save on each step — the timer is cancelled if another
+   * change arrives before it fires.
+   */
+  const autoSaveRef = useRef<"bhajan" | "pitch" | null>(null);
+  const autoSavePitchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!props.canEdit) return;
+    const kind = autoSaveRef.current;
+    if (!kind) return;
+
+    if (kind === "bhajan") {
+      autoSaveRef.current = null;
+      saveAll();
+    } else {
+      // Pitch: debounce — cancel any pending timer and start a fresh one.
+      if (autoSavePitchTimer.current) clearTimeout(autoSavePitchTimer.current);
+      autoSavePitchTimer.current = setTimeout(() => {
+        autoSaveRef.current = null;
+        autoSavePitchTimer.current = null;
+        saveAll();
+      }, 1500);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows]);
+
   const askedForDraft = useRef(false);
   useEffect(() => {
     if (askedForDraft.current || !props.canEdit) return;
@@ -1005,6 +1038,7 @@ export function SessionSingersGrid(props: {
 
     if (saved) setPitchUI((prev) => ({ ...prev, [localId]: { q: saved, open: false } }));
     setBhPortal((p) => ({ ...p, open: false }));
+    autoSaveRef.current = "bhajan";
   }
 
   /**
@@ -1037,6 +1071,7 @@ export function SessionSingersGrid(props: {
           : r
       )
     );
+    autoSaveRef.current = "pitch";
   }
 
   function setPitchQuery(localId: string, q: string) {

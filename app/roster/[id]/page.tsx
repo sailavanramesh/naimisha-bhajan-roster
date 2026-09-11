@@ -104,15 +104,23 @@ async function notifyCandidates(sessionId: string): Promise<NotifyPerson[]> {
   });
   if (slots.length === 0) return [];
 
-  const subscribed = new Set(
-    (
-      await prisma.pushSubscription.findMany({
-        where: { singerId: { in: slots.map((s) => s.singerId!) } },
-        select: { singerId: true },
-        distinct: ["singerId"],
-      })
-    ).map((s) => s.singerId),
-  );
+  const singerIds = slots.map((s) => s.singerId!);
+
+  const [subscribed, seenNotices] = await Promise.all([
+    prisma.pushSubscription.findMany({
+      where: { singerId: { in: singerIds } },
+      select: { singerId: true },
+      distinct: ["singerId"],
+    }),
+    prisma.sessionNotice.findMany({
+      where: { sessionId, singerId: { in: singerIds }, clickedAt: { not: null } },
+      select: { singerId: true },
+      distinct: ["singerId"],
+    }),
+  ]);
+
+  const subscribedSet = new Set(subscribed.map((s) => s.singerId));
+  const seenSet = new Set(seenNotices.map((n) => n.singerId));
 
   const byPerson = new Map<string, NotifyPerson>();
   for (const slot of slots) {
@@ -135,7 +143,8 @@ async function notifyCandidates(sessionId: string): Promise<NotifyPerson[]> {
             : missing[0] === "pitch"
               ? "no confirmed pitch yet"
               : "",
-      hasDevice: subscribed.has(slot.singer.id),
+      hasDevice: subscribedSet.has(slot.singer.id),
+      hasSeen: seenSet.has(slot.singer.id),
     });
   }
   return [...byPerson.values()];

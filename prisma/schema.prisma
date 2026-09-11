@@ -1552,6 +1552,8 @@ enum NoticeKind {
   rostered
   /// "The roster for Thursday is up" — silent.
   published
+  /// 9am on the day: "you're singing today" — all rostered singers regardless of row completeness.
+  nudge_morning
   /// 3pm on the day: "you have not chosen a bhajan yet" — alerts.
   nudge
   /// 5pm on the day, the last one. Nobody is nudged a third time.
@@ -1594,7 +1596,8 @@ model SessionNotice {
   singerId  String
   kind      NoticeKind
 
-  sentAt DateTime @default(now())
+  sentAt    DateTime  @default(now())
+  clickedAt DateTime?
 
   session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   singer  Singer  @relation(fields: [singerId], references: [id], onDelete: Cascade)

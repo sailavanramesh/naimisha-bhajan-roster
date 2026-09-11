@@ -11,6 +11,8 @@ export type NotifyPerson = {
   gap: string;
   /** False when nobody has turned notifications on for them on any device. */
   hasDevice: boolean;
+  /** True when this person has opened the app from any notification for this session. */
+  hasSeen: boolean;
 };
 
 /**
@@ -91,7 +93,15 @@ export function NotifyPanel({
             key={p.id}
             className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-[8px] px-2 py-1 text-sm odd:bg-surface/60 sm:grid-cols-[8rem_minmax(0,1fr)_5.5rem]"
           >
-            <span className="truncate font-medium">{p.name}</span>
+            <span className="flex min-w-0 items-center gap-1.5">
+              <span className="truncate font-medium">{p.name}</span>
+              {p.hasSeen && (
+                <span
+                  title="Opened the app from a notification"
+                  className="inline-block h-2 w-2 shrink-0 rounded-full bg-brass"
+                />
+              )}
+            </span>
             <span className="col-span-2 truncate text-[11px] text-on-surface-muted sm:col-span-1">
               {!p.hasDevice
                 ? "no device set up"

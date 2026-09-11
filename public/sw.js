@@ -33,7 +33,11 @@ self.addEventListener("push", (event) => {
     // The quiet kind arrives without sound or vibration.
     silent: !data.alert,
     requireInteraction: false,
-    data: { url: data.url || "/roster" },
+    data: {
+      url: data.url || "/roster",
+      singerId: data.singerId || null,
+      sessionId: data.sessionId || null,
+    },
   };
 
   event.waitUntil(self.registration.showNotification(title, options));
@@ -41,10 +45,25 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const target = (event.notification.data && event.notification.data.url) || "/roster";
+  const data = event.notification.data || {};
+  const target = data.url || "/roster";
 
   event.waitUntil(
-    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+    (async () => {
+      // Record that this person opened the app from a notification for this session.
+      if (data.singerId && data.sessionId) {
+        try {
+          await fetch("/api/notifications/click", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ singerId: data.singerId, sessionId: data.sessionId }),
+          });
+        } catch {
+          // Non-fatal: tracking is best-effort.
+        }
+      }
+
+      const clients = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
       // Reuse a window that is already open rather than piling up tabs.
       for (const client of clients) {
         if ("focus" in client) {
@@ -53,6 +72,6 @@ self.addEventListener("notificationclick", (event) => {
         }
       }
       return self.clients.openWindow(target);
-    }),
+    })(),
   );
 });

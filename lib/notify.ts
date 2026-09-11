@@ -21,7 +21,7 @@
  * have to turn up and sing do need to know.
  */
 
-export type NoticeKind = "rostered" | "published" | "nudge" | "nudge_final";
+export type NoticeKind = "rostered" | "published" | "nudge_morning" | "nudge" | "nudge_final";
 
 export type Notification = {
   title: string;
@@ -101,6 +101,32 @@ export function publishedNotification(input: {
     url: `/roster/${input.sessionId}`,
     tag: `published-${input.sessionId}`,
     alert: false,
+  };
+}
+
+/**
+ * "You are singing today" — goes to every rostered singer at 9am regardless of
+ * whether their row is complete. Prithvi's problem: a rostered notice was sent
+ * days earlier and forgotten; the 3pm nudge only fires when something is missing.
+ * This fills the gap for singers who have everything set.
+ */
+export function morningNotification(input: {
+  sessionId: string;
+  dateISO: string;
+  /** Titles of this singer's slots, for context — may be empty if not yet set. */
+  titles: readonly (string | null)[];
+}): Notification {
+  const filled = input.titles.filter((t): t is string => Boolean(t));
+  const body =
+    filled.length > 0
+      ? `You are singing ${filled.join(" and ")} today.`
+      : "You are singing today — check the roster for details.";
+  return {
+    title: "You're singing today",
+    body,
+    url: `/roster/${input.sessionId}`,
+    tag: `morning-${input.sessionId}`,
+    alert: true,
   };
 }
 
