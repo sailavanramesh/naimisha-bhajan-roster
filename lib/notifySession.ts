@@ -86,6 +86,7 @@ export async function notifyAboutSession(sessionId: string): Promise<{
       const res = await pushToSingers(
         [singerId],
         rosteredNotification({ sessionId, dateISO, bhajanTitles: titles }),
+        sessionId,
       );
       await prisma.sessionNotice.create({
         data: { sessionId, singerId, kind: "rostered" },

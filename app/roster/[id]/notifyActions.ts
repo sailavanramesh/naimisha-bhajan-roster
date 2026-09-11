@@ -103,7 +103,7 @@ export async function sendManualNotice(input: {
       })
     : rosteredNotification({ sessionId, dateISO, bhajanTitles: titles });
 
-  const res = await pushToSingers([singerId], notification);
+  const res = await pushToSingers([singerId], notification, sessionId);
   const who = singer?.name ?? "They";
 
   if (res.sent === 0) {
