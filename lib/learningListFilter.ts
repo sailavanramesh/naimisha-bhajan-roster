@@ -229,3 +229,145 @@ export function applyListFilter(
     }
   });
 }
+
+/* ── The filter, written down ──────────────────────────────────────────────
+ *
+ * Sailavan, 2026-09-13: "If I click a bhajan and return to that page filters
+ * don't hold. They should."
+ *
+ * They did not hold because the whole filter lived in `useState` inside the
+ * view, and opening a bhajan unmounts the view. Nine choices — a search, the
+ * stage chips, three multi-selects with their Only/Except modes, two state
+ * filters and a sort — all thrown away for the sake of checking one raga, and
+ * the list you had cut down to eleven rows came back at ninety.
+ *
+ * So the filter goes in the URL, which is where this app already keeps the
+ * answer to exactly this problem. components/BackLink.tsx says it plainly: the
+ * bhajan list's "search and the deity filter ... were sitting in the URL a
+ * moment before", and that is why Back works there. The same trick, the same
+ * reasoning, and two things come free with it: a filtered list can be sent to
+ * somebody or bookmarked, and components/KeepScroll.tsx — which keys on the url
+ * INCLUDING the query — can tell one filtered list from another.
+ *
+ * Only what is set is written. A URL carrying every default is a URL nobody can
+ * read, and "sort=recent&catmode=include" says nothing that the absence of it
+ * does not already say. Same rule fairness follows.
+ *
+ * TWO ENCODINGS, on purpose:
+ *
+ *   - the fixed vocabularies (stage, shruti, sung) are comma-joined, as
+ *     lib/fairnessFilters.ts joins category ids. Every value is a token we
+ *     wrote ourselves, so a comma cannot appear inside one.
+ *
+ *   - deity, raga and tempo REPEAT the key instead, because their values come
+ *     out of the catalogue rather than out of this file. A raga called
+ *     "Shankarabharanam, Hamsadhwani" would split into two ragas that match
+ *     nothing, and silently — the worst way for a filter to fail.
+ *
+ * Anything unrecognised is dropped rather than honoured: a hand-edited or
+ * half-truncated URL should give you the list, not an empty page.
+ */
+
+/** The three stages this list shows. `festival` is not one; see the schema. */
+const STAGE_KEYS = ["wantToLearn", "learning", "known"] as const;
+const SHRUTI_KEYS: readonly ShrutiState[] = ["saved", "missing", "disagrees"];
+const SUNG_KEYS: readonly SungState[] = ["never", "recent", "stale"];
+const SORT_KEYS: readonly SortKey[] = ["recent", "title", "lastSung", "mostSung"];
+
+/**
+ * Every key this filter owns, so the view can rewrite its own and leave
+ * anything else in the URL alone.
+ */
+export const FILTER_PARAM_KEYS = [
+  "q",
+  "stage",
+  "deity",
+  "deitymode",
+  "raga",
+  "ragamode",
+  "tempo",
+  "tempomode",
+  "shruti",
+  "sung",
+  "unlinked",
+  "sort",
+] as const;
+
+/**
+ * What we need off a query string — `URLSearchParams`, and Next's readonly
+ * version of it, both satisfy this without the lib importing either.
+ */
+export type ReadableParams = {
+  get(name: string): string | null;
+  getAll(name: string): string[];
+};
+
+/** Keep only the values from a known vocabulary, in the order given, no repeats. */
+function keepKnown<T extends string>(raw: string | null, allowed: readonly T[]): T[] {
+  if (!raw) return [];
+  const out: T[] = [];
+  for (const part of raw.split(",")) {
+    const value = part.trim() as T;
+    if (allowed.includes(value) && !out.includes(value)) out.push(value);
+  }
+  return out;
+}
+
+function writeValues(params: URLSearchParams, name: string, filter: ValueFilter): void {
+  // No values means no filter, whatever the mode says — so the mode is not
+  // worth writing either. See isFiltered.
+  if (filter.values.length === 0) return;
+  for (const value of filter.values) params.append(name, value);
+  if (filter.mode === "exclude") params.set(`${name}mode`, "exclude");
+}
+
+function readValues(params: ReadableParams, name: string): ValueFilter {
+  const values = params.getAll(name).filter((v) => v !== "");
+  if (values.length === 0) return ANY_VALUES;
+  return {
+    values,
+    mode: params.get(`${name}mode`) === "exclude" ? "exclude" : "include",
+  };
+}
+
+/**
+ * The filter as a query string — "" when nothing is set.
+ *
+ * The empty string matters: it is what lets the view put the bare path back in
+ * the address bar rather than a lonely "?".
+ */
+export function filterToQuery(filter: ListFilter): string {
+  const params = new URLSearchParams();
+
+  const query = filter.query.trim();
+  if (query !== "") params.set("q", filter.query);
+  if (filter.stages.length > 0) params.set("stage", filter.stages.join(","));
+  writeValues(params, "deity", filter.deity);
+  writeValues(params, "raga", filter.raga);
+  writeValues(params, "tempo", filter.tempo);
+  if (filter.shruti.length > 0) params.set("shruti", filter.shruti.join(","));
+  if (filter.sung.length > 0) params.set("sung", filter.sung.join(","));
+  if (filter.unlinkedOnly) params.set("unlinked", "1");
+  // Sort is not a filter, but it is a choice, and coming back to somebody
+  // else's default order is the same surprise as coming back unfiltered.
+  if (filter.sort !== EMPTY_FILTER.sort) params.set("sort", filter.sort);
+
+  return params.toString();
+}
+
+/** The filter a query string is asking for, defaults for everything it omits. */
+export function filterFromQuery(params: ReadableParams): ListFilter {
+  const sort = params.get("sort") as SortKey | null;
+
+  return {
+    query: params.get("q") ?? EMPTY_FILTER.query,
+    stages: keepKnown(params.get("stage"), STAGE_KEYS) as ListFilter["stages"],
+    deity: readValues(params, "deity"),
+    raga: readValues(params, "raga"),
+    tempo: readValues(params, "tempo"),
+    shruti: keepKnown(params.get("shruti"), SHRUTI_KEYS),
+    sung: keepKnown(params.get("sung"), SUNG_KEYS),
+    unlinkedOnly: params.get("unlinked") === "1",
+    sort: sort && SORT_KEYS.includes(sort) ? sort : EMPTY_FILTER.sort,
+  };
+}

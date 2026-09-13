@@ -1,8 +1,8 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { RepertoireKind } from "@prisma/client";
 import { Button, Textarea, Badge } from "@/components/ui";
 import { DeitySymbols } from "@/components/DeitySymbol";
@@ -14,8 +14,10 @@ import {
   daysSince,
   disagrees,
   toggleValue,
-  ANY_VALUES,
   EMPTY_FILTER,
+  FILTER_PARAM_KEYS,
+  filterFromQuery,
+  filterToQuery,
   RECENT_DAYS,
   STALE_DAYS,
   type ListFilter,
@@ -135,16 +137,56 @@ export function LearningListView({
   canEdit: boolean;
   mine: boolean;
 }) {
-  const [query, setQuery] = useState("");
-  const [stages, setStages] = useState<RepertoireKind[]>([]);
-  const [deity, setDeity] = useState<ValueFilter>(ANY_VALUES);
-  const [raga, setRaga] = useState<ValueFilter>(ANY_VALUES);
-  const [tempo, setTempo] = useState<ValueFilter>(ANY_VALUES);
-  const [shruti, setShruti] = useState<ShrutiState[]>([]);
-  const [sung, setSung] = useState<SungState[]>([]);
-  const [unlinkedOnly, setUnlinkedOnly] = useState(false);
-  const [sort, setSort] = useState<SortKey>("recent");
-  const [openFilters, setOpenFilters] = useState(false);
+  /*
+   * ── The filter starts in the URL and stays there ────────────────────────
+   *
+   * Sailavan, 2026-09-13: "If I click a bhajan and return to that page filters
+   * don't hold. They should."
+   *
+   * Opening a bhajan unmounts this component, and the filter used to live only
+   * in the state below — so nine choices and a list cut down to eleven rows
+   * became ninety rows and a blank toolbar, for the sake of one look at one
+   * bhajan. Checking something you found is the commonest thing anybody does on
+   * this page, and it cost you the search every time.
+   *
+   * The query string is the fix, and it is the one this app already uses: the
+   * bhajan list's filters survive Back because they sit in the URL, which is
+   * what components/BackLink.tsx is relying on when it calls `router.back()`.
+   *
+   * Read ONCE, on mount. `useSearchParams()` is live, but re-seeding from it
+   * would fight the typing it is echoing — this is the starting position, not a
+   * running input. Both host pages are `force-dynamic`, so the server render
+   * sees the same params the browser does and hydration agrees.
+   */
+  const searchParams = useSearchParams();
+  const [initial] = useState(() => filterFromQuery(searchParams));
+
+  const [query, setQuery] = useState(initial.query);
+  const [stages, setStages] = useState<RepertoireKind[]>(initial.stages);
+  const [deity, setDeity] = useState<ValueFilter>(initial.deity);
+  const [raga, setRaga] = useState<ValueFilter>(initial.raga);
+  const [tempo, setTempo] = useState<ValueFilter>(initial.tempo);
+  const [shruti, setShruti] = useState<ShrutiState[]>(initial.shruti);
+  const [sung, setSung] = useState<SungState[]>(initial.sung);
+  const [unlinkedOnly, setUnlinkedOnly] = useState(initial.unlinkedOnly);
+  const [sort, setSort] = useState<SortKey>(initial.sort);
+
+  /*
+   * The panel comes back OPEN if something inside it is set.
+   *
+   * Everything in there is out of sight behind "Filters", and coming back to a
+   * closed panel with a small "3" on the button means the list is cut down by
+   * things you cannot see. The count alone is a hint; the panel is the answer.
+   */
+  const [openFilters, setOpenFilters] = useState(
+    () =>
+      initial.deity.values.length > 0 ||
+      initial.raga.values.length > 0 ||
+      initial.tempo.values.length > 0 ||
+      initial.shruti.length > 0 ||
+      initial.sung.length > 0 ||
+      initial.unlinkedOnly,
+  );
 
   /*
    * The options come from the rows themselves, not from the masterlist.
@@ -193,6 +235,36 @@ export function LearningListView({
   );
   const matches = useMemo(() => applyListFilter(rows, filter), [rows, filter]);
   const filtered = isFiltered(filter);
+
+  /*
+   * Write it back, without asking the server anything.
+   *
+   * `history.replaceState` rather than `router.replace`: both pages are
+   * `force-dynamic`, so the router would re-fetch the whole list on every
+   * keystroke to render rows it already has. Next supports the native call and
+   * keeps its own idea of the URL in step with it.
+   *
+   * REPLACE, not push. A filter is an adjustment to the page you are on, not a
+   * place you went — pushing would bury the page you came from under one entry
+   * per keystroke and make Back mean "undo one letter". Replacing updates the
+   * entry you are standing on, which is the entry Back returns you to.
+   *
+   * Keys we do not own are left alone, and so is the hash: `/singers/x#list`
+   * comes back to the list rather than the top of somebody's profile.
+   */
+  const search = filterToQuery(filter);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    for (const key of FILTER_PARAM_KEYS) params.delete(key);
+    for (const [key, value] of new URLSearchParams(search)) params.append(key, value);
+
+    const rest = params.toString();
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${rest ? `?${rest}` : ""}${window.location.hash}`,
+    );
+  }, [search]);
 
   const clearAll = () => {
     setQuery(EMPTY_FILTER.query);

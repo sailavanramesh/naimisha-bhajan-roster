@@ -4,6 +4,8 @@ import {
   applyListFilter,
   daysSince,
   disagrees,
+  filterFromQuery,
+  filterToQuery,
   isFiltered,
   matchesValues,
   toggleValue,
@@ -404,5 +406,75 @@ describe("filters combine", () => {
 
   it("returns nothing rather than everything when nothing matches", () => {
     expect(applyListFilter([row()], F({ deity: only("Hanuman") }), NOW)).toEqual([]);
+  });
+});
+
+
+/**
+ * The filter in the URL.
+ *
+ * Sailavan, 2026-09-13: open a bhajan from the list, come back, and the filters
+ * were gone. They live in the query string now, so Back brings them with it —
+ * see the note in lib/learningListFilter.ts. What these pin is that the round
+ * trip is lossless, that a URL carries only what is actually set, and that a
+ * mangled one still gives you a list.
+ */
+describe("the filter, written to the query string and read back", () => {
+  const roundTrip = (f: ListFilter) => filterFromQuery(new URLSearchParams(filterToQuery(f)));
+
+  it("writes nothing at all when nothing is set", () => {
+    expect(filterToQuery(EMPTY_FILTER)).toBe("");
+  });
+
+  it("comes back unchanged, every axis at once", () => {
+    const f = F({
+      query: "sai ram",
+      stages: [RepertoireKind.wantToLearn, RepertoireKind.known],
+      deity: only("Krishna", "Rama"),
+      raga: except("Bhairavi"),
+      tempo: only("Medium"),
+      shruti: ["missing", "disagrees"],
+      sung: ["never"],
+      unlinkedOnly: true,
+      sort: "lastSung",
+    });
+    expect(roundTrip(f)).toEqual(f);
+  });
+
+  it("keeps a value that contains a comma in one piece", () => {
+    // Ragas come out of the catalogue, not out of our own vocabulary, so they
+    // are the one thing a comma-joined list could quietly split in two.
+    const f = F({ raga: only("Shankarabharanam, Hamsadhwani") });
+    expect(roundTrip(f).raga.values).toEqual(["Shankarabharanam, Hamsadhwani"]);
+  });
+
+  it("leaves a default sort and an empty search out of the url", () => {
+    const q = filterToQuery(F({ query: "   ", sort: "recent", deity: only("Sai") }));
+    expect(q).not.toContain("sort=");
+    expect(q).not.toContain("q=");
+  });
+
+  it("does not write a mode with no values beside it", () => {
+    // "Exclude nothing" is what "include everything" already means; a mode left
+    // in the url alone is a filter that looks set and is not. See isFiltered.
+    expect(filterToQuery(F({ raga: { values: [], mode: "exclude" } }))).toBe("");
+  });
+
+  it("keeps an exclusion an exclusion", () => {
+    expect(roundTrip(F({ deity: except("Ganesha") }))).toEqual(F({ deity: except("Ganesha") }));
+  });
+
+  it("gives you the whole list back when the url is nonsense", () => {
+    // A hand-edited or truncated link should not land on an empty page.
+    const f = filterFromQuery(
+      new URLSearchParams("stage=asleep&shruti=purple&sung=maybe&sort=loudest&unlinked=yes"),
+    );
+    expect(f).toEqual(EMPTY_FILTER);
+    expect(isFiltered(f)).toBe(false);
+  });
+
+  it("keeps the stages it recognises and drops the ones it does not", () => {
+    const f = filterFromQuery(new URLSearchParams("stage=learning,festival,known,learning"));
+    expect(f.stages).toEqual([RepertoireKind.learning, RepertoireKind.known]);
   });
 });
