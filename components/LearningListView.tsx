@@ -18,6 +18,8 @@ import {
   FILTER_PARAM_KEYS,
   filterFromQuery,
   filterToQuery,
+  panelFromQuery,
+  panelToQuery,
   RECENT_DAYS,
   STALE_DAYS,
   type ListFilter,
@@ -172,21 +174,13 @@ export function LearningListView({
   const [sort, setSort] = useState<SortKey>(initial.sort);
 
   /*
-   * The panel comes back OPEN if something inside it is set.
+   * The panel travels too — open or shut as YOU left it.
    *
-   * Everything in there is out of sight behind "Filters", and coming back to a
-   * closed panel with a small "3" on the button means the list is cut down by
-   * things you cannot see. The count alone is a hint; the panel is the answer.
+   * Sailavan, 2026-09-13: "it should come back with the filters collapsed."
+   * It is only guessed at for a url that has not been here before; see
+   * panelFromQuery.
    */
-  const [openFilters, setOpenFilters] = useState(
-    () =>
-      initial.deity.values.length > 0 ||
-      initial.raga.values.length > 0 ||
-      initial.tempo.values.length > 0 ||
-      initial.shruti.length > 0 ||
-      initial.sung.length > 0 ||
-      initial.unlinkedOnly,
-  );
+  const [openFilters, setOpenFilters] = useState(() => panelFromQuery(searchParams, initial));
 
   /*
    * The options come from the rows themselves, not from the masterlist.
@@ -253,10 +247,12 @@ export function LearningListView({
    * comes back to the list rather than the top of somebody's profile.
    */
   const search = filterToQuery(filter);
+  const panel = panelToQuery(openFilters, filter);
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     for (const key of FILTER_PARAM_KEYS) params.delete(key);
     for (const [key, value] of new URLSearchParams(search)) params.append(key, value);
+    if (panel !== null) params.set("filters", panel);
 
     const rest = params.toString();
     window.history.replaceState(
@@ -264,7 +260,7 @@ export function LearningListView({
       "",
       `${window.location.pathname}${rest ? `?${rest}` : ""}${window.location.hash}`,
     );
-  }, [search]);
+  }, [search, panel]);
 
   const clearAll = () => {
     setQuery(EMPTY_FILTER.query);

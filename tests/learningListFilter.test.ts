@@ -7,6 +7,8 @@ import {
   filterFromQuery,
   filterToQuery,
   isFiltered,
+  panelFromQuery,
+  panelToQuery,
   matchesValues,
   toggleValue,
   EMPTY_FILTER,
@@ -476,5 +478,67 @@ describe("the filter, written to the query string and read back", () => {
   it("keeps the stages it recognises and drops the ones it does not", () => {
     const f = filterFromQuery(new URLSearchParams("stage=learning,festival,known,learning"));
     expect(f.stages).toEqual([RepertoireKind.learning, RepertoireKind.known]);
+  });
+});
+
+
+/**
+ * The filter panel, open or shut.
+ *
+ * Sailavan, 2026-09-13: "it comes back with the filters expanded, even if I've
+ * collapsed them before clicking on an individual bhajan. it should come back
+ * with the filters collapsed." Remembered, not guessed at — and the guess is
+ * kept only for a url that has never been here, which is somebody else's link.
+ */
+describe("the filter panel travels with the filters", () => {
+  const withPanel = (open: boolean, f: ListFilter) => {
+    const params = new URLSearchParams(filterToQuery(f));
+    const said = panelToQuery(open, f);
+    if (said !== null) params.set("filters", said);
+    return params;
+  };
+  const roundTrip = (open: boolean, f: ListFilter) => panelFromQuery(withPanel(open, f), f);
+
+  it("comes back shut when you shut it, filters set or not", () => {
+    // The bug: a set filter forced it open again on the way back.
+    expect(roundTrip(false, F({ deity: only("Ganesha"), shruti: ["missing"] }))).toBe(false);
+    expect(roundTrip(false, EMPTY_FILTER)).toBe(false);
+  });
+
+  it("comes back open when you left it open, filters set or not", () => {
+    expect(roundTrip(true, F({ deity: only("Ganesha") }))).toBe(true);
+    expect(roundTrip(true, EMPTY_FILTER)).toBe(true);
+  });
+
+  it("says nothing in the url when the guess already gets it right", () => {
+    // A plain unfiltered list carries no "filters=0", and a link with filters
+    // in it opens the panel without anyone having to say so.
+    expect(panelToQuery(false, EMPTY_FILTER)).toBe(null);
+    expect(panelToQuery(true, F({ raga: only("Bhairavi") }))).toBe(null);
+    expect(withPanel(false, EMPTY_FILTER).toString()).toBe("");
+  });
+
+  it("only writes the key when you disagree with the guess", () => {
+    expect(panelToQuery(true, EMPTY_FILTER)).toBe("1");
+    expect(panelToQuery(false, F({ raga: only("Bhairavi") }))).toBe("0");
+  });
+
+  it("opens a stranger's filtered link, which has no say in the matter", () => {
+    const f = F({ deity: only("Ganesha") });
+    expect(panelFromQuery(new URLSearchParams(filterToQuery(f)), f)).toBe(true);
+  });
+
+  it("leaves a plain link shut", () => {
+    expect(panelFromQuery(new URLSearchParams(""), EMPTY_FILTER)).toBe(false);
+  });
+
+  it("ignores a value it does not recognise rather than honouring it", () => {
+    const f = F({ deity: only("Ganesha") });
+    expect(panelFromQuery(new URLSearchParams("filters=maybe"), f)).toBe(true);
+  });
+
+  it("does not count the stage chips or the search, which are not in the panel", () => {
+    expect(roundTrip(false, F({ query: "sai", stages: [RepertoireKind.known] }))).toBe(false);
+    expect(panelToQuery(false, F({ query: "sai", stages: [RepertoireKind.known] }))).toBe(null);
   });
 });

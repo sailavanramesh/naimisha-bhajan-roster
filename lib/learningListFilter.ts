@@ -291,6 +291,7 @@ export const FILTER_PARAM_KEYS = [
   "sung",
   "unlinked",
   "sort",
+  "filters",
 ] as const;
 
 /**
@@ -370,4 +371,60 @@ export function filterFromQuery(params: ReadableParams): ListFilter {
     unlinkedOnly: params.get("unlinked") === "1",
     sort: sort && SORT_KEYS.includes(sort) ? sort : EMPTY_FILTER.sort,
   };
+}
+
+
+/* ── The filter panel, open or shut ────────────────────────────────────────
+ *
+ * Sailavan, 2026-09-13: "it comes back with the filters expanded, even if I've
+ * collapsed them before clicking on an individual bhajan. it should come back
+ * with the filters collapsed."
+ *
+ * The panel was the one thing on the toolbar still being GUESSED at rather than
+ * remembered — it came back open whenever anything inside it was set, which is
+ * a fair guess for a link somebody sends you and the wrong answer for the page
+ * you were just on. You chose to shut it; that is not a guess to improve on.
+ *
+ * So it is remembered, and the guess survives only where there is nothing to
+ * remember: a link from somebody else, or a bookmark older than this. Which is
+ * also why the key is written only when it DISAGREES with the guess — a plain
+ * unfiltered list carries no "filters=0", and a link with filters in it opens
+ * the panel without anyone having to say so.
+ */
+
+/** Everything in the panel; the stage chips and the search sit outside it. */
+function panelHasSomethingSet(filter: ListFilter): boolean {
+  return (
+    filter.deity.values.length > 0 ||
+    filter.raga.values.length > 0 ||
+    filter.tempo.values.length > 0 ||
+    filter.shruti.length > 0 ||
+    filter.sung.length > 0 ||
+    filter.unlinkedOnly
+  );
+}
+
+/**
+ * Open or shut, for a url that does not say.
+ *
+ * A closed panel with a small "3" on the button means the list is cut down by
+ * things you cannot see, which is fine when you shut it yourself and unhelpful
+ * when you have just been handed the link.
+ */
+export function panelStartsOpen(filter: ListFilter): boolean {
+  return panelHasSomethingSet(filter);
+}
+
+/** What the url says, or the guess where it says nothing. */
+export function panelFromQuery(params: ReadableParams, filter: ListFilter): boolean {
+  const said = params.get("filters");
+  if (said === "1") return true;
+  if (said === "0") return false;
+  return panelStartsOpen(filter);
+}
+
+/** `null` where the guess already gets it right, and nothing need be written. */
+export function panelToQuery(open: boolean, filter: ListFilter): string | null {
+  if (open === panelStartsOpen(filter)) return null;
+  return open ? "1" : "0";
 }
