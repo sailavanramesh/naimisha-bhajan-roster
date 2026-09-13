@@ -1,9 +1,11 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { getSignedInSinger } from "@/lib/auth";
 import { Card, CardHeader, CardTitle } from "@/components/ui";
 import { LearningList } from "@/components/LearningList";
+import { KeepScroll } from "@/components/KeepScroll";
 
 export const dynamic = "force-dynamic";
 
@@ -37,6 +39,15 @@ export default async function MyListPage() {
 
   return (
     <div className="grid gap-4">
+      {/* Sailavan, 2026-09-13: "ideally remember where I was on the page instead
+          of going to the top or whatever." Open a bhajan from ninety rows down
+          and come back to it, not to the top. It keys on the url INCLUDING the
+          query, which is only useful now that the filters live there —
+          see components/KeepScroll.tsx and lib/learningListFilter.ts.
+          Suspense because it reads the query string. */}
+      <Suspense fallback={null}>
+        <KeepScroll prefix="my-list" />
+      </Suspense>
       <Card>
         <CardHeader>
           <CardTitle>My list</CardTitle>

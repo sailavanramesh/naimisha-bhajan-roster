@@ -1,7 +1,9 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui";
 import { LearningList } from "@/components/LearningList";
+import { KeepScroll } from "@/components/KeepScroll";
 import { getRole, can, getSignedInSinger } from "@/lib/auth";
 import { ShrutiLadder } from "@/components/ShrutiLadder";
 import { SungBhajanSearch, type SungBhajan } from "./SungBhajanSearch";
@@ -101,6 +103,12 @@ export default async function SingerPage({
 
   return (
     <div className="grid gap-4">
+      {/* The list sits below a pitch profile, a shruti ladder, a raga table and
+          fifty rows of history, so opening a bhajan from it and coming back to
+          the top is a long way back. See components/KeepScroll.tsx. */}
+      <Suspense fallback={null}>
+        <KeepScroll prefix="singer" />
+      </Suspense>
       <Card>
         <CardHeader>
           <CardTitle>{singer.name}</CardTitle>
