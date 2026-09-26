@@ -13,6 +13,7 @@ import { planTablas } from "@/lib/tablaPlan";
  */
 const TABLA = "Tabla";
 import type { LiveStrip } from "@/lib/liveDesk";
+import { isAbhishekam, ashtottaraLinks } from "@/lib/abhishekamChants";
 
 export const dynamic = "force-dynamic";
 
@@ -195,8 +196,16 @@ export default async function LiveSessionPage({
    */
   const subheading = `${slots.length} bhajan${slots.length === 1 ? "" : "s"}`;
 
+  /*
+   * The ashtottaras, on an Abhishekam only. Fetched here rather than inside the
+   * board because LiveBoard is a client component and this is a database read;
+   * on every other session it is an `isAbhishekam` string test and no query.
+   */
+  const chants = isAbhishekam(session.category?.name) ? await ashtottaraLinks() : [];
+
   return (
     <LiveBoard
+      chants={chants}
       sessionId={session.id}
       heading={heading}
       subheading={subheading}

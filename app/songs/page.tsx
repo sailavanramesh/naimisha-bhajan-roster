@@ -4,6 +4,7 @@ import { getRole, can } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
 import { openingLine } from "@/lib/songVerses";
 import { Card, CardContent } from "@/components/ui";
+import { NewChant } from "@/components/NewChant";
 
 export const dynamic = "force-dynamic";
 
@@ -17,18 +18,31 @@ export const dynamic = "force-dynamic";
 export default async function SongsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string }>;
+  searchParams: Promise<{ q?: string; kind?: string }>;
 }) {
   const role = await getRole();
   if (role === "viewer" && !can(role, "viewAllPages")) {
     return <NoAccess what="The song catalogue" role={role} />;
   }
 
-  const { q } = await searchParams;
+  const { q, kind: kindParam } = await searchParams;
   const query = (q ?? "").trim();
 
+  /*
+   * WHICH LIST YOU ARE LOOKING AT.
+   *
+   * Songs and chants share a table (see SongKind in schema.prisma) but never
+   * share a list: a singer looking for "Madhura Mohana" is not also looking for
+   * an ashtottara. Songs are the default because they are the bigger catalogue
+   * and the one people arrive here for.
+   */
+  const kind = kindParam === "chant" ? "chant" : "song";
+  const isChants = kind === "chant";
+
   const songs = await prisma.song.findMany({
-    where: query
+    where: {
+      kind,
+      ...(query
       ? {
           OR: [
             { title: { contains: query, mode: "insensitive" } },
@@ -39,9 +53,12 @@ export default async function SongsPage({
             // can only half remember a line of.
             { verses: { some: { roman: { contains: query, mode: "insensitive" } } } },
             { verses: { some: { meaning: { contains: query, mode: "insensitive" } } } },
+            // The Devanagari too, so searching in the script finds a chant.
+            { verses: { some: { script: { contains: query, mode: "insensitive" } } } },
           ],
         }
-      : undefined,
+      : {}),
+    },
     orderBy: { title: "asc" },
     select: {
       id: true,
@@ -60,23 +77,57 @@ export default async function SongsPage({
     },
   });
 
+  const canAdd = can(role, "editPrograms");
+
   return (
     <div className="grid gap-4">
       <div>
-        <h1 className="font-display text-2xl font-semibold sm:text-3xl">Songs</h1>
+        <h1 className="font-display text-2xl font-semibold sm:text-3xl">
+          {isChants ? "Chants" : "Songs"}
+        </h1>
         <p className="mt-1 text-sm text-on-ground-muted">
-          What the group sings at music programs, with the words and what they mean. Separate
-          from the bhajan masterlist — these are the centre&apos;s own.
+          {isChants
+            ? "Chants, stotras and ashtottaras, in Devanagari and in transliteration. Recited rather than sung, so they carry no pitch and no practice track."
+            : "What the group sings at music programs, with the words and what they mean. Separate from the bhajan masterlist — these are the centre's own."}
         </p>
       </div>
 
+      {/*
+        The two lists, as links rather than as a client-side toggle: which list
+        you are on belongs in the URL, so it survives opening an entry and
+        pressing back, and so a link to the chants can be sent to somebody.
+      */}
+      <nav className="flex gap-2" aria-label="Which catalogue">
+        {[
+          { key: "song", label: "Songs", href: "/songs" },
+          { key: "chant", label: "Chants & stotras", href: "/songs?kind=chant" },
+        ].map((tab) => (
+          <Link
+            key={tab.key}
+            href={tab.href}
+            aria-current={kind === tab.key ? "page" : undefined}
+            className={
+              kind === tab.key
+                ? "rounded-key border border-brass/50 bg-surface px-3 py-1.5 text-sm font-medium"
+                : "rounded-key border border-rule-surface px-3 py-1.5 text-sm text-on-ground-muted hover:border-brass/50"
+            }
+          >
+            {tab.label}
+          </Link>
+        ))}
+      </nav>
+
       <form method="get" className="flex flex-wrap gap-2">
+        {/* Searching must not drop you back into the songs. */}
+        {isChants ? <input type="hidden" name="kind" value="chant" /> : null}
         <input
           type="search"
           name="q"
           defaultValue={query}
-          placeholder="Title, language, or a line you remember"
-          aria-label="Search songs"
+          placeholder={
+            isChants ? "Title, or a name you remember" : "Title, language, or a line you remember"
+          }
+          aria-label={isChants ? "Search chants" : "Search songs"}
           className="h-9 min-w-0 flex-1 rounded-key border border-rule-surface bg-field px-3 text-sm"
         />
         <button
@@ -87,10 +138,16 @@ export default async function SongsPage({
         </button>
       </form>
 
+      {isChants && canAdd ? <NewChant /> : null}
+
       {songs.length === 0 ? (
         <Card>
           <CardContent className="py-6 text-sm text-on-surface-muted sm:py-6">
-            {query ? `Nothing matches "${query}".` : "No songs yet. They arrive with a program."}
+            {query
+              ? `Nothing matches "${query}".`
+              : isChants
+                ? "No chants yet."
+                : "No songs yet. They arrive with a program."}
           </CardContent>
         </Card>
       ) : (
@@ -127,8 +184,12 @@ export default async function SongsPage({
                     ) : null}
                   </span>
                   <span className="shrink-0 whitespace-nowrap text-xs text-on-surface-muted">
-                    {verses > 0 ? `${verses} verse${verses === 1 ? "" : "s"}` : "no words yet"}
-                    {song._count.items > 0 ? ` · sung ${song._count.items}×` : ""}
+                    {verses > 0
+                      ? isChants
+                        ? `${verses} part${verses === 1 ? "" : "s"}`
+                        : `${verses} verse${verses === 1 ? "" : "s"}`
+                      : "no words yet"}
+                    {!isChants && song._count.items > 0 ? ` · sung ${song._count.items}×` : ""}
                   </span>
                 </Link>
               </li>

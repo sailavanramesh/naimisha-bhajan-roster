@@ -82,6 +82,13 @@ export default async function SongPage({
    * storage allowance is a different thing from typing a verse.
    */
   const canEditTracks = can(role, "editPrograms");
+  /*
+   * A CHANT IS NOT SUNG, so this page drops three of its sections for one: the
+   * practice pair, the shruti finder and "Sung at". None of them are merely
+   * empty for an ashtottara — they are the wrong question. It is recited at a
+   * whole gathering, at no pitch, and it does not appear in a running order.
+   */
+  const isChant = song.kind === "chant";
   const pair = pairOf(song);
   const storage = canEditTracks ? await trackStorageSummary() : null;
 
@@ -107,7 +114,9 @@ export default async function SongPage({
     <div className="grid gap-4">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-xs uppercase tracking-wide text-on-ground-muted">Song</p>
+          <p className="text-xs uppercase tracking-wide text-on-ground-muted">
+            {isChant ? "Chant" : "Song"}
+          </p>
           <h1 className="font-display text-2xl font-semibold sm:text-3xl">{song.title}</h1>
           {facts ? <p className="mt-0.5 text-sm text-on-ground-muted">{facts}</p> : null}
         </div>
@@ -157,7 +166,7 @@ export default async function SongPage({
         Above "Sung at" too, because that list is history and this is the thing
         you came to use.
       */}
-      {pair.original || pair.karaoke || canEditTracks ? (
+      {!isChant && (pair.original || pair.karaoke || canEditTracks) ? (
         <Card>
           <CardHeader>
             <CardTitle>Recording</CardTitle>
@@ -252,16 +261,24 @@ export default async function SongPage({
         is practice and saves nothing; an editor may write it back to the
         programme that allocated it. See components/SongShrutiFinder.tsx.
       */}
-      <SongShrutiFinder
-        itemId={pitchItem?.id ?? null}
-        allocated={pitchItem?.pitchNote ?? null}
-        canAscribe={canEditPrograms}
-        where={pitchItem ? programmeLabel(pitchItem) : null}
-      />
+      {isChant ? null : (
+        <SongShrutiFinder
+          itemId={pitchItem?.id ?? null}
+          allocated={pitchItem?.pitchNote ?? null}
+          canAscribe={canEditPrograms}
+          where={pitchItem ? programmeLabel(pitchItem) : null}
+        />
+      )}
 
       <Card>
         <CardHeader>
-          <CardTitle>Words</CardTitle>
+          <CardTitle>{isChant ? "The chant" : "Words"}</CardTitle>
+          {isChant ? (
+            <p className="mt-1 text-sm text-on-surface-muted">
+              Devanagari and IAST transliteration. Anybody who can edit the words can correct
+              these — use the editor below.
+            </p>
+          ) : null}
         </CardHeader>
         <CardContent className="grid gap-4">
           <Verses
@@ -287,6 +304,7 @@ export default async function SongPage({
         </CardContent>
       </Card>
 
+      {isChant ? null : (
       <Card>
         <CardHeader>
           <CardTitle>Sung at</CardTitle>
@@ -334,6 +352,7 @@ export default async function SongPage({
           )}
         </CardContent>
       </Card>
+      )}
     </div>
   );
 }

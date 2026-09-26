@@ -128,6 +128,7 @@ export function LiveBoard({
   sessionId,
   heading,
   subheading,
+  chants = [],
   categoryName,
   categoryImage,
   slots,
@@ -137,6 +138,11 @@ export function LiveBoard({
   sessionId: string;
   heading: string;
   subheading: string;
+  /**
+   * The ashtottaras to put in the rail. Empty on every session that is not an
+   * Abhishekam — see lib/abhishekamChants.ts, which decides.
+   */
+  chants?: { id: string; title: string }[];
   /** The kind of session, shown as a mark at the foot of the rail. */
   categoryName?: string | null;
   categoryImage?: string | null;
@@ -541,6 +547,34 @@ export function LiveBoard({
             <span aria-hidden>{view === "desk" ? "♪" : "🎛"}</span>
           </button>
         ) : null}
+
+        {/*
+          THE ASHTOTTARAS, on an Abhishekam.
+
+          Same round 28px control as the exit and the desk toggle, and the title
+          only in the tooltip for the same reason the kind's picture below is:
+          at 36px wide there is no honest way to put "Sathya Sai Ashtottara
+          Shatanamavali" on screen. Two of them stack; the tooltip and the
+          accessible name carry which is which.
+
+          They open in a new tab deliberately. Whoever presses one is mid
+          session and wants the names in front of them — coming back to a live
+          board that had to reload, and had lost the desk view they were in,
+          would be worse than a second tab.
+        */}
+        {chants.map((chant) => (
+          <a
+            key={chant.id}
+            href={`/songs/${chant.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={chant.title}
+            title={chant.title}
+            className="mt-2 inline-flex h-7 w-7 items-center justify-center rounded-full border border-rule bg-surface text-[13px] leading-none text-on-surface-muted hover:border-brass/50 hover:text-on-surface"
+          >
+            <span aria-hidden>📿</span>
+          </a>
+        ))}
 
         {/* vertical-rl + rotate-180 reads bottom-to-top, which keeps the date
             upright from the left edge rather than upside down. */}
