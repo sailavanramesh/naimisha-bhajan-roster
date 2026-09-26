@@ -44,13 +44,31 @@ export async function createSong(input: {
   title: string;
   language?: string;
   tradition?: string;
+  /**
+   * `chant` puts it in the chants, stotras and ashtottaras list instead. The
+   * clash-returns-the-existing rule below does NOT reconsider the kind: if a
+   * title is already in the catalogue, the entry that exists is the answer, and
+   * silently moving somebody else's song into the chants because of a typed
+   * title would be worse than the duplicate we are avoiding.
+   */
+  kind?: "song" | "chant";
 }): Promise<WithId> {
   await requireCapability("editPrograms");
 
   const parsed = z
-    .object({ title: z.string().trim().min(1).max(200), language: Text(60), tradition: Text(60) })
-    .safeParse({ title: input.title, language: input.language ?? "", tradition: input.tradition ?? "" });
-  if (!parsed.success) return { ok: false, error: "Give the song a title." };
+    .object({
+      title: z.string().trim().min(1).max(200),
+      language: Text(60),
+      tradition: Text(60),
+      kind: z.enum(["song", "chant"]),
+    })
+    .safeParse({
+      title: input.title,
+      language: input.language ?? "",
+      tradition: input.tradition ?? "",
+      kind: input.kind ?? "song",
+    });
+  if (!parsed.success) return { ok: false, error: "Give it a title." };
 
   const existing = await prisma.song.findFirst({
     where: { title: { equals: parsed.data.title, mode: "insensitive" } },
@@ -63,6 +81,7 @@ export async function createSong(input: {
       title: parsed.data.title,
       language: parsed.data.language,
       tradition: parsed.data.tradition,
+      kind: parsed.data.kind,
     },
     select: { id: true },
   });

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/db";
 import { Card, CardContent, CardHeader, CardTitle, Input, Button } from "@/components/ui";
+import { AshtottaraLinks } from "@/components/AshtottaraLinks";
 import { SessionSingersGrid } from "./SessionSingersGrid";
 import { getPitchSuggestions } from "@/lib/pitchSuggestions";
 import { computeRecommendedPitch } from "@/lib/computeRecommendedPitch";
@@ -712,6 +713,10 @@ export default async function RosterSessionPage({
               ) : null}
             </div>
           ) : null}
+
+          {/* Only on an Abhishekam, and only if there are any — the component
+              decides. See lib/abhishekamChants.ts. */}
+          <AshtottaraLinks categoryName={session.category?.name ?? null} />
 
           <div className="mt-2 grid gap-2 text-sm">
             {/*

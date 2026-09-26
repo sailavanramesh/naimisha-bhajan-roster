@@ -923,9 +923,28 @@ model ProgramItemInstrument {
 /// Mohana" are both program songs and masterlist bhajans. A pointer, so the
 /// details page can offer the bhajan's own record; never a merge, or the two
 /// catalogues would have to agree about everything forever.
+/// What a catalogue entry IS — something sung, or something recited.
+///
+/// A chant is the same shape as a song: a title, and words in up to three
+/// layers. An ashtottara's 108 names are verses, the Devanagari goes in
+/// `SongVerse.script` and the IAST in `roman`, and the whole editor, the
+/// three-layer reader and the search over the words all work unchanged. So
+/// this is ONE COLUMN rather than a second catalogue — the group is not
+/// maintaining two of everything for a distinction that is only ever about
+/// which list a thing appears in.
+///
+/// A chant has no pitch, no practice pair and no programme item, and the page
+/// simply does not draw those sections for one.
+enum SongKind {
+  song
+  /// Chants, stotras, ashtottaras — recited rather than sung.
+  chant
+}
+
 model Song {
   id        String  @id @default(cuid())
   title     String  @unique
+  kind      SongKind @default(song)
   language  String?
   /// "Meera bhajan", "Carnatic kriti", "Odia bhajan" — how the group would
   /// describe where it comes from.
@@ -983,6 +1002,7 @@ model Song {
   items   ProgramItem[]
 
   @@index([tradition])
+  @@index([kind])
 }
 
 /// One section of a song — a Pallavi, a Charanam, a Chorus — in up to three
