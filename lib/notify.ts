@@ -21,7 +21,13 @@
  * have to turn up and sing do need to know.
  */
 
-export type NoticeKind = "rostered" | "published" | "nudge_morning" | "nudge" | "nudge_final";
+export type NoticeKind =
+  | "rostered"
+  | "published"
+  | "nudge_morning"
+  | "nudge"
+  | "nudge_final"
+  | "lyric_flag";
 
 export type Notification = {
   title: string;
@@ -357,6 +363,34 @@ export function unavailableWhileRosteredNotification(input: {
     body: `${input.singerName} is not available on ${formatSessionDate(input.dateISO)} and is on that roster. Somebody else will be needed.`,
     url: `/roster/${input.sessionId}/assign`,
     tag: `unavailable-${input.sessionId}-${input.singerName}`,
+    alert: true,
+  };
+}
+
+/**
+ * A flagged word or phrase is in the lyrics of a bhajan on today's session.
+ *
+ * Goes to coordinators and owners about two hours before the start — late
+ * enough that the roster is what will actually be sung, early enough to swap a
+ * bhajan if they want to. It names each bhajan and the words as written, so it
+ * can be acted on from the lock screen; the session page shows the same list.
+ *
+ * `alert: true`: it is sent because somebody may want to do something about it
+ * before the session begins.
+ */
+export function lyricFlagNotification(input: {
+  sessionId: string;
+  /** "7pm", or empty when unknown. */
+  timeLabel: string;
+  hits: ReadonlyArray<{ position: number; title: string; matched: string }>;
+}): Notification {
+  const when = input.timeLabel ? `the ${input.timeLabel} session` : "today's session";
+  const lines = input.hits.map((h) => `${h.position}. ${h.title}: "${h.matched}"`);
+  return {
+    title: input.hits.length === 1 ? "Flagged word in today's lyrics" : "Flagged words in today's lyrics",
+    body: `In ${when}: ${lines.join("; ")}`,
+    url: `/roster/${input.sessionId}`,
+    tag: `lyric-flag-${input.sessionId}`,
     alert: true,
   };
 }

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { pushToSingers, pushConfigured } from "@/lib/push";
 import { removedNotification, shouldNotifyForSession } from "@/lib/notify";
 import { melbourneTodayISO } from "@/lib/dates";
+import { changeNoticesClosed } from "@/lib/nudgeRules";
 
 /**
  * lib/notifyRemoval.ts — telling somebody they are off a session.
@@ -31,6 +32,7 @@ export async function rosteredSingerIds(sessionId: string): Promise<string[]> {
 export async function notifyRemovals(
   sessionId: string,
   before: readonly string[],
+  now: Date = new Date(),
 ): Promise<{ told: number; skipped?: string }> {
   if (before.length === 0) return { told: 0 };
   if (!pushConfigured) return { told: 0, skipped: "push is not configured" };
@@ -38,15 +40,20 @@ export async function notifyRemovals(
   try {
     const session = await prisma.session.findUnique({
       where: { id: sessionId },
-      select: { date: true },
+      select: { date: true, startsAt: true, timeZone: true },
     });
     if (!session) return { told: 0, skipped: "no such session" };
 
     const dateISO = session.date.toISOString().slice(0, 10);
     // Past sessions are edited constantly — tidying last month's roster must
     // not tell anybody they have been dropped from something already sung.
-    if (!shouldNotifyForSession(dateISO, melbourneTodayISO())) {
+    if (!shouldNotifyForSession(dateISO, melbourneTodayISO(now))) {
       return { told: 0, skipped: "session is in the past" };
+    }
+    // Same once it is an hour under way: rows tidied after the fact must not
+    // tell somebody in the hall that they have been dropped.
+    if (changeNoticesClosed({ dateISO, startsAt: session.startsAt, timeZone: session.timeZone }, now)) {
+      return { told: 0, skipped: "session is under way" };
     }
 
     const after = new Set(await rosteredSingerIds(sessionId));

@@ -1,4 +1,6 @@
 import { NUDGE_HOUR, NUDGE_FINAL_HOUR, NUDGE_LATEST_HOUR, type NoticeKind } from "./notify";
+import { sessionInstant } from "./timezones";
+import { USUAL_START } from "./sessionsOfDay";
 
 /**
  * lib/nudgeRules.ts — when the day-of reminders go out, per session.
@@ -195,4 +197,50 @@ export function sessionUnderWay(
 ): boolean {
   if (!startInstant) return false;
   return now.getTime() >= startInstant.getTime() + graceMinutes * 60_000;
+}
+
+/**
+ * The moment a session starts, for deciding what to send around it.
+ *
+ * A session with no `startsAt` is "the usual evening" (see Session.startsAt),
+ * so it is read as USUAL_START rather than as unknown — for these rules a
+ * guess at seven is far better than never cutting off. The zone does the
+ * daylight-saving work: see sessionInstant.
+ */
+export function sessionStart(session: {
+  dateISO: string;
+  startsAt: string | null;
+  timeZone: string;
+}): Date | null {
+  return sessionInstant(session.dateISO, session.startsAt ?? USUAL_START, session.timeZone);
+}
+
+/**
+ * How long after the scheduled start the app stops telling anybody about a
+ * change to the session.
+ *
+ * Sailavan, 2026-10-12: "don't send notifications to harmonium players or
+ * anyone if bhajans are changed 1 hr after the scheduled start time, its more
+ * of a nuisance at that point." An hour in, the rows being edited are the
+ * record of what was sung, not a plan anybody needs to act on.
+ */
+export const CHANGE_NOTICE_CUTOFF_MINUTES = 60;
+
+/**
+ * Has the session been going long enough that edits to it should be silent?
+ *
+ * Applies to everything a SAVE sends — "you are rostered", "you are off the
+ * roster", the harmonium summary and its changes, "the roster is up", and the
+ * coordinators' "somebody has dropped out". It does not touch a coordinator
+ * pressing "Send a reminder" by hand: that is a person deciding to send, not
+ * the app deciding for them.
+ *
+ * Measured from the real instant of the start in the session's own zone, so
+ * 7pm means 7pm in the hall on both sides of a daylight-saving change.
+ */
+export function changeNoticesClosed(
+  session: { dateISO: string; startsAt: string | null; timeZone: string },
+  now: Date,
+): boolean {
+  return sessionUnderWay(sessionStart(session), now, CHANGE_NOTICE_CUTOFF_MINUTES);
 }

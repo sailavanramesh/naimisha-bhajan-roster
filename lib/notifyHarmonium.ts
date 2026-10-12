@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { pushToSingers, pushConfigured } from "@/lib/push";
 import { formatSessionDate, shouldNotifyForSession } from "@/lib/notify";
 import { melbourneTodayISO } from "@/lib/dates";
+import { changeNoticesClosed } from "@/lib/nudgeRules";
 import {
   decideHarmoniumNotice,
   harmoniumChangeNotification,
@@ -42,6 +43,7 @@ export type HarmoniumOutcome =
   | "unchanged"
   | "nobody to tell"
   | "in the past"
+  | "under way"
   | "push is not configured"
   | "no such session"
   | "error";
@@ -76,12 +78,16 @@ async function harmoniumSingerIds(): Promise<string[]> {
 /** The session's rows as the harmonium reads them. */
 async function linesFor(sessionId: string): Promise<{
   dateISO: string;
+  startsAt: string | null;
+  timeZone: string;
   lines: HarmoniumLine[];
 } | null> {
   const session = await prisma.session.findUnique({
     where: { id: sessionId },
     select: {
       date: true,
+      startsAt: true,
+      timeZone: true,
       format: true,
       slots: {
         select: {
@@ -98,6 +104,8 @@ async function linesFor(sessionId: string): Promise<{
 
   return {
     dateISO: session.date.toISOString().slice(0, 10),
+    startsAt: session.startsAt,
+    timeZone: session.timeZone,
     lines: harmoniumLines(
       session.slots.map((s) => ({
         position: s.position,
@@ -115,13 +123,19 @@ async function linesFor(sessionId: string): Promise<{
  *
  * Safe to call after any save. Everything in it is about NOT sending.
  */
-export async function notifyHarmoniumIfReady(sessionId: string): Promise<HarmoniumOutcome> {
+export async function notifyHarmoniumIfReady(
+  sessionId: string,
+  now: Date = new Date(),
+): Promise<HarmoniumOutcome> {
   if (!pushConfigured) return "push is not configured";
 
   try {
     const current = await linesFor(sessionId);
     if (!current) return "no such session";
-    if (!shouldNotifyForSession(current.dateISO, melbourneTodayISO())) return "in the past";
+    if (!shouldNotifyForSession(current.dateISO, melbourneTodayISO(now))) return "in the past";
+    // An hour into the session the edits are the record of what was sung, and
+    // the players are at the harmonium. The snapshot is left where it was.
+    if (changeNoticesClosed(current, now)) return "under way";
 
     const sent = await prisma.harmoniumNotice.findUnique({ where: { sessionId } });
     const before = sent ? ((sent.lines as unknown as HarmoniumLine[]) ?? []) : null;
@@ -188,7 +202,7 @@ export async function notifyHarmoniumForSessions(now: Date = new Date()): Promis
 
   for (const s of sessions) {
     run.considered += 1;
-    const outcome = await notifyHarmoniumIfReady(s.id);
+    const outcome = await notifyHarmoniumIfReady(s.id, now);
     if (outcome === "summary sent") run.summaries += 1;
     if (outcome === "changes sent") run.changes += 1;
   }

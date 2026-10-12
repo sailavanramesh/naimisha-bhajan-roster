@@ -16,6 +16,7 @@ import { prisma } from "./db";
 import { pushToSingers } from "./push";
 import { unavailableWhileRosteredNotification } from "./notify";
 import { LIVE_SESSION } from "./archive";
+import { changeNoticesClosed } from "./nudgeRules";
 
 export type Clash = {
   sessionId: string;
@@ -33,6 +34,7 @@ export type Clash = {
 export async function clashesFor(
   singerId: string,
   dateISOs: readonly string[],
+  now: Date = new Date(),
 ): Promise<Clash[]> {
   if (dateISOs.length === 0) return [];
 
@@ -43,7 +45,7 @@ export async function clashesFor(
       session: { date: { in: dates }, ...LIVE_SESSION },
     },
     select: {
-      session: { select: { id: true, date: true } },
+      session: { select: { id: true, date: true, startsAt: true, timeZone: true } },
       singer: { select: { id: true, name: true } },
     },
   });
@@ -53,9 +55,14 @@ export async function clashesFor(
   const bySession = new Map<string, Clash>();
   for (const s of slots) {
     if (!s.session || !s.singer) continue;
+    const dateISO = s.session.date.toISOString().slice(0, 10);
+    // Dropping out of a session that has been going for an hour fills no gap.
+    if (changeNoticesClosed({ dateISO, startsAt: s.session.startsAt, timeZone: s.session.timeZone }, now)) {
+      continue;
+    }
     bySession.set(s.session.id, {
       sessionId: s.session.id,
-      dateISO: s.session.date.toISOString().slice(0, 10),
+      dateISO,
       singerId: s.singer.id,
       singerName: s.singer.name,
     });
