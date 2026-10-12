@@ -942,8 +942,8 @@ enum SongKind {
 }
 
 model Song {
-  id        String  @id @default(cuid())
-  title     String  @unique
+  id        String   @id @default(cuid())
+  title     String   @unique
   kind      SongKind @default(song)
   language  String?
   /// "Meera bhajan", "Carnatic kriti", "Odia bhajan" — how the group would
@@ -1722,4 +1722,33 @@ model SingerCycle {
   updatedAt DateTime @default(now()) @updatedAt
 
   singer Singer @relation(fields: [singerId], references: [id], onDelete: Cascade)
+}
+
+/// A word or phrase to flag when it turns up in the lyrics of a bhajan on a
+/// session — the lyric counterpart of "cannot sing on this date".
+///
+/// Asked for 2026-10-12. It flags, it never blocks: the session page says so
+/// and the coordinators decide. Kept in the database, managed from /admin, so
+/// the group can add, end and remove terms without a deploy.
+model LyricFlag {
+  id        String  @id @default(cuid())
+  /// What to look for. Matched case-insensitively, anywhere in the lyrics —
+  /// inside a word too, unless `wholeWord`.
+  term      String
+  /// Only match the term standing as a word of its own ("ram" not in "Rama").
+  wholeWord Boolean @default(false)
+  /// Why it is flagged, shown beside the flag on the session.
+  note      String?
+
+  /// Applies to sessions on or after this date (`Session.date` style).
+  startsOn DateTime  @db.Date
+  /// Up to and including this date. Null means it never ends.
+  endsOn   DateTime? @db.Date
+
+  /// Who added it. For visibility, never for authorisation.
+  createdByName String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([startsOn])
 }

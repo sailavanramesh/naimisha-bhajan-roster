@@ -2,7 +2,7 @@
 
 import { prisma } from "@/lib/db";
 import { contradiction } from "@/lib/repertoireGuard";
-import { requireCapability, normaliseEmail } from "@/lib/auth";
+import { requireCapability, normaliseEmail, getSignedInSinger } from "@/lib/auth";
 import { RepertoireKind } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -338,4 +338,85 @@ export async function removeSinger(singerId: string): Promise<RemoveSingerState>
   revalidatePath("/admin");
   revalidatePath("/singers");
   return { removed: singer.name };
+}
+
+/* ---- Lyric flags ---- */
+
+const ISO_DATE = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+const LyricFlagInput = z
+  .object({
+    term: z.string().trim().min(1, "Enter a word or phrase.").max(100),
+    wholeWord: z.boolean(),
+    note: z.string().trim().max(200),
+    startsOn: ISO_DATE,
+    endsOn: ISO_DATE.or(z.literal("")),
+  })
+  .refine((v) => v.endsOn === "" || v.endsOn >= v.startsOn, {
+    message: "The end date is before the start date.",
+  });
+
+export type AddLyricFlagState = { error?: string; added?: string };
+
+const asDate = (iso: string) => new Date(`${iso}T00:00:00Z`);
+
+function revalidateLyricFlags() {
+  revalidatePath("/admin");
+  // Every session page reads the flags.
+  revalidatePath("/roster/[id]", "page");
+}
+
+/**
+ * Add a word or phrase to flag in rostered lyrics.
+ *
+ * Returns its outcome rather than throwing, for the reason AddPersonForm gives:
+ * a thrown message is stripped in production.
+ */
+export async function addLyricFlag(_prev: AddLyricFlagState, formData: FormData): Promise<AddLyricFlagState> {
+  await requireCapability("manageAllocations");
+  const parsed = LyricFlagInput.safeParse({
+    term: String(formData.get("term") ?? ""),
+    wholeWord: formData.get("wholeWord") === "on",
+    note: String(formData.get("note") ?? ""),
+    startsOn: String(formData.get("startsOn") ?? ""),
+    endsOn: String(formData.get("endsOn") ?? ""),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Could not add that." };
+  const v = parsed.data;
+
+  const signedIn = await getSignedInSinger();
+  await prisma.lyricFlag.create({
+    data: {
+      term: v.term,
+      wholeWord: v.wholeWord,
+      note: v.note || null,
+      startsOn: asDate(v.startsOn),
+      endsOn: v.endsOn ? asDate(v.endsOn) : null,
+      createdByName: signedIn?.name ?? null,
+    },
+  });
+  revalidateLyricFlags();
+  return { added: v.term };
+}
+
+/** Change or clear a flag's end date. Blank means it never ends. */
+export async function setLyricFlagEnd(formData: FormData): Promise<void> {
+  await requireCapability("manageAllocations");
+  const parsed = z
+    .object({ id: z.string().min(1), endsOn: ISO_DATE.or(z.literal("")) })
+    .safeParse({ id: String(formData.get("id") ?? ""), endsOn: String(formData.get("endsOn") ?? "") });
+  if (!parsed.success) throw new Error("Could not change the end date.");
+  await prisma.lyricFlag.update({
+    where: { id: parsed.data.id },
+    data: { endsOn: parsed.data.endsOn ? asDate(parsed.data.endsOn) : null },
+  });
+  revalidateLyricFlags();
+}
+
+export async function removeLyricFlag(formData: FormData): Promise<void> {
+  await requireCapability("manageAllocations");
+  const id = z.string().min(1).safeParse(String(formData.get("id") ?? ""));
+  if (!id.success) throw new Error("Could not remove that flag.");
+  await prisma.lyricFlag.deleteMany({ where: { id: id.data } });
+  revalidateLyricFlags();
 }

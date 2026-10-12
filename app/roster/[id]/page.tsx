@@ -28,6 +28,7 @@ import { missingParts, shouldNotifyForSession } from "@/lib/notify";
 import type { NotifyPerson } from "./NotifyPanel";
 import { NOT_ARCHIVED } from "@/lib/archive";
 import { sungBeforeFor } from "@/lib/recentlySungQueries";
+import { findLyricFlags } from "@/lib/lyricFlags";
 import { SessionFormat } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -553,14 +554,42 @@ export default async function RosterSessionPage({
    * The session takes itself out of its own history — otherwise every row
    * would report the row you are looking at.
    */
-  const [suggestions, recentSung] = await Promise.all([
+  const [suggestions, recentSung, lyricFlagRows] = await Promise.all([
     getPitchSuggestions(),
     sungBeforeFor(
       initialRows.map((r) => r.bhajanId).filter((x): x is string => Boolean(x)),
       sessionISO,
       sid,
     ),
+    // Only the rules that could apply on this date; the matching is in lib.
+    prisma.lyricFlag.findMany({
+      where: { startsOn: { lte: session.date }, OR: [{ endsOn: null }, { endsOn: { gte: session.date } }] },
+    }),
   ]);
+
+  /*
+   * Words or phrases flagged in the lyrics of a bhajan on this session.
+   *
+   * The lyric counterpart of the "cannot sing" banner below it, but shown to
+   * everybody who opens the session, as asked for 2026-10-12. The lyrics are
+   * already here — the session query includes each slot's bhajan.
+   */
+  const lyricHits = findLyricFlags(
+    lyricFlagRows.map((f) => ({
+      id: f.id,
+      term: f.term,
+      wholeWord: f.wholeWord,
+      note: f.note,
+      startsOn: f.startsOn.toISOString().slice(0, 10),
+      endsOn: f.endsOn ? f.endsOn.toISOString().slice(0, 10) : null,
+    })),
+    session.slots.map((x, i) => ({
+      position: i + 1,
+      title: x.bhajan?.title ?? x.bhajanTitle ?? "Untitled",
+      lyrics: x.bhajan?.lyrics ?? null,
+    })),
+    sessionISO,
+  );
 
   async function onUpdateNotes(formData: FormData) {
     "use server";
@@ -653,6 +682,26 @@ export default async function RosterSessionPage({
           ragaRuleDegree: sl.ragaRule?.degree ?? null,
         }))}
         />
+      ) : null}
+
+      {lyricHits.length > 0 ? (
+        <div
+          role="status"
+          className="rounded-[12px] border px-3 py-2 text-sm"
+          style={{ borderColor: "rgb(var(--kumkum))", background: "rgb(var(--field))" }}
+        >
+          <strong className="font-semibold">
+            {lyricHits.length === 1 ? "A flagged word is in the lyrics." : "Flagged words are in the lyrics."}
+          </strong>
+          <ul className="mt-1 grid gap-0.5">
+            {lyricHits.map((h) => (
+              <li key={`${h.position}-${h.flagId}`}>
+                {h.position}. {h.title} — &ldquo;{h.matched}&rdquo;
+                {h.note ? <span className="text-on-surface-muted"> · {h.note}</span> : null}
+              </li>
+            ))}
+          </ul>
+        </div>
       ) : null}
 
       {droppedOut.length > 0 ? (

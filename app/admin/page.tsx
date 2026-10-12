@@ -20,6 +20,7 @@ import { getRole, can } from "@/lib/auth";
 import { NoAccess } from "@/components/RequireRole";
 import { AddPersonForm } from "./AddPersonForm";
 import { TablaDecisions } from "./TablaDecisions";
+import { LyricFlags } from "./LyricFlags";
 import { RemovePersonButton } from "./RemovePersonButton";
 
 export const dynamic = "force-dynamic";
@@ -156,6 +157,21 @@ export default async function AdminPage({
             </div>
           ) : null}
         </CardHeader>
+      </Card>
+
+      {/* ---- Words flagged in rostered lyrics ---- */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Lyric flags</CardTitle>
+          <div className="mt-1 max-w-2xl text-sm text-on-surface-muted">
+            Words or phrases to watch for. Any session in a term&rsquo;s dates whose bhajans
+            contain it in their lyrics says so at the top of the session page, for everyone. It
+            flags, it never blocks. Clear an end date to make a term run indefinitely.
+          </div>
+        </CardHeader>
+        <CardContent>
+          <LyricFlags canEdit={canEdit} />
+        </CardContent>
       </Card>
 
       {/* ---- Tabla decisions, collected over time ---- */}
