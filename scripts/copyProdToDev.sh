@@ -14,7 +14,7 @@
 #   * the source is checked to be the production database whatever machine it
 #     came from — .env here, the app service on a bootstrapped one
 #   * it refuses outright if the target is not named *_dev
-#   * it drops and recreates the dev SCHEMA, never the production one
+#   * it drops and recreates the dev TABLES, never the production ones
 #
 # There is deliberately no --reverse flag. Promoting data upwards is not a
 # thing this project does; code is promoted, data is not.
@@ -146,25 +146,135 @@ MISSING
 fi
 export PATH="$PG_BIN:$PATH"
 
-DUMP="$(mktemp -t naimisha-prod-XXXXXX.sql)"
-trap 'rm -f "$DUMP"' EXIT
+WORK="$(mktemp -d -t naimisha-prod-XXXXXX)"
+trap 'rm -rf "$WORK"' EXIT
 
+# THREE DUMPS, NOT ONE
+#
+# The restore used to be a single `psql -f` of a single dump. It hung, every
+# time, at "Restoring into dev…" — a COPY into Bhajan with the server waiting
+# on ClientRead and megabytes sitting unsent in the Mac's socket buffer.
+# Uploads from the original Mac to this server freeze at random somewhere
+# between 1 and 4 MB, on home wifi and on a phone hotspot alike, with or
+# without NordVPN's filter. Downloads never do, so dumping is safe; it is the
+# 11 MB of bhajans going back up that dies.
+#
+# So the restore is built to survive it: tables first with no keys
+# (pre-data), then the rows in small pieces, then the keys and indexes
+# (post-data). Splitting off the keys is what lets the rows go in any order.
 echo "Dumping production…"
-pg_dump --no-owner --no-privileges --clean --if-exists "$(libpq_url "$PROD_URL")" > "$DUMP"
-echo "  $(wc -l < "$DUMP") lines"
+for section in pre-data data post-data; do
+  extra=""
+  [ "$section" = "pre-data" ] && extra="--clean --if-exists"
+  # shellcheck disable=SC2086
+  pg_dump --no-owner --no-privileges --section="$section" $extra "$(libpq_url "$PROD_URL")" > "$WORK/$section.sql"
+  # Homebrew ships pg_dump 17; the server is PostgreSQL 16. A newer dumper
+  # writes settings the older server has never heard of, and psql stops on
+  # the first one:
+  #
+  #   ERROR: unrecognized configuration parameter "transaction_timeout"
+  #
+  # Dropped by name rather than by loosening ON_ERROR_STOP, which would hide
+  # every other error too — and the errors are the reason this is worth running.
+  sed -i.bak '/^SET transaction_timeout = /d' "$WORK/$section.sql" && rm -f "$WORK/$section.sql.bak"
+done
+echo "  $(wc -c < "$WORK/data.sql" | awk '{printf "%.1f MB", $1/1048576}') of rows"
 
-# Homebrew ships pg_dump 17; the server is PostgreSQL 16. A newer dumper
-# writes settings the older server has never heard of, and psql stops on the
-# first one:
+# THE RESTORE
 #
-#   ERROR: unrecognized configuration parameter "transaction_timeout"
+# Every upload is small (CHUNK bytes of COPY rows), runs in its own
+# transaction (psql -1), and is killed if it has not finished in PIECE_TIMEOUT
+# seconds. A killed piece rolls back, so retrying it cannot duplicate a row.
+# The server does not notice the dead client for a long while, so its session
+# is ended by name (PGAPPNAME) before the retry — otherwise it holds a lock
+# that the post-data ALTER TABLEs would wait on forever.
 #
-# Dropped by name rather than by loosening ON_ERROR_STOP, which would hide
-# every other error too — and the errors are the reason this is worth running.
-sed -i.bak '/^SET transaction_timeout = /d' "$DUMP" && rm -f "$DUMP.bak"
-
+# In COPY text format a row is exactly one line (newlines inside values are
+# written as \n), which is what makes splitting on lines safe.
 echo "Restoring into dev…"
-psql "$(libpq_url "$DEV_URL")" -v ON_ERROR_STOP=1 -q -f "$DUMP"
+DEV_LIBPQ="$(libpq_url "$DEV_URL")" WORK="$WORK" python3 - <<'PY'
+import os, re, subprocess, sys, time
+
+DEV, WORK = os.environ["DEV_LIBPQ"], os.environ["WORK"]
+APP = "copyProdToDev"
+CHUNK = 256 * 1024
+PIECE_TIMEOUT = 30
+TRIES = 8
+os.environ.setdefault("PGCONNECT_TIMEOUT", "15")
+
+def psql(url, *args, inp=None, timeout=60):
+    env = dict(os.environ, PGAPPNAME=APP)
+    return subprocess.run(["psql", url, *args], input=inp, capture_output=True, timeout=timeout, env=env)
+
+def reap():
+    psql(DEV, "-Atc", "select pg_terminate_backend(pid) from pg_stat_activity "
+         f"where datname = current_database() and application_name = '{APP}' and pid <> pg_backend_pid()")
+
+def upload(sql, label, timeout=PIECE_TIMEOUT):
+    for attempt in range(1, TRIES + 1):
+        try:
+            r = psql(DEV, "-v", "ON_ERROR_STOP=1", "-q", "-1", "-f", "-", inp=sql, timeout=timeout)
+        except subprocess.TimeoutExpired:
+            print(f"    {label}: stalled, retrying ({attempt}/{TRIES})", flush=True)
+            reap()
+            continue
+        if r.returncode == 0:
+            return
+        err = r.stderr.decode(errors="replace").strip()
+        # psql exits 2 when the connection itself failed; 3 is a real SQL error.
+        if r.returncode == 2:
+            print(f"    {label}: connection lost, retrying ({attempt}/{TRIES})", flush=True)
+            reap(); time.sleep(2)
+            continue
+        sys.exit(f"{label} failed:\n{err}")
+    sys.exit(f"{label}: still stalling after {TRIES} tries — giving up. Dev is half-restored; run this again.")
+
+read = lambda name: open(os.path.join(WORK, name), "rb").read()
+pre, data, post = read("pre-data.sql"), read("data.sql"), read("post-data.sql")
+
+reap()
+# pre-data's own DROPs cannot clear a table another table's foreign key still
+# points at, so every dev table goes first, CASCADE. This is the dev database:
+# the bash above refuses to get here with anything else.
+upload(b"""DO $$ DECLARE t text; BEGIN
+  FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' LOOP
+    EXECUTE format('DROP TABLE IF EXISTS public.%I CASCADE', t);
+  END LOOP; END $$;""", "clearing dev")
+upload(pre, "tables")
+
+counts = {}
+for m in re.finditer(rb"(?ms)^(COPY public\.(\S+) \(.*?\) FROM stdin;)\n(.*?)^\\\.\n", data):
+    header, table, rows = m.group(1), m.group(2).decode().strip('"'), m.group(3).splitlines(keepends=True)
+    counts[table] = len(rows)
+    pieces, piece, size = [], [], 0
+    for row in rows:
+        piece.append(row); size += len(row)
+        if size >= CHUNK:
+            pieces.append(piece); piece, size = [], 0
+    if piece:
+        pieces.append(piece)
+    if len(pieces) > 1:
+        print(f"  {table}: {len(rows)} rows in {len(pieces)} pieces", flush=True)
+    for i, p in enumerate(pieces, 1):
+        upload(header + b"\n" + b"".join(p) + b"\\.\n", f"{table} {i}/{len(pieces)}")
+
+setvals = b"".join(re.findall(rb"(?m)^SELECT pg_catalog\.setval\(.*\n", data))
+if setvals:
+    upload(setvals, "sequences")
+
+reap()
+upload(post, "keys and indexes", timeout=180)
+
+# Proof, not hope: every table's row count against production's.
+bad = []
+for table, n in counts.items():
+    got = psql(DEV, "-Atc", f'select count(*) from public."{table}"').stdout.decode().strip()
+    if got != str(n):
+        bad.append(f"{table}: production {n}, dev {got}")
+if bad:
+    sys.exit("Row counts differ:\n  " + "\n  ".join(bad))
+print(f"  {len(counts)} tables, row counts match production")
+PY
 
 echo
 echo "Done. Dev now matches production as of $(date '+%Y-%m-%d %H:%M')."
