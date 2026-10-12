@@ -1578,6 +1578,9 @@ enum NoticeKind {
   nudge
   /// 5pm on the day, the last one. Nobody is nudged a third time.
   nudge_final
+  /// About two hours before the start: a flagged word is in tonight's lyrics.
+  /// Coordinators and owners only. See lib/notifyLyricFlags.ts.
+  lyric_flag
 }
 
 /// One row per person per session per kind, so nobody is told twice.

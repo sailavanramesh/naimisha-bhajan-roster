@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { pushToSingers, pushConfigured } from "@/lib/push";
 import { rosteredNotification, shouldNotifyForSession } from "@/lib/notify";
 import { melbourneTodayISO } from "@/lib/dates";
+import { changeNoticesClosed } from "@/lib/nudgeRules";
 
 /**
  * Tell people about a session that has just been rostered.
@@ -31,7 +32,10 @@ import { melbourneTodayISO } from "@/lib/dates";
  * changing. A notice nobody is waiting for can afford to be late; it cannot
  * afford to be wrong.
  */
-export async function notifyAboutSession(sessionId: string): Promise<{
+export async function notifyAboutSession(
+  sessionId: string,
+  now: Date = new Date(),
+): Promise<{
   rostered: number;
   published: number;
   skipped?: string;
@@ -45,6 +49,8 @@ export async function notifyAboutSession(sessionId: string): Promise<{
       select: {
         id: true,
         date: true,
+        startsAt: true,
+        timeZone: true,
         slots: {
           select: {
             singerId: true,
@@ -58,8 +64,13 @@ export async function notifyAboutSession(sessionId: string): Promise<{
     if (!session) return { ...nothing, skipped: "no such session" };
 
     const dateISO = session.date.toISOString().slice(0, 10);
-    if (!shouldNotifyForSession(dateISO, melbourneTodayISO())) {
+    if (!shouldNotifyForSession(dateISO, melbourneTodayISO(now))) {
       return { ...nothing, skipped: "session is in the past" };
+    }
+    // Somebody added an hour in is being written down, not asked to sing.
+    // Nothing is recorded, so nothing is owed later either: the session is over.
+    if (changeNoticesClosed({ dateISO, startsAt: session.startsAt, timeZone: session.timeZone }, now)) {
+      return { ...nothing, skipped: "session is under way" };
     }
 
     // What each rostered person is singing.

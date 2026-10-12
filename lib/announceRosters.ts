@@ -2,6 +2,7 @@ import { prisma } from "@/lib/db";
 import { pushToSingers, pushConfigured } from "@/lib/push";
 import { publishedNotification, shouldNotifyForSession } from "@/lib/notify";
 import { melbourneTodayISO } from "@/lib/dates";
+import { changeNoticesClosed } from "@/lib/nudgeRules";
 import { NOT_ARCHIVED } from "./archive";
 
 /**
@@ -56,6 +57,7 @@ export type AnnounceOutcome =
   | "still changing"
   | "nobody rostered"
   | "in the past"
+  | "under way"
   | "nobody to tell"
   | "push is not configured"
   | "no such session"
@@ -79,6 +81,8 @@ export async function announceRosterIfSettled(
       select: {
         id: true,
         date: true,
+        startsAt: true,
+        timeZone: true,
         createdAt: true,
         rosterChangedAt: true,
         announceToGroup: true,
@@ -90,6 +94,10 @@ export async function announceRosterIfSettled(
 
     const dateISO = session.date.toISOString().slice(0, 10);
     if (!shouldNotifyForSession(dateISO, melbourneTodayISO(now))) return "in the past";
+    // "The roster is up" for a session an hour old is not news.
+    if (changeNoticesClosed({ dateISO, startsAt: session.startsAt, timeZone: session.timeZone }, now)) {
+      return "under way";
+    }
     if (session.slots.length === 0) return "nobody rostered";
     if (session.notices.length > 0) return "already announced";
 
