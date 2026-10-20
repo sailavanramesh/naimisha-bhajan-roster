@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/db";
 
 /**
- * scripts/seedChants.ts — the two ashtottaras, in Devanagari and IAST.
+ * scripts/seedChants.ts — the two ashtottaras, in Devanagari and IAST, and the
+ * Hanuman and Ganesh aartis, which also carry an English meaning per verse.
  *
  *     npx tsx scripts/seedChants.ts
  *     npx tsx scripts/seedChants.ts --force
@@ -30,7 +31,10 @@ import { prisma } from "@/lib/db";
 
 const force = process.argv.includes("--force");
 
-const CHANTS = [
+type ChantVerse = { label: string; script: string; roman: string; meaning?: string };
+type Chant = { title: string; tradition: string; language: string; verses: ChantVerse[] };
+
+const CHANTS: Chant[] = [
   {
     title: "Shirdi Sai Ashtottara Shatanamavali",
     tradition: "Ashtottara · 108 names",
@@ -62,7 +66,51 @@ const CHANTS = [
       { label: "Names 85–96", script: "ॐ श्री साई कालातीताय नमः\nॐ श्री साई सिद्धि रूपाय नमः\nॐ श्री साई सिद्ध सङ्कल्पाय नमः\nॐ श्री साई आरोग्य प्रदाय नमः\nॐ श्री साई अन्नवस्त्रदाय नमः\nॐ श्री साई संसार दुःखक्षयकराय नमः\nॐ श्री साई सर्वाभीष्ट प्रदाय नमः\nॐ श्री साई कल्यान गुणाय नमः\nॐ श्री साई कर्म ध्वंसिने नमः\nॐ श्री साई साधु मानस शोभिताय नमः\nॐ श्री साई सर्वमत सम्मताय नमः\nॐ श्री साई साधुमानस परिशुद्धकाय नमः", roman: "oṁ śrī sāī kālātītāya namaḥ\noṁ śrī sāī siddhi rūpāya namaḥ\noṁ śrī sāī siddha saṅkalpāya namaḥ\noṁ śrī sāī ārogya pradāya namaḥ\noṁ śrī sāī annavastradāya namaḥ\noṁ śrī sāī saṁsāra duḥkhakṣayakarāya namaḥ\noṁ śrī sāī sarvābhīṣṭa pradāya namaḥ\noṁ śrī sāī kalyāna guṇāya namaḥ\noṁ śrī sāī karma dhvaṁsine namaḥ\noṁ śrī sāī sādhu mānasa śobhitāya namaḥ\noṁ śrī sāī sarvamata sammatāya namaḥ\noṁ śrī sāī sādhumānasa pariśuddhakāya namaḥ" },
       { label: "Names 97–108", script: "ॐ श्री साई साधकानुग्रह वटवृक्ष प्रतिष्ठापकाय नमः\nॐ श्री साई सकल संशय हराय नमः\nॐ श्री साई सकल तत्त्व बोधकाय नमः\nॐ श्री साई योगीश्वराय नमः\nॐ श्री साई योगीन्द्र वन्दिताय नमः\nॐ श्री साई सर्व मङ्गलकराय नमः\nॐ श्री साई सर्वसिद्धि प्रदाय नमः\nॐ श्री साई आपन्निवारिणे नमः\nॐ श्री साई आर्तिहराय नमः\nॐ श्री साई शान्त मूर्त्तये नमः\nॐ श्री साई सुलभ प्रसन्नाय नमः\nॐ श्री साई भगवान् श्री सत्य साई बाबाय नमः", roman: "oṁ śrī sāī sādhakānugraha vaṭavṛkṣa pratiṣṭhāpakāya namaḥ\noṁ śrī sāī sakala saṁśaya harāya namaḥ\noṁ śrī sāī sakala tattva bodhakāya namaḥ\noṁ śrī sāī yogīśvarāya namaḥ\noṁ śrī sāī yogīndra vanditāya namaḥ\noṁ śrī sāī sarva maṅgalakarāya namaḥ\noṁ śrī sāī sarvasiddhi pradāya namaḥ\noṁ śrī sāī āpannivāriṇe namaḥ\noṁ śrī sāī ārtiharāya namaḥ\noṁ śrī sāī śānta mūrttaye namaḥ\noṁ śrī sāī sulabha prasannāya namaḥ\noṁ śrī sāī bhagavān śrī satya sāī bābāya namaḥ" }
     ],
-  }
+  },
+
+  /*
+   * THE TWO AARTIS are Hindi, not Sanskrit, and the roman line follows how
+   * they are SUNG: the final and medial schwa Hindi drops is dropped here too
+   * ("ārtī", "hanumān"), where strict IAST of the Devanagari would write
+   * "āratī", "hanumāna" and have people sing syllables nobody sings.
+   * Anusvara and chandrabindu are both written ṁ, as in the ashtottaras.
+   *
+   * The refrain is its own verse at the top — it is sung after every verse,
+   * and repeating it nine times would bury the verses between it.
+   */
+  {
+    title: "Hanuman Aarti — Aarti Kije Hanuman Lala Ki",
+    tradition: "Aarti",
+    language: "Hindi",
+    verses: [
+      { label: "Refrain (after each verse)", script: "आरती कीजै हनुमान लला की।\nदुष्ट दलन रघुनाथ कला की॥", roman: "ārtī kījai hanumān lalā kī\nduṣṭ dalan raghunāth kalā kī", meaning: "Let us wave the lamp before beloved Hanuman — destroyer of the wicked, the very power of Raghunath (Rama)." },
+      { label: "Verse 1", script: "जाके बल से गिरिवर काँपे।\nरोग दोष जाके निकट न झाँके॥", roman: "jāke bal se girivar kāṁpe\nrog doṣ jāke nikaṭ na jhāṁke", meaning: "At whose strength the mountains tremble; near whom disease and wrongdoing dare not even look." },
+      { label: "Verse 2", script: "अंजनि पुत्र महा बलदाई।\nसन्तन के प्रभु सदा सहाई॥", roman: "aṁjani putra mahā baladāī\nsantan ke prabhu sadā sahāī", meaning: "Son of Anjani, giver of great strength; lord of the saints and their help at every hour." },
+      { label: "Verse 3", script: "दे बीरा रघुनाथ पठाए।\nलंका जारि सिया सुधि लाए॥", roman: "de bīrā raghunāth paṭhāe\nlaṁkā jāri siyā sudhi lāe", meaning: "Raghunath gave him the betel leaf of the mission and sent him; he burned Lanka and brought back word of Sita." },
+      { label: "Verse 4", script: "लंका सो कोट समुद्र-सी खाई।\nजात पवनसुत बार न लाई॥", roman: "laṁkā so koṭ samudra-sī khāī\njāt pavansut bār na lāī", meaning: "Lanka was a fortress with the ocean for its moat, yet the son of the Wind crossed it without a moment's delay." },
+      { label: "Verse 5", script: "लंका जारि असुर संहारे।\nसियारामजी के काज सँवारे॥", roman: "laṁkā jāri asur saṁhāre\nsiyārāmjī ke kāj saṁvāre", meaning: "He set Lanka ablaze and destroyed the demons, and brought the work of Sita and Rama to fulfilment." },
+      { label: "Verse 6", script: "लक्ष्मण मूर्छित पड़े सकारे।\nआनि सजीवन प्राण उबारे॥", roman: "lakṣmaṇ mūrchit paṛe sakāre\nāni sajīvan prāṇ ubāre", meaning: "When Lakshmana lay unconscious, he brought the Sanjivani herb before dawn and saved his life." },
+      { label: "Verse 7", script: "पैठि पाताल तोरि जम-कारे।\nअहिरावण की भुजा उखारे॥", roman: "paiṭhi pātāl tori jam-kāre\nahirāvaṇ kī bhujā ukhāre", meaning: "He entered the underworld, broke the bonds of death, and tore off the arms of Ahiravana." },
+      { label: "Verse 8", script: "बाएँ भुजा असुरदल मारे।\nदाहिने भुजा संतजन तारे॥", roman: "bāeṁ bhujā asuradal māre\ndāhine bhujā santajan tāre", meaning: "With his left arm he struck down the demon armies; with his right he carried the saints across." },
+      { label: "Verse 9", script: "सुर नर मुनि आरती उतारें।\nजय जय जय हनुमान उचारें॥", roman: "sur nar muni ārtī utāreṁ\njay jay jay hanumān ucāreṁ", meaning: "Gods, people and sages wave the lamp before him, calling out \"Victory, victory, victory to Hanuman!\"" },
+      { label: "Verse 10", script: "कंचन थार कपूर लौ छाई।\nआरती करत अंजना माई॥", roman: "kaṁcan thār kapūr lau chāī\nārtī karat aṁjanā māī", meaning: "On a golden plate the camphor flame spreads its light; Mother Anjana herself performs the aarti." },
+      { label: "Verse 11", script: "लंक विध्वंस किए रघुराई।\nतुलसीदास प्रभु कीरति गाई॥", roman: "laṁk vidhvaṁs kie raghurāī\ntulsīdās prabhu kīrati gāī", meaning: "Through him Raghurai (Rama) laid Lanka low; Tulsidas sings the glory of his Lord." },
+      { label: "Verse 12", script: "जो हनुमानजी की आरती गावे।\nबसि बैकुंठ परम पद पावे॥", roman: "jo hanumānjī kī ārtī gāve\nbasi baikuṁṭh param pad pāve", meaning: "Whoever sings this aarti of Hanuman comes to dwell in Vaikuntha and attains the highest state." },
+    ],
+  },
+  {
+    title: "Ganesh Aarti — Jai Ganesh Deva",
+    tradition: "Aarti",
+    language: "Hindi",
+    verses: [
+      { label: "Refrain (after each verse)", script: "जय गणेश जय गणेश जय गणेश देवा।\nमाता जाकी पार्वती पिता महादेवा॥", roman: "jay gaṇeś jay gaṇeś jay gaṇeś devā\nmātā jākī pārvatī pitā mahādevā", meaning: "Victory to you, Lord Ganesha — whose mother is Parvati and whose father is Mahadeva (Shiva)." },
+      { label: "Verse 1", script: "एक दन्त दयावन्त चार भुजा धारी।\nमाथे पर तिलक सोहे मूसे की सवारी॥", roman: "ek dant dayāvant cār bhujā dhārī\nmāthe par tilak sohe mūse kī savārī", meaning: "One-tusked and full of compassion, bearing four arms; a tilak shines on his brow and he rides upon a mouse." },
+      { label: "Verse 2", script: "पान चढ़े फूल चढ़े और चढ़े मेवा।\nलड्डुअन का भोग लगे सन्त करें सेवा॥", roman: "pān caṛhe phūl caṛhe aur caṛhe mevā\nlaḍḍuan kā bhog lage sant kareṁ sevā", meaning: "Betel leaves, flowers and dried fruits are offered to him; laddus are his food-offering, and the saints serve him." },
+      { label: "Verse 3", script: "अन्धन को आँख देत कोढ़िन को काया।\nबाँझन को पुत्र देत निर्धन को माया॥", roman: "andhan ko āṁkh det koṛhin ko kāyā\nbāṁjhan ko putra det nirdhan ko māyā", meaning: "He gives sight to the blind and a healed body to the leper, a child to the childless and wealth to the poor." },
+      { label: "Verse 4", script: "दीनन की लाज रखो शम्भु सुतकारी।\nकामना को पूर्ण करो जाऊँ बलिहारी॥", roman: "dīnan kī lāj rakho śambhu sutkārī\nkāmnā ko pūrṇ karo jāūṁ balihārī", meaning: "Keep the honour of the humble, O son of Shambhu (Shiva); fulfil our longing — I offer myself to you." },
+      { label: "Verse 5", script: "'सूर' श्याम शरण आए सफल कीजे सेवा।\nमाता जाकी पार्वती पिता महादेवा॥", roman: "'sūr' śyām śaraṇ āe saphal kīje sevā\nmātā jākī pārvatī pitā mahādevā", meaning: "Surdas has come to you for refuge — make this service fruitful, O Lord whose mother is Parvati and whose father is Mahadeva." },
+    ],
+  },
 ];
 
 async function main() {
@@ -86,6 +134,7 @@ async function main() {
               label: v.label,
               script: v.script,
               roman: v.roman,
+              meaning: v.meaning ?? null,
             })),
           },
         },
@@ -97,7 +146,10 @@ async function main() {
     const same =
       existing.verses.length === chant.verses.length &&
       existing.verses.every(
-        (v, i) => v.script === chant.verses[i].script && v.roman === chant.verses[i].roman,
+        (v, i) =>
+          v.script === chant.verses[i].script &&
+          v.roman === chant.verses[i].roman &&
+          v.meaning === (chant.verses[i].meaning ?? null),
       );
 
     if (same) {
@@ -135,6 +187,7 @@ async function main() {
               label: v.label,
               script: v.script,
               roman: v.roman,
+              meaning: v.meaning ?? null,
             })),
           },
         },
