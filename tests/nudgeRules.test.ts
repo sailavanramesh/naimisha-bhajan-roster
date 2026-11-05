@@ -9,6 +9,7 @@ import {
   weekdayOfISO,
   type ScopedRule,
   sessionUnderWay,
+  morningNoticeDue,
 } from "@/lib/nudgeRules";
 
 const rule = (
@@ -180,5 +181,27 @@ describe("sessionUnderWay", () => {
   it("never suppresses a session with no start time", () => {
     // Not knowing when it begins is not evidence that it has.
     expect(sessionUnderWay(null, new Date("2026-08-23T23:00:00.000Z"))).toBe(false);
+  });
+});
+
+/*
+ * GitHub ran the hourly job only a handful of times a day from late August
+ * 2026, so a notice that needed a run in the 9am hour mostly never went.
+ */
+describe("morningNoticeDue", () => {
+  const start = new Date("2026-11-05T08:00:00.000Z"); // 7pm Melbourne (AEDT)
+
+  it("waits for 9am", () => {
+    expect(morningNoticeDue(8, start, new Date("2026-11-04T21:59:00.000Z"))).toBe(false);
+    expect(morningNoticeDue(9, start, new Date("2026-11-04T22:05:00.000Z"))).toBe(true);
+  });
+
+  it("still goes on a late run, up to the start", () => {
+    expect(morningNoticeDue(13, start, new Date("2026-11-05T02:10:00.000Z"))).toBe(true);
+    expect(morningNoticeDue(18, start, new Date("2026-11-05T07:59:00.000Z"))).toBe(true);
+  });
+
+  it("never goes once the session has started", () => {
+    expect(morningNoticeDue(19, start, new Date("2026-11-05T08:00:00.000Z"))).toBe(false);
   });
 });

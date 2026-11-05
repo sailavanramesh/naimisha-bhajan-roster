@@ -215,6 +215,22 @@ export function sessionStart(session: {
   return sessionInstant(session.dateISO, session.startsAt ?? USUAL_START, session.timeZone);
 }
 
+/** The Melbourne hour from which the "you're singing today" notice may go. */
+export const MORNING_NOTICE_HOUR = 9;
+
+/**
+ * Whether the morning-of notice may go out on this run.
+ *
+ * It used to need a run in the 9am hour exactly. GitHub's scheduler has run
+ * the hourly job only a handful of times a day since late August 2026, so most
+ * days had no 9am run and nobody was told. Now any run from 9am until the
+ * session starts will do; SessionNotice's unique key keeps it to one each.
+ */
+export function morningNoticeDue(hour: number, start: Date | null, now: Date): boolean {
+  if (hour < MORNING_NOTICE_HOUR) return false;
+  return !start || now.getTime() < start.getTime();
+}
+
 /**
  * How long after the scheduled start the app stops telling anybody about a
  * change to the session.
