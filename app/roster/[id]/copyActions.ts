@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { requireCapability } from "@/lib/auth";
 import { revalidatePath } from "next/cache";
 import { defaultSessionOf, USUAL_START } from "@/lib/sessionsOfDay";
+import { notifyAboutSession } from "@/lib/notifySession";
 
 const CopyRows = z.object({
   sessionId: z.string().min(1),
@@ -119,6 +120,9 @@ export async function copyRowsToDate(input: {
 
     return target.id;
   });
+
+  // The copied singers are now on another day, and nobody has told them.
+  await notifyAboutSession(targetId);
 
   revalidatePath(`/roster/${sessionId}`);
   revalidatePath(`/roster/${targetId}`);
