@@ -8,6 +8,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { draftSaveDecision } from "@/lib/draftGuard";
 import { NOT_ARCHIVED } from "@/lib/archive";
+import { notifyAboutSession } from "@/lib/notifySession";
 
 /**
  * Slots arrive as one JSON field rather than parallel comma-joined lists:
@@ -137,6 +138,10 @@ export async function saveDraftSession(formData: FormData): Promise<void> {
 
     return session.id;
   });
+
+  // Anybody given a row here is rostered, draft or not — the Build page
+  // promises they are alerted the moment they are put on.
+  await notifyAboutSession(sessionId);
 
   revalidatePath("/roster");
   revalidatePath(`/roster/${sessionId}`);

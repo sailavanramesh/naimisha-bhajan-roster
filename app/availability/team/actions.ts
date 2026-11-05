@@ -8,6 +8,7 @@ import { requireCapability } from "@/lib/auth";
 import { rosterAvailability } from "@/lib/availabilityQueries";
 import { rosterBlockReason } from "@/lib/rosterEligibility";
 import { NOT_ARCHIVED } from "@/lib/archive";
+import { notifyAboutSession } from "@/lib/notifySession";
 import { defaultSessionOf, USUAL_START } from "@/lib/sessionsOfDay";
 
 const Input = z.object({
@@ -103,6 +104,8 @@ export async function rosterFromBoard(input: {
       });
     }
   });
+
+  await notifyAboutSession(session.id);
 
   revalidatePath("/availability/team");
   revalidatePath(`/roster/${session.id}`);
