@@ -3,7 +3,9 @@ import { pushToSingers, pushConfigured } from "@/lib/push";
 import { missingParts, morningNotification, nudgeNotification, type NoticeKind } from "@/lib/notify";
 import {
   dueNudgeUnder,
+  morningNoticeDue,
   resolveRule,
+  sessionStart,
   sessionUnderWay,
   weekdayOfISO,
   type ScopedRule,
@@ -35,7 +37,7 @@ export type NudgeRun = {
   complete: number;
   /** Sessions left alone because they were already under way. */
   underWay?: number;
-  /** How many morning-of notices were sent (9am run only). */
+  /** How many morning-of notices were sent (from 9am until the start). */
   morning?: number;
   skipped?: string;
 };
@@ -172,7 +174,7 @@ export async function runNudges(now: Date = new Date()): Promise<NudgeRun> {
   }
 
   /*
-   * Morning-of notice — 9am only.
+   * Morning-of notice — the first run from 9am until the session starts.
    *
    * Goes to every rostered singer for today, regardless of whether their row
    * is complete. The 3pm nudge only fires when something is MISSING, so singers
@@ -180,37 +182,37 @@ export async function runNudges(now: Date = new Date()): Promise<NudgeRun> {
    * Prithvi was one of those: he had chosen his bhajan and pitch, got nothing
    * at 3pm, and forgot he was rostered.
    *
-   * The unique constraint on (sessionId, singerId, kind) means calling the
-   * cron more than once at 9am is safe — only one message per person per session.
+   * The unique constraint on (sessionId, singerId, kind) means every run after
+   * 9am is safe — only one message per person per session.
    */
   let morning = 0;
-  if (hour === 9) {
-    for (const session of sessions) {
-      const alreadySentMorning = new Set(
-        session.notices.filter((n) => n.kind === "nudge_morning").map((n) => n.singerId),
-      );
-      const singerTitles = new Map<string, (string | null)[]>();
-      for (const slot of session.slots) {
-        if (!slot.singerId) continue;
-        if (alreadySentMorning.has(slot.singerId)) continue;
-        const title = slot.bhajan?.title ?? slot.bhajanTitle ?? slot.festivalBhajanTitle ?? null;
-        const arr = singerTitles.get(slot.singerId) ?? [];
-        arr.push(title);
-        singerTitles.set(slot.singerId, arr);
-      }
+  for (const session of sessions) {
+    const start = sessionStart({ dateISO: date, startsAt: session.startsAt, timeZone: session.timeZone });
+    if (!morningNoticeDue(hour, start, now)) continue;
+    const alreadySentMorning = new Set(
+      session.notices.filter((n) => n.kind === "nudge_morning").map((n) => n.singerId),
+    );
+    const singerTitles = new Map<string, (string | null)[]>();
+    for (const slot of session.slots) {
+      if (!slot.singerId) continue;
+      if (alreadySentMorning.has(slot.singerId)) continue;
+      const title = slot.bhajan?.title ?? slot.bhajanTitle ?? slot.festivalBhajanTitle ?? null;
+      const arr = singerTitles.get(slot.singerId) ?? [];
+      arr.push(title);
+      singerTitles.set(slot.singerId, arr);
+    }
 
-      for (const [singerId, titles] of singerTitles) {
-        const res = await pushToSingers(
-          [singerId],
-          morningNotification({ sessionId: session.id, dateISO: date, titles }),
-          session.id,
-        );
-        await prisma.sessionNotice.createMany({
-          data: [{ sessionId: session.id, singerId, kind: "nudge_morning" }],
-          skipDuplicates: true,
-        });
-        if (res.sent > 0) morning++;
-      }
+    for (const [singerId, titles] of singerTitles) {
+      const res = await pushToSingers(
+        [singerId],
+        morningNotification({ sessionId: session.id, dateISO: date, titles }),
+        session.id,
+      );
+      await prisma.sessionNotice.createMany({
+        data: [{ sessionId: session.id, singerId, kind: "nudge_morning" }],
+        skipDuplicates: true,
+      });
+      if (res.sent > 0) morning++;
     }
   }
 
